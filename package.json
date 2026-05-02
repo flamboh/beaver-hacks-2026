@@ -32,7 +32,8 @@
     "@tanstack/react-router-devtools": "^1.166.13",
     "effect": "^3.21.2",
     "lucide-react": "^1.14.0",
-    "react-router-dom": "^7.14.2"
+    "react-router-dom": "^7.14.2",
+    "sqlite3": "^6.0.1"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
@@ -62,7 +63,8 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "electron",
-      "esbuild"
+      "esbuild",
+      "sqlite3"
     ]
   }
 }
