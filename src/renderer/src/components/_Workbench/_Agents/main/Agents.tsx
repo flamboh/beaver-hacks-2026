@@ -30,6 +30,8 @@ const PLACEHOLDER_AGENTS: Agent[] = [
 	}
 ]
 
+const PLACEHOLDER_TASK = 'Refactoring the authentication middleware to meet the new compliance requirements...'
+
 const MODEL_OPTIONS: { group: string; models: { value: string; label: string }[] }[] = [
 	{
 		group: "Anthropic",
@@ -56,6 +58,13 @@ const EFFORT_STYLES: Record<string, string> = {
 	low: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
 	medium: "bg-yellow-500/15  text-yellow-400  border-yellow-500/30",
 	high: "bg-red-500/15     text-red-400     border-red-500/30"
+}
+
+// gradient per effort for card image area
+const CARD_GRADIENTS: Record<string, string> = {
+  low:    'from-emerald-900/40 to-neutral-900',
+  medium: 'from-yellow-900/40 to-neutral-900',
+  high:   'from-red-900/40    to-neutral-900',
 }
 
 const DEFAULT_FORM = {
