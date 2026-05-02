@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
-import Settings from './pages/Settings'
+import Workbench from './pages/Workbench'
 
 const queryClient = new QueryClient()
 
@@ -12,7 +12,7 @@ export default function App() {
       <HashRouter>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/workbench" element={<Workbench />} />
         </Routes>
       </HashRouter>
       <ReactQueryDevtools initialIsOpen={false} />
