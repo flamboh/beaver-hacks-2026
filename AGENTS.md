@@ -36,6 +36,7 @@ This project is greenfield, sweeping changes are expected.
 - Use dark mode color scheme, Linear-like design.
 - Keep designs simple, no over explaining, plain colors, no gradients, no decorative elements.
 - Assume dev servers are already running.
+- Reference t3code implementation where relevant in agent loop and infrastructure.
 
 ## References
 
