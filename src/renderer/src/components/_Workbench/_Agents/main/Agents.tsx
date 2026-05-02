@@ -30,7 +30,8 @@ const PLACEHOLDER_AGENTS: Agent[] = [
 	}
 ]
 
-const PLACEHOLDER_TASK = 'Refactoring the authentication middleware to meet the new compliance requirements...'
+// const PLACEHOLDER_TASK =
+// 	"Refactoring the authentication middleware to meet the new compliance requirements..."
 
 const MODEL_OPTIONS: { group: string; models: { value: string; label: string }[] }[] = [
 	{
@@ -61,11 +62,11 @@ const EFFORT_STYLES: Record<string, string> = {
 }
 
 // gradient per effort for card image area
-const CARD_GRADIENTS: Record<string, string> = {
-  low:    'from-emerald-900/40 to-neutral-900',
-  medium: 'from-yellow-900/40 to-neutral-900',
-  high:   'from-red-900/40    to-neutral-900',
-}
+// const CARD_GRADIENTS: Record<string, string> = {
+// 	low: "from-emerald-900/40 to-neutral-900",
+// 	medium: "from-yellow-900/40 to-neutral-900",
+// 	high: "from-red-900/40    to-neutral-900"
+// }
 
 const DEFAULT_FORM = {
 	name: "",
