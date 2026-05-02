@@ -1,10 +1,11 @@
-import WorkbenchButton from '@renderer/components/_Home/WorkbenchButton'
+import Header from '@renderer/components/_Home/Header'
+import Gallery from '@renderer/components/_Home/Gallery'
 
 export default function Home() {
   return (
     <>
-      This is the home page
-      <WorkbenchButton />
+      <Header />
+      <Gallery />
     </>
   )
 }
