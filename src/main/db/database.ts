@@ -34,6 +34,11 @@ function toProjectRow(row: ProjectTableRow): ProjectRow {
 	}
 }
 
+function isUniqueProjectPathError(error: unknown): boolean {
+	if (!(error instanceof Error)) return false
+	return error.message.includes("SQLITE_CONSTRAINT") && error.message.includes("projects.path")
+}
+
 export class DatabaseService {
 	private readonly db: sqlite3.Database
 
@@ -100,13 +105,20 @@ export class DatabaseService {
 			accessed: timestamp
 		}
 
-		await this.run(
-			`
-				INSERT INTO projects (id, name, path, created_at, accessed)
-				VALUES (?, ?, ?, ?, ?)
-			`,
-			[project.id, project.name, project.path, project.createdAt, project.accessed]
-		)
+		try {
+			await this.run(
+				`
+					INSERT INTO projects (id, name, path, created_at, accessed)
+					VALUES (?, ?, ?, ?, ?)
+				`,
+				[project.id, project.name, project.path, project.createdAt, project.accessed]
+			)
+		} catch (error) {
+			if (isUniqueProjectPathError(error)) {
+				throw new Error("A project with this path already exists.")
+			}
+			throw error
+		}
 
 		return project
 	}

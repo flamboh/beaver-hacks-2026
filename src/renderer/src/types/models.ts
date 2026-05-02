@@ -4,8 +4,8 @@ export type ProjectRow = {
 	id: string
 	name: string
 	path: string
-	accessed: Date
-	created_at: Date
+	createdAt: string
+	accessed: string
 }
 
 export type Agent = {
