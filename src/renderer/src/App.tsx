@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { HashRouter, Routes, Route } from 'react-router-dom'
-import Home from '../../pages/Home'
-import Settings from '../../pages/Settings'
+import Home from './pages/Home'
+import Settings from './pages/Settings'
 
 const queryClient = new QueryClient()
 
