@@ -57,21 +57,21 @@ export default function ProjectButton({ name, accessed }: ProjectButtonProps) {
   return (
     <button
       type="button"
-      className="flex min-h-64 w-full cursor-pointer flex-col justify-between border
-      border-neutral-700/50 bg-neutral-800/50 p-6 text-left text-neutral-50
+      className="flex min-h-48 w-full cursor-pointer flex-col justify-between border
+      border-neutral-700/50 bg-neutral-800/50 p-4 text-left text-neutral-50
       transition duration-300 hover:border-neutral-700 hover:bg-neutral-800/65"
     >
       {/* Black Bbg */}
-      <div className="flex min-h-32 items-center justify-center bg-neutral-950">
+      <div className="flex min-h-24 items-center justify-center bg-neutral-950">
         {/* Folder Icon */}
-        <div className="relative h-7 w-10 rounded-sm bg-slate-600">
+        <div className="relative h-6 w-9 rounded-sm bg-slate-600">
           <div className="absolute -top-1 left-0 h-3 w-5 rounded-t-sm bg-slate-600" />
         </div>
       </div>
 
       <div>
-        <h2 className="text-xl font-semibold">{name}</h2>
-        <p className="mt-2 text-sm text-neutral-400">Accessed {formatAccessedDate(accessed)}</p>
+        <h2 className="text-lg font-semibold">{name}</h2>
+        <p className="mt-1.5 text-xs text-neutral-400">Accessed {formatAccessedDate(accessed)}</p>
       </div>
     </button>
   )
