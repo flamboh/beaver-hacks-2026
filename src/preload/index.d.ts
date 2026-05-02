@@ -45,6 +45,9 @@ interface BeaverApi {
 	db: {
 		getInfo: () => Promise<DatabaseInfo>
 	}
+	dialog: {
+		selectDirectory: () => Promise<string | null>
+	}
 	projects: {
 		list: () => Promise<ProjectRow[]>
 		create: (input: CreateProjectInput) => Promise<ProjectRow>

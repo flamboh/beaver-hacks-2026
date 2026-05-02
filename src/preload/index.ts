@@ -35,6 +35,9 @@ const api = {
 	db: {
 		getInfo: (): Promise<DatabaseInfo> => ipcRenderer.invoke("db:get-info")
 	},
+	dialog: {
+		selectDirectory: (): Promise<string | null> => ipcRenderer.invoke("dialog:select-directory")
+	},
 	projects: {
 		list: (): Promise<ProjectRow[]> => ipcRenderer.invoke("project:list"),
 		create: (input: CreateProjectInput): Promise<ProjectRow> =>

@@ -111,7 +111,7 @@ export default function ControlPanel() {
 
   return (
     <div
-      ref={viewportRef}
+      ref={setViewportRef}
       className="w-full h-full overflow-hidden relative cursor-grab active:cursor-grabbing select-none bg-neutral-950 focus:outline-none"
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}

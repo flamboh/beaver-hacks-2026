@@ -6,6 +6,7 @@ import { AgentEngine } from './agent/agentEngine'
 import { registerAgentIpc } from './agent/ipc'
 import { DatabaseService } from './db/database'
 import { registerDatabaseIpc } from './db/ipc'
+import { registerDialogIpc } from './dialog/ipc'
 
 const agentEngine = new AgentEngine({ cwd: process.cwd() })
 let database: DatabaseService | null = null
@@ -61,6 +62,7 @@ app.whenReady().then(async () => {
 
   registerAgentIpc(agentEngine)
   registerDatabaseIpc(database)
+  registerDialogIpc()
 
   createWindow()
 
