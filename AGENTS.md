@@ -25,7 +25,7 @@ Keep files under ~400 lines. Refactor as neeeded to meet this.
 
 ## Maintainability
 
-This project is greenfield, sweeping changes are preferred.
+This project is greenfield, sweeping changes are expected.
 
 ## Package Roles
 
