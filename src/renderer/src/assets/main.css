@@ -17,6 +17,21 @@
   }
 }
 
+/* strip React Flow node chrome so our custom cards render cleanly */
+.react-flow__node-agentCard,
+.react-flow__node-boundary {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.react-flow__node-agentCard:focus,
+.react-flow__node-agentCard.selected {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 @layer base {
   html,
   body,
