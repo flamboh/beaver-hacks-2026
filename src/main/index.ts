@@ -1,14 +1,3 @@
-<<<<<<< HEAD
-import { app, shell, BrowserWindow } from 'electron'
-import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
-import { AgentEngine } from './agent/agentEngine'
-import { registerAgentIpc } from './agent/ipc'
-import { DatabaseService } from './db/database'
-import { registerDatabaseIpc } from './db/ipc'
-import { registerDialogIpc } from './dialog/ipc'
-=======
 import { app, shell, BrowserWindow } from "electron"
 import { join } from "path"
 import { electronApp, optimizer, is } from "@electron-toolkit/utils"
@@ -17,9 +6,9 @@ import { AgentEngine } from "./agent/agentEngine"
 import { registerAgentIpc } from "./agent/ipc"
 import { DatabaseService } from "./db/database"
 import { registerDatabaseIpc } from "./db/ipc"
+import { registerDialogIpc } from "./dialog/ipc"
 import { GitService } from "./git/gitService"
 import { registerGitIpc } from "./git/ipc"
->>>>>>> origin/main
 
 const agentEngine = new AgentEngine({ cwd: process.cwd() })
 const gitService = new GitService()
@@ -74,15 +63,12 @@ app.whenReady().then(async () => {
 	database = new DatabaseService(join(app.getPath("userData"), "beaver.sqlite"))
 	await database.initialize()
 
-<<<<<<< HEAD
-  registerAgentIpc(agentEngine)
-  registerDatabaseIpc(database)
-  registerDialogIpc()
-=======
+	registerAgentIpc(agentEngine)
+	registerDatabaseIpc(database)
+	registerDialogIpc()
 	registerAgentIpc(agentEngine)
 	registerDatabaseIpc(database)
 	registerGitIpc(gitService, agentEngine)
->>>>>>> origin/main
 
 	createWindow()
 
