@@ -1,3 +1,3 @@
 export default function Workbench() {
-  return <></>
+  return <>This is the workbench page</>
 }
