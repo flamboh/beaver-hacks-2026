@@ -8,6 +8,7 @@ import { DatabaseService } from "./db/database"
 import { registerDatabaseIpc } from "./db/ipc"
 import { DevServerService } from "./devServer/devServerService"
 import { registerDevServerIpc } from "./devServer/ipc"
+import { registerDialogIpc } from "./dialog/ipc"
 import { GitService } from "./git/gitService"
 import { registerGitIpc } from "./git/ipc"
 
@@ -68,6 +69,7 @@ app.whenReady().then(async () => {
 	registerAgentIpc(agentEngine)
 	registerDatabaseIpc(database)
 	registerDevServerIpc(devServer)
+	registerDialogIpc()
 	registerGitIpc(gitService, agentEngine)
 
 	createWindow()

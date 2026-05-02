@@ -23,6 +23,13 @@ export interface GitStatusSnapshot {
 	updatedAt: string
 }
 
+export interface GitWorkingTreeDiffSnapshot {
+	cwd: string
+	isRepo: boolean
+	patch: string
+	updatedAt: string
+}
+
 export interface GitCommitMessage {
 	subject: string
 	body: string

@@ -22,7 +22,8 @@ import type {
 	GitCreateBranchInput,
 	GitPushInput,
 	GitPushResult,
-	GitStatusSnapshot
+	GitStatusSnapshot,
+	GitWorkingTreeDiffSnapshot
 } from "../main/git/ipc"
 
 // Custom APIs for renderer
@@ -46,6 +47,8 @@ const api = {
 	git: {
 		getStatus: (cwd: string): Promise<GitStatusSnapshot> =>
 			ipcRenderer.invoke("git:get-status", cwd),
+		getWorkingTreeDiff: (cwd?: string): Promise<GitWorkingTreeDiffSnapshot> =>
+			ipcRenderer.invoke("git:get-working-tree-diff", cwd),
 		checkout: (input: GitCheckoutInput): Promise<GitStatusSnapshot> =>
 			ipcRenderer.invoke("git:checkout", input),
 		createBranch: (input: GitCreateBranchInput): Promise<GitStatusSnapshot> =>
@@ -62,6 +65,9 @@ const api = {
 	devServer: {
 		launchReview: (): Promise<ReviewDevServerLaunch> =>
 			ipcRenderer.invoke("dev-server:launch-review")
+	},
+	dialog: {
+		selectDirectory: (): Promise<string | null> => ipcRenderer.invoke("dialog:select-directory")
 	},
 	projects: {
 		list: (): Promise<ProjectRow[]> => ipcRenderer.invoke("project:list"),

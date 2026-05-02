@@ -21,7 +21,8 @@ import type {
 	GitCreateBranchInput,
 	GitPushInput,
 	GitPushResult,
-	GitStatusSnapshot
+	GitStatusSnapshot,
+	GitWorkingTreeDiffSnapshot
 } from "../main/git/ipc"
 
 interface BeaverApi {
@@ -34,6 +35,7 @@ interface BeaverApi {
 	}
 	git: {
 		getStatus: (cwd: string) => Promise<GitStatusSnapshot>
+		getWorkingTreeDiff: (cwd?: string) => Promise<GitWorkingTreeDiffSnapshot>
 		checkout: (input: GitCheckoutInput) => Promise<GitStatusSnapshot>
 		createBranch: (input: GitCreateBranchInput) => Promise<GitStatusSnapshot>
 		generateCommitMessage: (cwd: string) => Promise<GitCommitMessage>
@@ -45,6 +47,9 @@ interface BeaverApi {
 	}
 	devServer: {
 		launchReview: () => Promise<ReviewDevServerLaunch>
+	}
+	dialog: {
+		selectDirectory: () => Promise<string | null>
 	}
 	projects: {
 		list: () => Promise<ProjectRow[]>

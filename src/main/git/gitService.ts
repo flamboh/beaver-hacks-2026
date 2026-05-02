@@ -8,7 +8,8 @@ import type {
 	GitFileChange,
 	GitPushInput,
 	GitPushResult,
-	GitStatusSnapshot
+	GitStatusSnapshot,
+	GitWorkingTreeDiffSnapshot
 } from "./contracts"
 
 interface GitResult {
@@ -37,6 +38,28 @@ function runGit(
 			{ cwd, timeout: DEFAULT_TIMEOUT_MS, maxBuffer },
 			(error, stdout, stderr) => {
 				if (error) {
+					reject(new Error((stderr || error.message).trim()))
+					return
+				}
+				resolve({ stdout, stderr })
+			}
+		)
+	})
+}
+
+function runGitAllowExit(
+	cwd: string,
+	args: readonly string[],
+	allowedCodes: readonly string[],
+	maxBuffer = DEFAULT_MAX_BUFFER
+): Promise<GitResult> {
+	return new Promise((resolve, reject) => {
+		execFile(
+			"git",
+			[...args],
+			{ cwd, timeout: DEFAULT_TIMEOUT_MS, maxBuffer },
+			(error, stdout, stderr) => {
+				if (error && !allowedCodes.includes(String((error as { code?: unknown }).code))) {
 					reject(new Error((stderr || error.message).trim()))
 					return
 				}
@@ -163,6 +186,27 @@ function normalizeBranchName(branch: string): string {
 		.replace(/^[-/]+|[-/]+$/g, "")
 }
 
+async function buildUntrackedPatch(cwd: string): Promise<string> {
+	const result = await runGit(cwd, ["ls-files", "--others", "--exclude-standard"])
+	const patches = await Promise.all(
+		result.stdout
+			.split(/\r?\n/g)
+			.map((path) => path.trim())
+			.filter(Boolean)
+			.map((path) =>
+				runGitAllowExit(
+					cwd,
+					["diff", "--no-index", "--patch", "--no-color", "--", "/dev/null", path],
+					["1"]
+				).catch(() => ({ stdout: "", stderr: "" }))
+			)
+	)
+	return patches
+		.map((patch) => patch.stdout)
+		.filter(Boolean)
+		.join("\n")
+}
+
 export class GitService {
 	async status(cwd: string): Promise<GitStatusSnapshot> {
 		try {
@@ -247,6 +291,30 @@ export class GitService {
 			: ["push", "--set-upstream", "origin", snapshot.branch]
 		await runGit(input.cwd, args, DEFAULT_MAX_BUFFER)
 		return { status: await this.status(input.cwd) }
+	}
+
+	async workingTreeDiff(cwd = process.cwd()): Promise<GitWorkingTreeDiffSnapshot> {
+		try {
+			await runGit(cwd, ["rev-parse", "--is-inside-work-tree"])
+		} catch {
+			return {
+				cwd,
+				isRepo: false,
+				patch: "",
+				updatedAt: nowIso()
+			}
+		}
+
+		const [trackedPatch, untrackedPatch] = await Promise.all([
+			runGit(cwd, ["diff", "--patch", "--minimal", "--no-color", "HEAD", "--"]),
+			buildUntrackedPatch(cwd)
+		])
+		return {
+			cwd,
+			isRepo: true,
+			patch: [trackedPatch.stdout, untrackedPatch].filter(Boolean).join("\n"),
+			updatedAt: nowIso()
+		}
 	}
 
 	async buildCommitPrompt(cwd: string): Promise<string> {
