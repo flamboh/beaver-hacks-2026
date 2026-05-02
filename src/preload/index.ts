@@ -1,8 +1,22 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type { AgentSnapshot, StartTurnInput } from '../main/agent/ipc'
 
 // Custom APIs for renderer
-const api = {}
+const api = {
+  agent: {
+    getSnapshot: (): Promise<AgentSnapshot> => ipcRenderer.invoke('agent:get-snapshot'),
+    startTurn: (input: StartTurnInput): Promise<AgentSnapshot> =>
+      ipcRenderer.invoke('agent:start-turn', input),
+    onSnapshot: (listener: (snapshot: AgentSnapshot) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, snapshot: AgentSnapshot): void => {
+        listener(snapshot)
+      }
+      ipcRenderer.on('agent:snapshot', handler)
+      return () => ipcRenderer.off('agent:snapshot', handler)
+    }
+  }
+}
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
