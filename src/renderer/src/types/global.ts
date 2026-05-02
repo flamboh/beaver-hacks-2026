@@ -1,2 +1,1 @@
-
-export type WorkbenchTab = "control-panel" | "gallery" | "review" | "agents" | "settings";
+export type WorkbenchTab = "control-panel" | "gallery" | "review" | "agents" | "settings"

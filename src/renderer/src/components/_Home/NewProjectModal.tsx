@@ -54,16 +54,6 @@ export default function NewProjectModal({ error, onCancel, onCreate }: NewProjec
               </button>
             </div>
           </label>
-
-          <label className="block">
-            <span className="text-sm font-medium text-neutral-50">Base branch</span>
-            <input
-              type="text"
-              name="baseBranch"
-              placeholder="main"
-              className="mt-2 w-full border border-neutral-600 bg-neutral-950 px-3 py-2 text-sm text-neutral-50 outline-none transition duration-300 placeholder:text-neutral-500 focus:border-neutral-500"
-            />
-          </label>
         </form>
 
         <footer className="flex items-center justify-end gap-2 border-t border-neutral-700 px-5 py-4">
