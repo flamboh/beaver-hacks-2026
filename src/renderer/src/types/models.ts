@@ -9,17 +9,17 @@ export type ProjectRow = {
 }
 
 export type Agent = {
-  id: string
-  name: string
-  project_id: string
-  model: string
-  scope_path: string
-  effort: string
+	id: string
+	name: string
+	project_id: string
+	model: string
+	scope_path: string
+	effort: string
 }
 
 export type Task = {
-  id: string
-  agent_id: string
-  status: string
-  description: string
+	id: string
+	agent_id: string
+	status: string
+	description: string
 }
