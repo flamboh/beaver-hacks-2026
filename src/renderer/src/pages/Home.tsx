@@ -1,11 +1,12 @@
+import Header from '@renderer/components/_Home/Header'
+import Gallery from '@renderer/components/_Home/Gallery'
 import type { JSX } from 'react'
-import WorkbenchButton from '@renderer/components/_Home/WorkbenchButton'
 
 export default function Home(): JSX.Element {
   return (
     <>
-      This is the home page
-      <WorkbenchButton />
+      <Header />
+      <Gallery />
     </>
   )
 }
