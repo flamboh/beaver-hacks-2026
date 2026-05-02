@@ -42,6 +42,9 @@ export default function AgentCard() {
 		<div
 			className="flex flex-col rounded-xl border border-white/8 bg-neutral-900 text-white overflow-hidden shadow-2xl shadow-black/40"
 			style={{ width: 820, height: 500 }}
+			onMouseDown={(event) => event.stopPropagation()}
+			onMouseMove={(event) => event.stopPropagation()}
+			onWheel={(event) => event.stopPropagation()}
 		>
 			{/* header */}
 			<div className="flex items-center justify-between px-5 h-11 border-b border-white/5 bg-neutral-800/60 shrink-0">
