@@ -4,8 +4,11 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { AgentEngine } from './agent/agentEngine'
 import { registerAgentIpc } from './agent/ipc'
+import { DatabaseService } from './db/database'
+import { registerDatabaseIpc } from './db/ipc'
 
 const agentEngine = new AgentEngine({ cwd: process.cwd() })
+let database: DatabaseService | null = null
 
 function createWindow(): void {
   // Create the browser window.
@@ -42,7 +45,7 @@ function createWindow(): void {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
@@ -53,7 +56,11 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  database = new DatabaseService(join(app.getPath('userData'), 'beaver.sqlite'))
+  await database.initialize()
+
   registerAgentIpc(agentEngine)
+  registerDatabaseIpc(database)
 
   createWindow()
 
@@ -71,6 +78,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  void database?.close()
 })
 
 // In this file you can include the rest of your app's specific main process
