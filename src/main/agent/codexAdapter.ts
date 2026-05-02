@@ -34,6 +34,7 @@ interface CodexTurnStartResponse {
 }
 
 const DEFAULT_MODEL = 'gpt-5.5'
+const DEFAULT_ONE_SHOT_TIMEOUT_MS = 45_000
 
 function nowIso(): string {
   return new Date().toISOString()
@@ -213,6 +214,73 @@ export class CodexAdapter implements ProviderAdapter {
       status: 'stopped',
       activeTurnId: null,
       updatedAt: nowIso()
+    })
+  }
+
+  async runOneShot(input: {
+    cwd: string
+    prompt: string
+    model: string
+    runtimeMode: AgentRuntimeMode
+    timeoutMs?: number
+  }): Promise<string> {
+    const threadId = `internal:${generatedId('thread')}`
+    let output = ''
+
+    return new Promise<string>((resolve, reject) => {
+      const cleanup = this.onEvent((event) => {
+        if (event.threadId !== threadId) return
+
+        if (event.type === 'assistant.delta') {
+          output += event.payload.delta
+          return
+        }
+
+        if (event.type === 'runtime.error') {
+          cleanup()
+          clearTimeout(timeout)
+          void this.stopSession(threadId)
+          reject(new Error(event.payload.message))
+          return
+        }
+
+        if (event.type === 'turn.completed') {
+          cleanup()
+          clearTimeout(timeout)
+          void this.stopSession(threadId)
+          if (event.payload.status === 'failed') {
+            reject(new Error(event.payload.error ?? 'Codex one-shot turn failed'))
+            return
+          }
+          resolve(output)
+        }
+      })
+
+      const timeout = setTimeout(() => {
+        cleanup()
+        void this.stopSession(threadId)
+        reject(new Error('Codex one-shot turn timed out'))
+      }, input.timeoutMs ?? DEFAULT_ONE_SHOT_TIMEOUT_MS)
+
+      void this.startSession({
+        threadId,
+        cwd: input.cwd,
+        model: input.model,
+        runtimeMode: input.runtimeMode
+      })
+        .then(() =>
+          this.sendTurn({
+            threadId,
+            prompt: input.prompt,
+            model: input.model
+          })
+        )
+        .catch((error: unknown) => {
+          cleanup()
+          clearTimeout(timeout)
+          void this.stopSession(threadId)
+          reject(error instanceof Error ? error : new Error(String(error)))
+        })
     })
   }
 
