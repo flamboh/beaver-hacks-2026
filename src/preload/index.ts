@@ -13,6 +13,7 @@ import type {
 	ProjectRow,
 	UpdateProjectInput
 } from "../main/db/ipc"
+import type { ReviewDevServerLaunch } from "../main/devServer/ipc"
 import type {
 	GitCheckoutInput,
 	GitCommitAllInput,
@@ -57,6 +58,10 @@ const api = {
 	},
 	db: {
 		getInfo: (): Promise<DatabaseInfo> => ipcRenderer.invoke("db:get-info")
+	},
+	devServer: {
+		launchReview: (): Promise<ReviewDevServerLaunch> =>
+			ipcRenderer.invoke("dev-server:launch-review")
 	},
 	projects: {
 		list: (): Promise<ProjectRow[]> => ipcRenderer.invoke("project:list"),

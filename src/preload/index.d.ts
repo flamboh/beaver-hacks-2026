@@ -12,6 +12,7 @@ import type {
 	ProjectRow,
 	UpdateProjectInput
 } from "../main/db/ipc"
+import type { ReviewDevServerLaunch } from "../main/devServer/ipc"
 import type {
 	GitCheckoutInput,
 	GitCommitAllInput,
@@ -41,6 +42,9 @@ interface BeaverApi {
 	}
 	db: {
 		getInfo: () => Promise<DatabaseInfo>
+	}
+	devServer: {
+		launchReview: () => Promise<ReviewDevServerLaunch>
 	}
 	projects: {
 		list: () => Promise<ProjectRow[]>

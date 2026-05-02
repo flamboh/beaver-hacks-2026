@@ -14,6 +14,7 @@ export default function App(): JSX.Element {
 				<Routes>
 					<Route path="/" element={<Home />} />
 					<Route path="/workbench" element={<Workbench />} />
+					<Route path="/workbench/:tab" element={<Workbench />} />
 				</Routes>
 			</HashRouter>
 			<ReactQueryDevtools initialIsOpen={false} />
