@@ -5,34 +5,23 @@ import type {
 	InstallSkillInput,
 	StartTurnInput
 } from "../main/agent/ipc"
-
-interface DatabaseInfo {
-	path: string
-	schemaVersion: number
-}
-
-interface ProjectRow {
-	id: string
-	name: string
-	path: string
-	createdAt: string
-	accessed: string
-}
-
-interface CreateProjectInput {
-	name: string
-	path: string
-}
-
-interface UpdateProjectInput {
-	id: string
-	name: string
-	path: string
-}
-
-interface ProjectIdInput {
-	id: string
-}
+import type {
+	CreateProjectInput,
+	DatabaseInfo,
+	ProjectIdInput,
+	ProjectRow,
+	UpdateProjectInput
+} from "../main/db/ipc"
+import type {
+	GitCheckoutInput,
+	GitCommitAllInput,
+	GitCommitMessage,
+	GitCommitResult,
+	GitCreateBranchInput,
+	GitPushInput,
+	GitPushResult,
+	GitStatusSnapshot
+} from "../main/git/ipc"
 
 interface BeaverApi {
 	agent: {
@@ -41,6 +30,14 @@ interface BeaverApi {
 		findSkills: (input: FindSkillsInput) => Promise<AgentSnapshot>
 		installSkill: (input: InstallSkillInput) => Promise<AgentSnapshot>
 		onSnapshot: (listener: (snapshot: AgentSnapshot) => void) => () => void
+	}
+	git: {
+		getStatus: (cwd: string) => Promise<GitStatusSnapshot>
+		checkout: (input: GitCheckoutInput) => Promise<GitStatusSnapshot>
+		createBranch: (input: GitCreateBranchInput) => Promise<GitStatusSnapshot>
+		generateCommitMessage: (cwd: string) => Promise<GitCommitMessage>
+		commitAll: (input: GitCommitAllInput) => Promise<GitCommitResult>
+		push: (input: GitPushInput) => Promise<GitPushResult>
 	}
 	db: {
 		getInfo: () => Promise<DatabaseInfo>

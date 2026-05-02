@@ -3,10 +3,10 @@ import Gallery from "@renderer/components/_Home/Gallery"
 import type { JSX } from "react"
 
 export default function Home(): JSX.Element {
-  return (
-    <>
-      <Header />
-      <Gallery />
-    </>
-  )
+	return (
+		<>
+			<Header />
+			<Gallery />
+		</>
+	)
 }
