@@ -9,7 +9,7 @@ Generally speaking, you should browse the codebase to figure out what is going o
 
 ## Project Snapshot
 
-This is a hackathon project to create the best agent infrastructure. 
+This is a hackathon project to create the best agent infrastructure.
 
 ## Core Priorities
 
@@ -41,4 +41,3 @@ This project is greenfield, sweeping changes are expected.
 
 - Skills: use ~/.agents/skills/find-skills to locate relevant skills wherever possible
 - SDK infrastructure: ~/code/oss/t3code
-

@@ -1,7 +1,11 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { AgentEngine } from './agent/agentEngine'
+import { registerAgentIpc } from './agent/ipc'
+
+const agentEngine = new AgentEngine({ cwd: process.cwd() })
 
 function createWindow(): void {
   // Create the browser window.
@@ -49,8 +53,7 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  registerAgentIpc(agentEngine)
 
   createWindow()
 
