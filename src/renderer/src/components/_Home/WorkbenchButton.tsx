@@ -1,6 +1,7 @@
+import type { JSX } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-export default function WorkbenchButton() {
+export default function WorkbenchButton(): JSX.Element {
   const navigate = useNavigate()
 
   return (
