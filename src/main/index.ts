@@ -66,8 +66,6 @@ app.whenReady().then(async () => {
 	registerAgentIpc(agentEngine)
 	registerDatabaseIpc(database)
 	registerDialogIpc()
-	registerAgentIpc(agentEngine)
-	registerDatabaseIpc(database)
 	registerGitIpc(gitService, agentEngine)
 
 	createWindow()

@@ -109,26 +109,6 @@ export default function ControlPanel() {
 
 	const canvas = getCanvasSize()
 
-<<<<<<< HEAD
-  return (
-    <div
-      ref={setViewportRef}
-      className="w-full h-full overflow-hidden relative cursor-grab active:cursor-grabbing select-none bg-neutral-950 focus:outline-none"
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onMouseLeave={onMouseUp}
-      onWheel={onWheel}
-    >
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: 'radial-gradient(circle, #ffffff18 1px, transparent 1px)',
-          backgroundSize: `${24 * scale}px ${24 * scale}px`,
-          backgroundPosition: `${offset.x % (24 * scale)}px ${offset.y % (24 * scale)}px`
-        }}
-      />
-=======
 	return (
 		<div
 			ref={setViewportRef}
@@ -147,7 +127,6 @@ export default function ControlPanel() {
 					backgroundPosition: `${offset.x % (24 * scale)}px ${offset.y % (24 * scale)}px`
 				}}
 			/>
->>>>>>> origin/main
 
 			<div
 				style={{
