@@ -8,9 +8,9 @@ export default function WorkbenchButton(): JSX.Element {
     <button
       type="button"
       onClick={() => navigate('/workbench')}
-      className="cursor-pointer rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition hover:opacity-85"
+      className="cursor-pointer rounded-md bg-white px-3 py-1.5 text-xs font-medium text-background transition duration-300 hover:bg-white/80"
     >
-      Go to workbench
+      Workbench
     </button>
   )
 }
