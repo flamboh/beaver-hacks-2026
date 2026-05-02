@@ -21,22 +21,22 @@ const TERMINAL_OUTPUT = [
 
 const PRIORITY_LEVELS = ['low', 'medium', 'high'] as const
 
-const priorityColor: Record<(typeof PRIORITY_LEVELS)[number], string> = {
-  low: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
-  medium: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40',
-  high: 'bg-red-500/20 text-red-400 border-red-500/40'
+const priorityStyles: Record<typeof PRIORITY_LEVELS[number], string> = {
+  low:    'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  medium: 'bg-yellow-500/15  text-yellow-400  border-yellow-500/30',
+  high:   'bg-red-500/15     text-red-400     border-red-500/30',
 }
 
 export default function AgentCard() {
   return (
     <div
-      className="flex flex-col rounded-xl border border-white/10 bg-neutral-900 text-white overflow-hidden shadow-2xl"
+      className="flex flex-col rounded-xl border border-white/8 bg-neutral-900 text-white overflow-hidden shadow-2xl shadow-black/40"
       style={{ width: 820, height: 500 }}
     >
       {/* header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 bg-neutral-800 shrink-0">
-        <span className="font-semibold tracking-wide">{AGENT_NAME}</span>
-        <button className="text-xs px-3 py-1 rounded border border-red-500/50 text-red-400 hover:bg-red-500/10 transition-colors">
+      <div className="flex items-center justify-between px-5 h-11 border-b border-white/5 bg-neutral-800/60 shrink-0">
+        <span className="text-sm font-semibold tracking-wide text-neutral-100">{AGENT_NAME}</span>
+        <button className="text-xs px-2.5 py-1 rounded-md border border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-500/60 transition-all duration-150">
           Terminate
         </button>
       </div>
@@ -44,78 +44,69 @@ export default function AgentCard() {
       {/* body */}
       <div className="flex flex-1 overflow-hidden">
         {/* left panel */}
-        <div className="flex flex-col w-[280px] shrink-0 border-r border-white/10 px-4 py-4 gap-5">
-          {/* current task */}
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest text-neutral-500 font-medium">
-              Current Task
-            </span>
-            <div className="mt-1 rounded-md bg-neutral-800 border border-white/5 px-3 py-2 text-sm text-neutral-300 leading-snug">
+        <div className="flex flex-col w-64 shrink-0 border-r border-white/5 px-4 py-4 gap-5">
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] uppercase tracking-widest text-neutral-600 font-medium">Current Task</span>
+            <div className="rounded-lg bg-neutral-800/60 border border-white/5 px-3 py-2.5 text-sm text-neutral-300 leading-relaxed">
               {CURRENT_TASK}
             </div>
           </div>
 
-          {/* task list */}
-          <div className="flex flex-col gap-1 flex-1">
-            <span className="text-[10px] uppercase tracking-widest text-neutral-500 font-medium">
-              Task List
-            </span>
-            <ol className="mt-1 flex flex-col gap-1">
+          <div className="flex flex-col gap-1.5 flex-1">
+            <span className="text-[10px] uppercase tracking-widest text-neutral-600 font-medium">Task List</span>
+            <ol className="flex flex-col gap-1.5">
               {TASK_LIST.map((task, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-neutral-400">
-                  <span className="text-neutral-600 tabular-nums shrink-0">{i + 1}.</span>
-                  {task}
+                  <span className="text-neutral-700 tabular-nums shrink-0 mt-px">{i + 1}.</span>
+                  <span className="leading-snug">{task}</span>
                 </li>
               ))}
             </ol>
           </div>
 
-          {/* model */}
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest text-neutral-500 font-medium">
-              Model
-            </span>
-            <span className="text-sm text-neutral-300 font-mono">{MODEL_NAME}</span>
+            <span className="text-[10px] uppercase tracking-widest text-neutral-600 font-medium">Model</span>
+            <span className="text-xs text-neutral-400 font-mono">{MODEL_NAME}</span>
           </div>
         </div>
 
         {/* right panel */}
-        <div className="flex flex-col flex-1 px-4 py-4 gap-4">
-          {/* priority + scope row */}
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col flex-1 px-4 py-4 gap-3">
+
+          <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
               {PRIORITY_LEVELS.map((level) => (
                 <span
                   key={level}
-                  className={`text-[11px] px-2 py-0.5 rounded border capitalize
-                    ${
-                      PRIORITY === level
-                        ? priorityColor[level]
-                        : 'border-white/5 text-neutral-600 bg-transparent'
+                  className={`text-[11px] px-2 py-0.5 rounded-md border capitalize transition-colors
+                    ${PRIORITY === level
+                      ? priorityStyles[level]
+                      : 'border-white/5 text-neutral-700 bg-transparent'
                     }`}
                 >
                   {level}
                 </span>
               ))}
             </div>
-            <span className="text-xs text-neutral-500">
-              Scope: <span className="text-blue-400 font-mono">{SCOPE}</span>
+            <span className="text-xs text-neutral-600">
+              Scope: <span className="text-blue-400/80 font-mono">{SCOPE}</span>
             </span>
           </div>
 
           {/* terminal */}
-          <div className="flex flex-col flex-1 rounded-md border border-white/10 bg-neutral-950 overflow-hidden">
-            <div className="flex items-center gap-1.5 px-3 py-2 border-b border-white/5 bg-neutral-900 shrink-0">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
-              <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/60" />
-              <span className="ml-2 text-[10px] text-neutral-600 font-mono">terminal</span>
+          <div className="flex flex-col flex-1 rounded-lg border border-white/5 bg-neutral-950 overflow-hidden">
+            <div className="flex items-center gap-1.5 px-3 h-8 border-b border-white/5 bg-neutral-900/60 shrink-0">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500/50" />
+              <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/50" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/50" />
+              <span className="ml-2 text-[10px] text-neutral-700 font-mono">terminal</span>
             </div>
-            <div className="flex-1 px-4 py-3 font-mono text-xs text-emerald-400 leading-relaxed overflow-auto">
+            <div className="flex-1 px-4 py-3 font-mono text-xs text-emerald-400/80 leading-6 overflow-auto">
               {TERMINAL_OUTPUT.map((line, i) => (
                 <div key={i}>{line}</div>
               ))}
-              <span className="animate-pulse">▊</span>
+              <span className="inline-block w-1.5 h-3.5 bg-emerald-400/60 animate-pulse align-middle ml-0.5" />
             </div>
           </div>
         </div>

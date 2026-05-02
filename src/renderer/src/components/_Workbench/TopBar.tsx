@@ -2,14 +2,13 @@ import { Tally1 } from 'lucide-react'
 
 export default function TopBar() {
   return (
-    <div className="w-full h-12 bg-neutral-800 flex items-center justify-between shrink-0 border-b border-white/10">
-      <div className="w-full flex flex-row">
-        <h1 className="mx-5">NULLOTH</h1>
-        <Tally1 />
-        <h1>Workbench</h1>
+    <div className="w-full h-11 bg-neutral-900 border-b border-white/5 flex items-center justify-between shrink-0 px-5">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <span className="text-white tracking-wide">NULLOTH</span>
+        <Tally1 size={14} className="text-neutral-600" />
+        <span className="text-neutral-400">Workbench</span>
       </div>
-
-      <h1 className="mx-5">v1.1.0</h1>
+      <span className="text-xs text-neutral-600 tabular-nums">v1.1.0</span>
     </div>
   )
 }

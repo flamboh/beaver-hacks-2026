@@ -111,8 +111,8 @@ export default function ControlPanel() {
 
   return (
     <div
-      ref={setViewportRef}
-      className="w-full h-full overflow-hidden relative cursor-grab active:cursor-grabbing select-none bg-neutral-950"
+      ref={viewportRef}
+      className="w-full h-full overflow-hidden relative cursor-grab active:cursor-grabbing select-none bg-neutral-950 focus:outline-none"
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
@@ -134,7 +134,8 @@ export default function ControlPanel() {
           width: `${CANVAS_VW}vw`,
           height: `${CANVAS_VH}vh`,
           transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-          transformOrigin: '0 0'
+          transformOrigin: '0 0',
+          willChange: 'transform',
         }}
       >
         <div className="absolute inset-0 border border-white/10 pointer-events-none" />
@@ -153,7 +154,7 @@ export default function ControlPanel() {
         visible={showMap}
       />
 
-      <div className="absolute bottom-3 right-3 text-xs text-neutral-500 pointer-events-none tabular-nums">
+      <div className="absolute bottom-3 left-3 text-xs text-neutral-600 pointer-events-none tabular-nums select-none">
         {Math.round(scale * 100)}%
       </div>
     </div>
