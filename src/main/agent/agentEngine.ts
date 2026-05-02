@@ -1,6 +1,9 @@
 import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
 import { CodexAdapter, assistantMessageId } from './codexAdapter'
+import { recommendProjectSkills } from '../skills/skillRecommender'
+import { installProjectSkill } from '../skills/skillInstaller'
+import { listInstalledSkillKeys, matchesInstalledSkill } from '../skills/installedSkills'
 import type {
   AgentActivity,
   AgentMessage,
@@ -8,6 +11,8 @@ import type {
   AgentSnapshot,
   AgentThread,
   ProviderRuntimeEvent,
+  FindSkillsInput,
+  InstallSkillInput,
   StartTurnInput
 } from './contracts'
 
@@ -93,6 +98,59 @@ export class AgentEngine {
     return this.getSnapshot()
   }
 
+  async findSkills(input: FindSkillsInput): Promise<AgentSnapshot> {
+    const thread = this.ensureThread({
+      threadId: input.threadId,
+      cwd: input.cwd,
+      prompt: input.prompt ?? 'Find relevant skills for this project.',
+      runtimeMode: input.runtimeMode
+    })
+    this.activeThreadId = thread.id
+    this.emitSnapshot()
+
+    try {
+      await this.updateSkillSuggestions(thread, input.prompt ?? thread.title)
+    } catch (error) {
+      thread.activities.push({
+        id: `activity:${randomUUID()}`,
+        kind: 'skills.error',
+        summary: error instanceof Error ? error.message : String(error),
+        payload: {},
+        turnId: null,
+        createdAt: nowIso()
+      })
+    }
+
+    this.emitSnapshot()
+    return this.getSnapshot()
+  }
+
+  async installSkill(input: InstallSkillInput): Promise<AgentSnapshot> {
+    const thread = this.threads.get(input.threadId)
+    if (!thread) throw new Error(`Thread not found: ${input.threadId}`)
+
+    const skill = thread.suggestedSkills.find((suggestion) => suggestion.id === input.skillId)
+    if (!skill?.installUrl) throw new Error(`Skill install target not found: ${input.skillId}`)
+
+    await installProjectSkill(thread.cwd, skill.installUrl)
+    const installedKeys = await listInstalledSkillKeys(thread.cwd)
+    thread.suggestedSkills = thread.suggestedSkills.map((suggestion) => ({
+      ...suggestion,
+      installed: matchesInstalledSkill(installedKeys, suggestion)
+    }))
+    thread.activities.push({
+      id: `activity:${randomUUID()}`,
+      kind: 'skills.installed',
+      summary: `Installed ${skill.installUrl} for this project.`,
+      payload: { skillId: skill.id, installUrl: skill.installUrl },
+      turnId: null,
+      createdAt: nowIso()
+    })
+    thread.updatedAt = nowIso()
+    this.emitSnapshot()
+    return this.getSnapshot()
+  }
+
   private ensureThread(input: StartTurnInput): AgentThread {
     const requestedThread = input.threadId ? this.threads.get(input.threadId) : undefined
     if (requestedThread) return requestedThread
@@ -106,6 +164,7 @@ export class AgentEngine {
       runtimeMode: input.runtimeMode ?? 'full-access',
       messages: [],
       activities: [],
+      suggestedSkills: [],
       session: null,
       createdAt,
       updatedAt: createdAt
@@ -218,6 +277,32 @@ export class AgentEngine {
     if (!thread) return
     thread.session = session
     thread.updatedAt = session.updatedAt
+  }
+
+  private async updateSkillSuggestions(thread: AgentThread, prompt: string): Promise<void> {
+    const recommendation = await recommendProjectSkills(thread.cwd, prompt, {
+      runCodexPrompt: (input) =>
+        this.provider.runOneShot({
+          cwd: thread.cwd,
+          prompt: input.prompt,
+          model: input.model,
+          runtimeMode: thread.runtimeMode
+        })
+    })
+    thread.suggestedSkills = recommendation.suggestions
+    thread.activities.push({
+      id: `activity:${randomUUID()}`,
+      kind: 'skills.suggested',
+      summary: recommendation.marketplaceError
+        ? recommendation.marketplaceError
+        : recommendation.suggestions.length > 0
+          ? `Suggested ${recommendation.suggestions.length} skills from ${recommendation.profile.source} project profile.`
+          : `No skills suggested from ${recommendation.profile.source} project profile.`,
+      payload: recommendation,
+      turnId: null,
+      createdAt: nowIso()
+    })
+    this.emitSnapshot()
   }
 
   private emitSnapshot(): void {

@@ -51,3 +51,23 @@ export async function sendAgentMessage(input: {
   })
   setSnapshot(nextSnapshot)
 }
+
+export async function findProjectSkills(input: {
+  threadId?: string
+  prompt?: string
+}): Promise<void> {
+  const nextSnapshot = await window.api.agent.findSkills({
+    ...(input.threadId ? { threadId: input.threadId } : {}),
+    ...(input.prompt ? { prompt: input.prompt } : {}),
+    runtimeMode: 'full-access'
+  })
+  setSnapshot(nextSnapshot)
+}
+
+export async function installProjectSkill(input: {
+  threadId: string
+  skillId: string
+}): Promise<void> {
+  const nextSnapshot = await window.api.agent.installSkill(input)
+  setSnapshot(nextSnapshot)
+}

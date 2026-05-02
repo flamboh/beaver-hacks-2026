@@ -2,15 +2,16 @@ import { WorkbenchTab } from '@renderer/types/global'
 
 const navItems: { label: string; key: WorkbenchTab }[] = [
   { label: 'Gallery', key: 'gallery' },
+  { label: 'Chat', key: 'chat' },
   { label: 'Control Panel', key: 'control-panel' },
   { label: 'Review', key: 'review' },
   { label: 'Agents', key: 'agents' },
-  { label: 'Settings', key: 'settings' },
+  { label: 'Settings', key: 'settings' }
 ]
 
 export default function SideBar({
   currentPage,
-  setCurrentPage,
+  setCurrentPage
 }: {
   currentPage: WorkbenchTab
   setCurrentPage: (tab: WorkbenchTab) => void

@@ -1,0 +1,9 @@
+pnpm fmt
+
+if ! git diff --quiet; then
+  echo "Formatting changed files. Review and re-stage before committing."
+  exit 1
+fi
+
+pnpm lint
+pnpm typecheck

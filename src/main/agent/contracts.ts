@@ -23,6 +23,20 @@ export interface AgentActivity {
   turnId: string | null
 }
 
+export interface AgentSkillSuggestion {
+  id: string
+  slug: string
+  name: string
+  source: string
+  installs: number
+  sourceType: 'github' | 'well-known' | string
+  installUrl: string | null
+  url: string
+  description: string
+  score: number
+  installed: boolean
+}
+
 export interface AgentSession {
   status: AgentSessionStatus
   provider: 'codex'
@@ -39,6 +53,7 @@ export interface AgentThread {
   runtimeMode: AgentRuntimeMode
   messages: AgentMessage[]
   activities: AgentActivity[]
+  suggestedSkills: AgentSkillSuggestion[]
   session: AgentSession | null
   createdAt: string
   updatedAt: string
@@ -56,6 +71,18 @@ export interface StartTurnInput {
   prompt: string
   model?: string
   runtimeMode?: AgentRuntimeMode
+}
+
+export interface FindSkillsInput {
+  threadId?: string
+  cwd?: string
+  prompt?: string
+  runtimeMode?: AgentRuntimeMode
+}
+
+export interface InstallSkillInput {
+  threadId: string
+  skillId: string
 }
 
 export interface ProviderSessionStartInput {

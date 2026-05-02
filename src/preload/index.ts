@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { AgentSnapshot, StartTurnInput } from '../main/agent/ipc'
+import type {
+  AgentSnapshot,
+  FindSkillsInput,
+  InstallSkillInput,
+  StartTurnInput
+} from '../main/agent/ipc'
 
 // Custom APIs for renderer
 const api = {
@@ -8,6 +13,10 @@ const api = {
     getSnapshot: (): Promise<AgentSnapshot> => ipcRenderer.invoke('agent:get-snapshot'),
     startTurn: (input: StartTurnInput): Promise<AgentSnapshot> =>
       ipcRenderer.invoke('agent:start-turn', input),
+    findSkills: (input: FindSkillsInput): Promise<AgentSnapshot> =>
+      ipcRenderer.invoke('agent:find-skills', input),
+    installSkill: (input: InstallSkillInput): Promise<AgentSnapshot> =>
+      ipcRenderer.invoke('agent:install-skill', input),
     onSnapshot: (listener: (snapshot: AgentSnapshot) => void): (() => void) => {
       const handler = (_event: Electron.IpcRendererEvent, snapshot: AgentSnapshot): void => {
         listener(snapshot)

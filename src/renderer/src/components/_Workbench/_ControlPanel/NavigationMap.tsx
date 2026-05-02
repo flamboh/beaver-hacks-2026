@@ -11,7 +11,15 @@ interface Props {
   visible: boolean
 }
 
-export default function NavigationMap({ canvasWidth, canvasHeight, viewportWidth, viewportHeight, offset, scale, visible }: Props) {
+export default function NavigationMap({
+  canvasWidth,
+  canvasHeight,
+  viewportWidth,
+  viewportHeight,
+  offset,
+  scale,
+  visible
+}: Props) {
   if (canvasWidth === 0 || canvasHeight === 0) return null
 
   const scaleX = MAP_W / canvasWidth
@@ -41,7 +49,7 @@ export default function NavigationMap({ canvasWidth, canvasHeight, viewportWidth
           left: clampedX,
           top: clampedY,
           width: clampedW,
-          height: clampedH,
+          height: clampedH
         }}
       />
     </div>
