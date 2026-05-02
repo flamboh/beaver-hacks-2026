@@ -6,9 +6,16 @@ import Agents from "@renderer/components/_Workbench/_Agents/main/Agents"
 import Settings from "@renderer/components/_Workbench/_Settings/main/Settings"
 import { WorkbenchTab } from "@renderer/types/models"
 import { useState } from "react"
+import { useParams } from "react-router-dom"
+
+const WORKBENCH_TABS: WorkbenchTab[] = ["control-panel", "gallery", "review", "agents", "settings"]
 
 export default function Workbench() {
-	const [currentPage, setCurrentPage] = useState<WorkbenchTab>("control-panel")
+	const { tab } = useParams()
+	const initialPage = WORKBENCH_TABS.includes(tab as WorkbenchTab)
+		? (tab as WorkbenchTab)
+		: "control-panel"
+	const [currentPage, setCurrentPage] = useState<WorkbenchTab>(initialPage)
 
 	const renderPage = () => {
 		switch (currentPage) {

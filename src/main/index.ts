@@ -6,12 +6,15 @@ import { AgentEngine } from "./agent/agentEngine"
 import { registerAgentIpc } from "./agent/ipc"
 import { DatabaseService } from "./db/database"
 import { registerDatabaseIpc } from "./db/ipc"
+import { DevServerService } from "./devServer/devServerService"
+import { registerDevServerIpc } from "./devServer/ipc"
 import { registerDialogIpc } from "./dialog/ipc"
 import { GitService } from "./git/gitService"
 import { registerGitIpc } from "./git/ipc"
 
 const agentEngine = new AgentEngine({ cwd: process.cwd() })
 const gitService = new GitService()
+const devServer = new DevServerService()
 let database: DatabaseService | null = null
 
 function createWindow(): void {
@@ -65,6 +68,7 @@ app.whenReady().then(async () => {
 
 	registerAgentIpc(agentEngine)
 	registerDatabaseIpc(database)
+	registerDevServerIpc(devServer)
 	registerDialogIpc()
 	registerGitIpc(gitService, agentEngine)
 
@@ -87,6 +91,7 @@ app.on("window-all-closed", () => {
 })
 
 app.on("before-quit", () => {
+	devServer.stop()
 	void database?.close()
 })
 

@@ -11,6 +11,7 @@ import type {
 
 export function registerGitIpc(git: GitService, agentEngine: AgentEngine): void {
 	ipcMain.handle("git:get-status", (_event, cwd: string) => git.status(cwd))
+	ipcMain.handle("git:get-working-tree-diff", (_event, cwd?: string) => git.workingTreeDiff(cwd))
 	ipcMain.handle("git:checkout", (_event, input: GitCheckoutInput) => git.checkout(input))
 	ipcMain.handle("git:create-branch", (_event, input: GitCreateBranchInput) =>
 		git.createBranch(input)
@@ -41,5 +42,6 @@ export type {
 	GitCreateBranchInput,
 	GitPushInput,
 	GitPushResult,
-	GitStatusSnapshot
+	GitStatusSnapshot,
+	GitWorkingTreeDiffSnapshot
 } from "./contracts"
