@@ -8,6 +8,7 @@ import ControlPanel from '@renderer/components/_Workbench/_ControlPanel/main/Con
 import Review from '@renderer/components/_Workbench/_Review/main/Review'
 import Settings from '@renderer/components/_Workbench/_Settings/main/Settings'
 import { Chat } from '@renderer/components/chat'
+import { GitCommitMenu } from '@renderer/components/GitCommitMenu'
 import type { WorkbenchTab } from '@renderer/types/global'
 import { findProjectSkills, installProjectSkill, useAgentSnapshot } from '../agentStore'
 
@@ -89,6 +90,7 @@ export default function Workbench(): JSX.Element {
               <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-xs text-zinc-400">
                 {sessionStatus}
               </span>
+              <GitCommitMenu cwd={activeThread?.cwd ?? null} />
               <button
                 type="button"
                 onClick={handleSkillsClick}

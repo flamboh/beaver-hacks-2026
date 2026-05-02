@@ -4,8 +4,11 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { AgentEngine } from './agent/agentEngine'
 import { registerAgentIpc } from './agent/ipc'
+import { GitService } from './git/gitService'
+import { registerGitIpc } from './git/ipc'
 
 const agentEngine = new AgentEngine({ cwd: process.cwd() })
+const gitService = new GitService()
 
 function createWindow(): void {
   // Create the browser window.
@@ -54,6 +57,7 @@ app.whenReady().then(() => {
   })
 
   registerAgentIpc(agentEngine)
+  registerGitIpc(gitService, agentEngine)
 
   createWindow()
 

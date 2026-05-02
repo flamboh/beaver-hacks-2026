@@ -2,6 +2,7 @@ import type { FormEvent, JSX } from 'react'
 import { useState } from 'react'
 import { sendAgentMessage } from '../agentStore'
 import type { AgentSnapshot } from '../../../main/agent/ipc'
+import { GitBranchControls } from './GitBranchControls'
 
 type AgentThread = AgentSnapshot['threads'][number]
 
@@ -36,7 +37,7 @@ export function Chat({ thread, isRunning }: ChatProps): JSX.Element {
   }
 
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-col">
       <section className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
           {thread ? (
@@ -87,8 +88,9 @@ export function Chat({ thread, isRunning }: ChatProps): JSX.Element {
             Send
           </button>
         </form>
+        <GitBranchControls cwd={thread?.cwd ?? null} />
         {error ? <p className="mx-auto mt-2 max-w-3xl text-xs text-red-400">{error}</p> : null}
       </footer>
-    </>
+    </div>
   )
 }

@@ -6,6 +6,16 @@ import type {
   InstallSkillInput,
   StartTurnInput
 } from '../main/agent/ipc'
+import type {
+  GitCheckoutInput,
+  GitCommitAllInput,
+  GitCommitMessage,
+  GitCommitResult,
+  GitCreateBranchInput,
+  GitPushInput,
+  GitPushResult,
+  GitStatusSnapshot
+} from '../main/git/ipc'
 
 // Custom APIs for renderer
 const api = {
@@ -24,6 +34,19 @@ const api = {
       ipcRenderer.on('agent:snapshot', handler)
       return () => ipcRenderer.off('agent:snapshot', handler)
     }
+  },
+  git: {
+    getStatus: (cwd: string): Promise<GitStatusSnapshot> =>
+      ipcRenderer.invoke('git:get-status', cwd),
+    checkout: (input: GitCheckoutInput): Promise<GitStatusSnapshot> =>
+      ipcRenderer.invoke('git:checkout', input),
+    createBranch: (input: GitCreateBranchInput): Promise<GitStatusSnapshot> =>
+      ipcRenderer.invoke('git:create-branch', input),
+    generateCommitMessage: (cwd: string): Promise<GitCommitMessage> =>
+      ipcRenderer.invoke('git:generate-commit-message', cwd),
+    commitAll: (input: GitCommitAllInput): Promise<GitCommitResult> =>
+      ipcRenderer.invoke('git:commit-all', input),
+    push: (input: GitPushInput): Promise<GitPushResult> => ipcRenderer.invoke('git:push', input)
   }
 }
 

@@ -7,6 +7,7 @@ import { listInstalledSkillKeys, matchesInstalledSkill } from '../skills/install
 import type {
   AgentActivity,
   AgentMessage,
+  AgentRuntimeMode,
   AgentSession,
   AgentSnapshot,
   AgentThread,
@@ -149,6 +150,16 @@ export class AgentEngine {
     thread.updatedAt = nowIso()
     this.emitSnapshot()
     return this.getSnapshot()
+  }
+
+  runOneShot(input: {
+    cwd: string
+    prompt: string
+    model: string
+    runtimeMode: AgentRuntimeMode
+    timeoutMs?: number
+  }): Promise<string> {
+    return this.provider.runOneShot(input)
   }
 
   private ensureThread(input: StartTurnInput): AgentThread {
