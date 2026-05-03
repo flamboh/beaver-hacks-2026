@@ -1,7 +1,10 @@
 import { FileDiff, type FileDiffMetadata } from "@pierre/diffs/react"
 import type { GitStatusEntry } from "@pierre/trees"
 import { FileTree, useFileTree, useFileTreeSelection } from "@pierre/trees/react"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
+
+type DiffViewStyle = "unified" | "split"
+type DiffOverflow = "scroll" | "wrap"
 
 const treeCSS = `
 	:host {
@@ -17,10 +20,8 @@ const treeCSS = `
 
 const diffOptions = {
 	diffIndicators: "bars" as const,
-	diffStyle: "unified" as const,
 	hunkSeparators: "line-info-basic" as const,
 	lineDiffType: "word" as const,
-	overflow: "scroll" as const,
 	theme: "pierre-dark" as const,
 	themeType: "dark" as const,
 	unsafeCSS: `
@@ -44,6 +45,14 @@ const diffOptions = {
 			color: #d4d4d4 !important;
 		}
 	`
+}
+
+function diffToggleClass(active: boolean): string {
+	return `h-6 rounded px-2 text-[11px] transition-colors ${
+		active
+			? "bg-white/10 text-neutral-100"
+			: "text-neutral-500 hover:bg-white/[0.06] hover:text-neutral-300"
+	}`
 }
 
 function resolveFileDiffPath(fileDiff: FileDiffMetadata): string {
@@ -81,6 +90,8 @@ function statusLabel(fileDiff: FileDiffMetadata) {
 }
 
 export function ReviewFilesWorkspace({ files }: { files: FileDiffMetadata[] }) {
+	const [diffStyle, setDiffStyle] = useState<DiffViewStyle>("unified")
+	const [overflow, setOverflow] = useState<DiffOverflow>("scroll")
 	const sortedFiles = useMemo(
 		() =>
 			files.toSorted((left, right) =>
@@ -115,6 +126,14 @@ export function ReviewFilesWorkspace({ files }: { files: FileDiffMetadata[] }) {
 	const selectedFile =
 		sortedFiles.find((fileDiff) => resolveFileDiffPath(fileDiff) === selectedPath) ?? sortedFiles[0]
 	const selectedStats = selectedFile ? countFileDiffLines(selectedFile) : null
+	const selectedDiffOptions = useMemo(
+		() => ({
+			...diffOptions,
+			diffStyle,
+			overflow
+		}),
+		[diffStyle, overflow]
+	)
 
 	return (
 		<section className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)] gap-4 pt-4">
@@ -138,17 +157,45 @@ export function ReviewFilesWorkspace({ files }: { files: FileDiffMetadata[] }) {
 									{resolveFileDiffPath(selectedFile)}
 								</p>
 							</div>
-							{selectedStats && (
-								<p className="font-mono text-[11px] text-neutral-500">
-									+{selectedStats.additions} -{selectedStats.deletions}
-								</p>
-							)}
+							<div className="flex shrink-0 items-center gap-2">
+								<div className="flex rounded-md border border-white/8 bg-white/[0.03] p-0.5">
+									<button
+										type="button"
+										onClick={() => setDiffStyle("unified")}
+										className={diffToggleClass(diffStyle === "unified")}
+										aria-pressed={diffStyle === "unified"}
+									>
+										Unified
+									</button>
+									<button
+										type="button"
+										onClick={() => setDiffStyle("split")}
+										className={diffToggleClass(diffStyle === "split")}
+										aria-pressed={diffStyle === "split"}
+									>
+										Split
+									</button>
+								</div>
+								<button
+									type="button"
+									onClick={() => setOverflow((next) => (next === "wrap" ? "scroll" : "wrap"))}
+									className={diffToggleClass(overflow === "wrap")}
+									aria-pressed={overflow === "wrap"}
+								>
+									Wrap
+								</button>
+								{selectedStats && (
+									<p className="font-mono text-[11px] text-neutral-500">
+										+{selectedStats.additions} -{selectedStats.deletions}
+									</p>
+								)}
+							</div>
 						</div>
 						<div className="min-h-0 flex-1 overflow-auto">
 							<FileDiff
 								key={buildFileDiffRenderKey(selectedFile)}
 								fileDiff={selectedFile}
-								options={diffOptions}
+								options={selectedDiffOptions}
 								className="block min-w-full"
 								disableWorkerPool
 							/>
