@@ -31,7 +31,7 @@ export default function AgentsSidebar({ total, counts, onStatusHover }: AgentsSi
 						key={row.label}
 						onMouseEnter={() => onStatusHover(row.status)}
 						onMouseLeave={() => onStatusHover(null)}
-						className="flex cursor-default items-center justify-between rounded-md px-2 py-2 text-sm transition-colors duration-300 hover:bg-white/5"
+						className="flex cursor-pointer items-center justify-between rounded-md px-2 py-2 text-sm transition-colors duration-300 hover:bg-white/5"
 					>
 						<div className="flex items-center gap-2">
 							<span className={`h-2 w-2 rounded-full ${row.dot}`} />

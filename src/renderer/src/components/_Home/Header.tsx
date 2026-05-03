@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom"
+import logoUrl from "@renderer/assets/logo.png"
 
 export default function Header() {
 	return (
@@ -9,8 +10,13 @@ export default function Header() {
 					event.preventDefault()
 					window.location.reload()
 				}}
-				className="text-sm font-medium uppercase tracking-wide text-neutral-50 hover:text-neutral-300"
+				className="group flex cursor-pointer items-center gap-2 text-sm font-medium uppercase tracking-wide text-neutral-50 hover:text-neutral-300"
 			>
+				<img
+					src={logoUrl}
+					alt=""
+					className="size-10 transition-opacity duration-150 group-hover:opacity-70"
+				/>
 				NULLOTH
 			</Link>
 
