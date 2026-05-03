@@ -363,7 +363,7 @@ export class GitService {
 		}
 
 		const [trackedPatch, untrackedPatch] = await Promise.all([
-			runGit(cwd, ["diff", "--patch", "--minimal", "--no-color", "HEAD", "--"]),
+			runGit(cwd, ["diff", "--patch", "--minimal", "--no-color", "--"]),
 			buildUntrackedPatch(cwd)
 		])
 		return {
@@ -418,6 +418,8 @@ export class GitService {
 			"Audience: a maintainer reviewing the branch before merge.",
 			"Cover important implementation details, changed behavior, code-base impact, risk areas, and likely follow-up checks.",
 			"Do not write a line-by-line review. Do not invent details absent from the diff.",
+			"Return only the final tour markdown. Do not mention inspecting files, running commands, shell output, tool usage, or your process.",
+			'Start directly with the "Overview" section.',
 			"Use concise markdown with these sections: Overview, Important Changes, Codebase Impact, Review Focus.",
 			"",
 			`Branch: ${status.branch ?? "detached"}`,
