@@ -1,12 +1,13 @@
-import { useRef, useState, useCallback, useEffect } from "react"
+import { useRef, useState, useCallback, useEffect, useMemo } from "react"
 import NavigationMap from "../NavigationMap"
 import AgentCard from "../AgentCard"
+import { useAgentSnapshot } from "@renderer/agentStore"
 import { AgentRow } from "@renderer/types/models"
 
 // ── layout constants ──────────────────────────────────────────────
-const CARD_W = 820
-const CARD_H = 500
-const GAP = 80
+const CARD_W = 1040
+const CARD_H = 680
+const GAP = 96
 const PADDING = 80
 const COLS = 2
 
@@ -62,12 +63,6 @@ const PLACEHOLDER_AGENTS: AgentRow[] = [
 	}
 ]
 
-// placeholder query — replace with real IPC/DB call
-async function fetchAgents(_projectId: string): Promise<AgentRow[]> {
-	console.log(_projectId)
-	return PLACEHOLDER_AGENTS
-}
-
 // ── canvas math ───────────────────────────────────────────────────
 function canvasSize(count: number) {
 	const rows = Math.ceil(count / COLS)
@@ -97,25 +92,39 @@ interface ControlPanelProps {
 
 // ── component ─────────────────────────────────────────────────────
 export default function ControlPanel({ workspacePath }: ControlPanelProps) {
+	const snapshot = useAgentSnapshot()
 	const viewportRef = useRef<HTMLDivElement>(null)
 	const resizeObserver = useRef<ResizeObserver | null>(null)
 	const hideMapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const smoothPanTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const isPanning = useRef(false)
 	const lastPos = useRef({ x: 0, y: 0 })
 	// always holds the latest wheel logic so the stable capture listener stays current
 	const wheelFnRef = useRef<(e: WheelEvent) => void>(() => {})
 
-	const [agents, setAgents] = useState<AgentRow[]>([])
 	const [offset, setOffset] = useState({ x: PADDING, y: PADDING })
 	const [vpSize, setVpSize] = useState({ w: 0, h: 0 })
 	const [showMap, setShowMap] = useState(false)
 	const [focusedIdx, setFocusedIdx] = useState(0)
 	const [smoothPan, setSmoothPan] = useState(false)
-
-	// fetch agents on mount
-	useEffect(() => {
-		fetchAgents("proj-1").then(setAgents)
-	}, [])
+	const workspaceThreads = useMemo(
+		() => snapshot.threads.filter((thread) => thread.cwd === workspacePath),
+		[snapshot.threads, workspacePath]
+	)
+	const agents = useMemo<AgentRow[]>(
+		() =>
+			workspaceThreads.length > 0
+				? workspaceThreads.map((thread) => ({
+						id: thread.id,
+						name: thread.title,
+						project_id: "",
+						model: thread.model ?? "codex",
+						scope_path: thread.cwd,
+						effort: "medium"
+					}))
+				: PLACEHOLDER_AGENTS,
+		[workspaceThreads]
+	)
 
 	const flashMap = useCallback(() => {
 		setShowMap(true)
@@ -125,6 +134,8 @@ export default function ControlPanel({ workspacePath }: ControlPanelProps) {
 
 	// stable capture-phase handler — always delegates to the latest wheelFnRef
 	const stableWheelCapture = useCallback((e: WheelEvent) => {
+		const target = e.target as Element | null
+		if (target?.closest(".nowheel")) return
 		e.preventDefault()
 		wheelFnRef.current(e)
 	}, [])
@@ -148,17 +159,14 @@ export default function ControlPanel({ workspacePath }: ControlPanelProps) {
 		[stableWheelCapture]
 	)
 
-	const snapToCard = useCallback(
+	const centerCard = useCallback(
 		(idx: number) => {
-			const clamped = Math.max(0, Math.min(idx, agents.length - 1))
-			setFocusedIdx(clamped)
-
 			const vp = viewportRef.current
 			if (!vp) return
 			const vpW = vp.offsetWidth
 			const vpH = vp.offsetHeight
 			const { w, h } = canvasSize(agents.length)
-			const pos = cardPos(clamped)
+			const pos = cardPos(idx)
 
 			// center the target card in the viewport
 			const tx = vpW / 2 - pos.x - CARD_W / 2
@@ -167,24 +175,59 @@ export default function ControlPanel({ workspacePath }: ControlPanelProps) {
 			setSmoothPan(true)
 			setOffset(clamp({ x: tx, y: ty }, vpW, vpH, w, h))
 			flashMap()
-			setTimeout(() => setSmoothPan(false), 320)
+			if (smoothPanTimer.current) clearTimeout(smoothPanTimer.current)
+			smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 320)
 		},
 		[agents.length, flashMap]
+	)
+
+	const snapToCard = useCallback(
+		(idx: number) => {
+			const clamped = Math.max(0, Math.min(idx, agents.length - 1))
+			setFocusedIdx(clamped)
+			centerCard(clamped)
+		},
+		[agents.length, centerCard]
+	)
+
+	const moveFocus = useCallback(
+		(direction: "left" | "right" | "up" | "down") => {
+			if (agents.length === 0) return
+			setFocusedIdx((current) => {
+				const col = current % COLS
+				let next = current
+				if (direction === "left") next = col > 0 ? current - 1 : current
+				if (direction === "right") {
+					const right = current + 1
+					next = col < COLS - 1 && right < agents.length ? right : current
+				}
+				if (direction === "up") next = current - COLS >= 0 ? current - COLS : current
+				if (direction === "down") {
+					const down = current + COLS
+					next = down < agents.length && down % COLS === col ? down : current
+				}
+				centerCard(next)
+				return next
+			})
+		},
+		[agents.length, centerCard]
 	)
 
 	// keyboard grid-snap
 	useEffect(() => {
 		const handler = (e: KeyboardEvent) => {
 			if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return
+			const target = e.target as Element | null
+			if (target?.closest("input, textarea, [contenteditable='true']")) return
 			e.preventDefault()
-			if (e.key === "ArrowRight") snapToCard(focusedIdx + 1)
-			if (e.key === "ArrowLeft") snapToCard(focusedIdx - 1)
-			if (e.key === "ArrowDown") snapToCard(focusedIdx + COLS)
-			if (e.key === "ArrowUp") snapToCard(focusedIdx - COLS)
+			if (e.key === "ArrowRight") moveFocus("right")
+			if (e.key === "ArrowLeft") moveFocus("left")
+			if (e.key === "ArrowDown") moveFocus("down")
+			if (e.key === "ArrowUp") moveFocus("up")
 		}
 		window.addEventListener("keydown", handler)
 		return () => window.removeEventListener("keydown", handler)
-	}, [focusedIdx, snapToCard])
+	}, [moveFocus])
 
 	const onMouseDown = useCallback((e: React.MouseEvent) => {
 		isPanning.current = true
@@ -279,7 +322,11 @@ export default function ControlPanel({ workspacePath }: ControlPanelProps) {
 									focused ? "ring-2 ring-white/20 ring-offset-4 ring-offset-neutral-950" : ""
 								}`}
 							>
-								<AgentCard workspacePath={workspacePath} />
+								<AgentCard
+									agent={agent}
+									thread={workspaceThreads.find((thread) => thread.id === agent.id) ?? null}
+									workspacePath={workspacePath}
+								/>
 							</div>
 						</div>
 					)

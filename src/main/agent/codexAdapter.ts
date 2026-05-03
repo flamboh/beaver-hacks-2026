@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events"
 import { generatedId, CodexJsonRpc, type CodexWireMessage } from "./codexJsonRpc"
+import { codexNotificationEvents, providerThreadIdForNotification } from "./codexNotifications"
 import type {
 	AgentRuntimeMode,
 	AgentSession,
@@ -78,18 +79,6 @@ function buildInitializeParams(): Record<string, unknown> {
 			experimentalApi: true
 		}
 	}
-}
-
-function readPath(payload: unknown, path: string[]): unknown {
-	let cursor = payload as Record<string, unknown> | undefined | null
-	for (const segment of path) {
-		cursor = cursor?.[segment] as Record<string, unknown> | undefined | null
-	}
-	return cursor
-}
-
-function readText(value: unknown): string | undefined {
-	return value === undefined || value === null ? undefined : String(value)
 }
 
 export class CodexAdapter implements ProviderAdapter {
@@ -290,77 +279,12 @@ export class CodexAdapter implements ProviderAdapter {
 	}
 
 	private handleNotification(message: CodexWireMessage): void {
-		const method = message.method
-		const params = message.params
-		const providerThreadId = readText(
-			readPath(params, ["thread", "id"]) ??
-				readPath(params, ["threadId"]) ??
-				readPath(params, ["turn", "threadId"])
-		)
+		const providerThreadId = providerThreadIdForNotification(message)
 		const appThreadId = this.appThreadIdForProviderThread(providerThreadId) ?? this.activeThreadId()
-		if (!method || !appThreadId) return
-
-		const turnId =
-			readText(readPath(params, ["turn", "id"]) ?? readPath(params, ["turnId"])) ?? null
-		const itemId =
-			readText(readPath(params, ["item", "id"]) ?? readPath(params, ["itemId"])) ?? null
 		const createdAt = nowIso()
-
-		if (method === "turn/started" && turnId) {
-			this.emit({ type: "turn.started", threadId: appThreadId, turnId, createdAt, payload: {} })
-			return
-		}
-
-		if (method === "turn/completed") {
-			const status = readText(readPath(params, ["turn", "status"])) ?? "completed"
-			const error = readText(readPath(params, ["turn", "error", "message"]))
-			this.emit({
-				type: "turn.completed",
-				threadId: appThreadId,
-				turnId,
-				createdAt,
-				payload: {
-					status:
-						status === "failed" ||
-						status === "cancelled" ||
-						status === "interrupted" ||
-						status === "completed"
-							? status
-							: "completed",
-					...(error ? { error } : {})
-				}
-			})
-			return
-		}
-
-		if (method === "item/agentMessage/delta") {
-			const delta = readText(readPath(params, ["delta"]) ?? readPath(params, ["textDelta"]))
-			if (!delta) return
-			this.emit({
-				type: "assistant.delta",
-				threadId: appThreadId,
-				turnId,
-				itemId,
-				createdAt,
-				payload: { delta }
-			})
-			return
-		}
-
-		if (method === "item/started" || method === "item/completed") {
-			const rawType = readText(readPath(params, ["item", "type"])) ?? "item"
-			const title = readText(readPath(params, ["item", "title"]))
-			this.emit({
-				type: "activity",
-				threadId: appThreadId,
-				turnId,
-				createdAt,
-				payload: {
-					kind: method,
-					summary: title ?? rawType,
-					detail: params
-				}
-			})
+		if (!appThreadId) return
+		for (const event of codexNotificationEvents({ message, appThreadId, createdAt })) {
+			this.emit(event)
 		}
 	}
 

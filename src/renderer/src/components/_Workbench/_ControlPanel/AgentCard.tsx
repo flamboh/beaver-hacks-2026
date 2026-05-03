@@ -1,37 +1,39 @@
 import { useMemo } from "react"
 import { Chat } from "@renderer/components/chat"
 import { useAgentSnapshot } from "@renderer/agentStore"
+import type { AgentRow } from "@renderer/types/models"
+import type { AgentSnapshot } from "../../../../../main/agent/ipc"
 
-// ── placeholder data ──────────────────────────────────────────────
-const AGENT_NAME = "Agent One"
-const MODEL_NAME = "claude-opus-4-7"
-const CURRENT_TASK =
-	"Refactor the authentication middleware to meet the new compliance requirements."
-const PRIORITY: "low" | "medium" | "high" = "medium"
-const SCOPE = "@Pipeline.md"
-const TASK_LIST = [
-	"Research existing auth patterns",
-	"Draft new session token schema",
-	"Implement middleware changes",
-	"Write integration tests"
-]
-// ─────────────────────────────────────────────────────────────────
+type AgentThread = AgentSnapshot["threads"][number]
+type PlanStatus = "pending" | "inProgress" | "completed"
+type PlanStep = {
+	step: string
+	status: PlanStatus
+}
+type PlanActivityPayload = {
+	plan?: Array<{
+		step?: string
+		status?: string
+	}>
+}
 
 const PRIORITY_LEVELS = ["low", "medium", "high"] as const
 
 const priorityStyles: Record<(typeof PRIORITY_LEVELS)[number], string> = {
 	low: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-	medium: "bg-yellow-500/15  text-yellow-400  border-yellow-500/30",
-	high: "bg-red-500/15     text-red-400     border-red-500/30"
+	medium: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+	high: "bg-red-500/15 text-red-400 border-red-500/30"
 }
 
 interface AgentCardProps {
+	agent: AgentRow
+	thread: AgentThread | null
 	workspacePath: string
 }
 
-export default function AgentCard({ workspacePath }: AgentCardProps) {
+export default function AgentCard({ agent, thread, workspacePath }: AgentCardProps) {
 	const snapshot = useAgentSnapshot()
-	const activeThread = useMemo(
+	const fallbackThread = useMemo(
 		() =>
 			snapshot.threads.find(
 				(thread) => thread.id === snapshot.activeThreadId && thread.cwd === workspacePath
@@ -40,95 +42,130 @@ export default function AgentCard({ workspacePath }: AgentCardProps) {
 			null,
 		[workspacePath, snapshot]
 	)
+	const activeThread = thread ?? fallbackThread
 	const sessionStatus = activeThread?.session?.status ?? "idle"
 	const isRunning = sessionStatus === "starting" || sessionStatus === "running"
+	const planSteps = useMemo(() => derivePlanSteps(activeThread), [activeThread])
+	const currentTask =
+		planSteps.find((step) => step.status === "inProgress") ??
+		planSteps.find((step) => step.status === "pending") ??
+		planSteps[planSteps.length - 1] ??
+		null
+	const priority = agent.effort === "low" || agent.effort === "high" ? agent.effort : "medium"
+	const modelName = activeThread?.model ?? agent.model
 
 	return (
 		<div
-			className="flex flex-col rounded-xl border border-white/8 bg-neutral-900 text-white overflow-hidden shadow-2xl shadow-black/40"
-			style={{ width: 820, height: 500 }}
+			className="flex flex-col overflow-hidden rounded-xl border border-white/8 bg-neutral-900 text-white shadow-2xl shadow-black/40"
+			style={{ width: 1040, height: 680 }}
 			onMouseDown={(event) => event.stopPropagation()}
 			onMouseMove={(event) => event.stopPropagation()}
 			onWheel={(event) => event.stopPropagation()}
 		>
-			{/* header */}
-			<div className="flex items-center justify-between px-5 h-11 border-b border-white/5 bg-neutral-800/60 shrink-0">
-				<span className="text-sm font-semibold tracking-wide text-neutral-100">{AGENT_NAME}</span>
+			<div className="flex h-11 shrink-0 items-center justify-between border-b border-white/5 bg-neutral-800/60 px-5">
+				<span className="min-w-0 truncate text-sm font-semibold tracking-wide text-neutral-100">
+					{activeThread?.title ?? agent.name}
+				</span>
 				<div className="flex items-center gap-2">
 					<span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-xs text-zinc-500">
 						{sessionStatus}
 					</span>
-					<button className="text-xs px-2.5 py-1 rounded-md border border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-500/60 transition-all duration-150">
+					<button className="rounded-md border border-red-500/40 px-2.5 py-1 text-xs text-red-400 transition-all duration-150 hover:border-red-500/60 hover:bg-red-500/10">
 						Terminate
 					</button>
 				</div>
 			</div>
 
-			{/* body */}
 			<div className="flex flex-1 overflow-hidden">
-				{/* left panel */}
-				<div className="flex flex-col w-64 shrink-0 border-r border-white/5 px-4 py-4 gap-5">
-					<div className="flex flex-col gap-1.5">
-						<span className="text-[10px] uppercase tracking-widest text-neutral-600 font-medium">
+				<div className="flex w-72 shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
+					<div className="flex min-w-0 flex-col gap-1.5">
+						<span className="text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
 							Current Task
 						</span>
-						<div className="rounded-lg bg-neutral-800/60 border border-white/5 px-3 py-2.5 text-sm text-neutral-300 leading-relaxed">
-							{CURRENT_TASK}
+						<div className="break-words rounded-lg border border-white/5 bg-neutral-800/60 px-3 py-2.5 text-sm leading-relaxed text-neutral-300">
+							{currentTask?.step ?? "No plan tasks yet."}
 						</div>
 					</div>
 
-					<div className="flex flex-col gap-1.5 flex-1">
-						<span className="text-[10px] uppercase tracking-widest text-neutral-600 font-medium">
-							Task List
+					<div className="flex min-w-0 flex-1 flex-col gap-1.5">
+						<span className="text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
+							Tasks
 						</span>
-						<ol className="flex flex-col gap-1.5">
-							{TASK_LIST.map((task, i) => (
-								<li key={i} className="flex items-start gap-2 text-sm text-neutral-400">
-									<span className="text-neutral-700 tabular-nums shrink-0 mt-px">{i + 1}.</span>
-									<span className="leading-snug">{task}</span>
-								</li>
-							))}
-						</ol>
+						<div className="nowheel min-h-0 flex-1 overflow-y-auto pr-1">
+							{planSteps.length > 0 ? (
+								<ol className="flex flex-col gap-1.5">
+									{planSteps.map((task, i) => (
+										<li
+											key={`${task.status}:${task.step}`}
+											className="flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-sm text-neutral-400"
+										>
+											<span className="mt-px shrink-0 tabular-nums text-neutral-700">{i + 1}.</span>
+											<span
+												className={`mt-1.5 size-1.5 shrink-0 rounded-full ${
+													task.status === "completed"
+														? "bg-emerald-400/70"
+														: task.status === "inProgress"
+															? "bg-blue-300/80"
+															: "bg-neutral-700"
+												}`}
+											/>
+											<span
+												className={`min-w-0 break-words leading-snug ${
+													task.status === "completed"
+														? "text-neutral-600 line-through decoration-neutral-700"
+														: task.status === "inProgress"
+															? "text-neutral-200"
+															: ""
+												}`}
+											>
+												{task.step}
+											</span>
+										</li>
+									))}
+								</ol>
+							) : (
+								<p className="rounded-lg border border-white/5 bg-neutral-950/50 px-3 py-2 text-sm text-neutral-600">
+									Waiting for plan tool updates.
+								</p>
+							)}
+						</div>
 					</div>
 
 					<div className="flex flex-col gap-1">
-						<span className="text-[10px] uppercase tracking-widest text-neutral-600 font-medium">
+						<span className="text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
 							Model
 						</span>
-						<span className="text-xs text-neutral-400 font-mono">{MODEL_NAME}</span>
+						<span className="break-words font-mono text-xs text-neutral-400">{modelName}</span>
 					</div>
 				</div>
 
-				{/* right panel */}
-				<div className="flex flex-col flex-1 px-4 py-4 gap-3">
-					<div className="flex items-center gap-3">
+				<div className="flex min-w-0 flex-1 flex-col gap-3 px-4 py-4">
+					<div className="flex shrink-0 items-center gap-3">
 						<div className="flex items-center gap-1">
 							{PRIORITY_LEVELS.map((level) => (
 								<span
 									key={level}
-									className={`text-[11px] px-2 py-0.5 rounded-md border capitalize transition-colors
-                    ${
-											PRIORITY === level
-												? priorityStyles[level]
-												: "border-white/5 text-neutral-700 bg-transparent"
-										}`}
+									className={`rounded-md border px-2 py-0.5 text-[11px] capitalize transition-colors ${
+										priority === level
+											? priorityStyles[level]
+											: "border-white/5 bg-transparent text-neutral-700"
+									}`}
 								>
 									{level}
 								</span>
 							))}
 						</div>
-						<span className="text-xs text-neutral-600">
-							Scope: <span className="text-blue-400/80 font-mono">{SCOPE}</span>
+						<span className="min-w-0 break-words text-xs text-neutral-600">
+							Scope: <span className="font-mono text-blue-400/80">{agent.scope_path}</span>
 						</span>
 					</div>
 
-					{/* chat */}
-					<div className="flex flex-col flex-1 rounded-lg border border-white/5 bg-neutral-950 overflow-hidden">
-						<div className="flex items-center gap-1.5 px-3 h-8 border-b border-white/5 bg-neutral-900/60 shrink-0">
-							<span className="w-2.5 h-2.5 rounded-full bg-red-500/50" />
-							<span className="w-2.5 h-2.5 rounded-full bg-yellow-500/50" />
-							<span className="w-2.5 h-2.5 rounded-full bg-emerald-500/50" />
-							<span className="ml-2 text-[10px] text-neutral-700 font-mono">chat</span>
+					<div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/5 bg-neutral-950">
+						<div className="flex h-8 shrink-0 items-center gap-1.5 border-b border-white/5 bg-neutral-900/60 px-3">
+							<span className="size-2.5 rounded-full bg-red-500/50" />
+							<span className="size-2.5 rounded-full bg-yellow-500/50" />
+							<span className="size-2.5 rounded-full bg-emerald-500/50" />
+							<span className="ml-2 font-mono text-[10px] text-neutral-700">chat</span>
 						</div>
 						<div className="min-h-0 flex-1">
 							<Chat thread={activeThread} isRunning={isRunning} cwd={workspacePath} />
@@ -138,4 +175,27 @@ export default function AgentCard({ workspacePath }: AgentCardProps) {
 			</div>
 		</div>
 	)
+}
+
+function derivePlanSteps(thread: AgentThread | null): PlanStep[] {
+	const latestPlan = thread?.activities
+		.filter((activity) => activity.kind === "plan.updated")
+		.toSorted((left, right) => left.createdAt.localeCompare(right.createdAt))
+		.at(-1)
+	if (!latestPlan) return []
+
+	const payload = latestPlan.payload as PlanActivityPayload
+	const rawPlan = Array.isArray(payload.plan) ? payload.plan : []
+	return rawPlan
+		.map((entry) => ({
+			step: entry.step ?? "",
+			status: normalizePlanStatus(entry.status)
+		}))
+		.filter((entry) => entry.step.trim().length > 0)
+}
+
+function normalizePlanStatus(status: string | undefined): PlanStatus {
+	if (status === "completed") return "completed"
+	if (status === "inProgress" || status === "in_progress") return "inProgress"
+	return "pending"
 }

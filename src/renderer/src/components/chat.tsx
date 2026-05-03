@@ -4,6 +4,9 @@ import { sendAgentMessage } from "../agentStore"
 import type { AgentSnapshot } from "../../../main/agent/ipc"
 
 type AgentThread = AgentSnapshot["threads"][number]
+type TimelineItem =
+	| { id: string; createdAt: string; kind: "message"; message: AgentThread["messages"][number] }
+	| { id: string; createdAt: string; kind: "activity"; activity: AgentThread["activities"][number] }
 
 interface ChatProps {
 	thread: AgentThread | null
@@ -16,6 +19,7 @@ export function Chat({ thread, isRunning, cwd }: ChatProps): JSX.Element {
 	const [isSending, setIsSending] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const canSend = draft.trim().length > 0 && !isSending && !isRunning
+	const timeline = thread ? buildTimeline(thread) : []
 
 	function handleSubmit(event: FormEvent<HTMLFormElement>): void {
 		event.preventDefault()
@@ -39,24 +43,16 @@ export function Chat({ thread, isRunning, cwd }: ChatProps): JSX.Element {
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<section className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+			<section className="nowheel nodrag min-h-0 flex-1 overflow-y-auto px-4 py-5">
 				<div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
 					{thread ? (
-						thread.messages.map((message) => (
-							<article
-								key={message.id}
-								className={
-									message.role === "user"
-										? "ml-auto max-w-[78%] rounded-lg bg-white px-3 py-2 text-sm text-zinc-950"
-										: "mr-auto max-w-[86%] rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm leading-6 text-zinc-100"
-								}
-							>
-								<p className="whitespace-pre-wrap">{message.text}</p>
-								{message.streaming ? (
-									<span className="mt-2 block text-xs text-zinc-500">Streaming</span>
-								) : null}
-							</article>
-						))
+						timeline.map((item) =>
+							item.kind === "message" ? (
+								<MessageBubble key={item.id} message={item.message} />
+							) : (
+								<ActivityBubble key={item.id} activity={item.activity} />
+							)
+						)
 					) : (
 						<div className="mt-24 text-center">
 							<h2 className="text-lg font-medium text-zinc-100">Ask Codex</h2>
@@ -93,4 +89,81 @@ export function Chat({ thread, isRunning, cwd }: ChatProps): JSX.Element {
 			</footer>
 		</div>
 	)
+}
+
+function buildTimeline(thread: AgentThread): TimelineItem[] {
+	return [
+		...thread.messages.map((message) => ({
+			id: message.id,
+			createdAt: message.createdAt,
+			kind: "message" as const,
+			message
+		})),
+		...thread.activities.filter(shouldShowActivity).map((activity) => ({
+			id: activity.id,
+			createdAt: activity.createdAt,
+			kind: "activity" as const,
+			activity
+		}))
+	].sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+}
+
+function shouldShowActivity(activity: AgentThread["activities"][number]): boolean {
+	return (
+		activity.kind === "command.execution" ||
+		activity.kind === "file.change" ||
+		activity.kind === "tool.call"
+	)
+}
+
+function MessageBubble({ message }: { message: AgentThread["messages"][number] }): JSX.Element {
+	return (
+		<article
+			className={
+				message.role === "user"
+					? "ml-auto max-w-[78%] rounded-lg bg-white px-3 py-2 text-sm text-zinc-950"
+					: "mr-auto max-w-[86%] rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm leading-6 text-zinc-100"
+			}
+		>
+			<p className="whitespace-pre-wrap break-words">{message.text}</p>
+			{message.streaming ? (
+				<span className="mt-2 block text-xs text-zinc-500">Streaming</span>
+			) : null}
+		</article>
+	)
+}
+
+function ActivityBubble({
+	activity
+}: {
+	activity: AgentThread["activities"][number]
+}): JSX.Element {
+	const summary = activitySummary(activity)
+	return (
+		<article className="mr-auto max-w-[86%] rounded-lg border border-white/8 bg-neutral-900/70 px-3 py-2 text-xs text-neutral-400">
+			<div className="flex items-center justify-between gap-3">
+				<span className="font-mono text-[11px] text-neutral-500">{summary.label}</span>
+				<span className="text-[10px] text-neutral-600">
+					{new Date(activity.createdAt).toLocaleTimeString([], {
+						hour: "2-digit",
+						minute: "2-digit",
+						second: "2-digit"
+					})}
+				</span>
+			</div>
+			<p className="mt-1 whitespace-pre-wrap break-words text-neutral-300">{summary.value}</p>
+		</article>
+	)
+}
+
+function activitySummary(activity: AgentThread["activities"][number]): {
+	label: string
+	value: string
+} {
+	if (activity.kind === "command.execution") {
+		return { label: "ran command", value: activity.summary.replace(/^Ran command:\s*/i, "") }
+	}
+	if (activity.kind === "file.change") return { label: "edited files", value: "Changed files" }
+	if (activity.kind === "tool.call") return { label: "called tool", value: activity.summary }
+	return { label: "activity", value: activity.summary }
 }
