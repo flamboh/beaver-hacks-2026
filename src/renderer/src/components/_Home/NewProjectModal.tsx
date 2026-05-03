@@ -1,8 +1,10 @@
+import type { ProjectRow } from "@renderer/types/models"
 import { FormEvent, useState } from "react"
 
 type NewProjectModalProps = {
 	onCreate: (input: { name: string; path: string }) => Promise<unknown>
 	onCancel?: () => void
+	initialProject?: ProjectRow
 }
 
 function errorMessage(error: unknown): string {
@@ -11,9 +13,14 @@ function errorMessage(error: unknown): string {
 	return remoteError?.[1] ?? message
 }
 
-export default function NewProjectModal({ onCancel, onCreate }: NewProjectModalProps) {
-	const [name, setName] = useState("")
-	const [path, setPath] = useState("")
+export default function NewProjectModal({
+	initialProject,
+	onCancel,
+	onCreate
+}: NewProjectModalProps) {
+	const isEditing = Boolean(initialProject)
+	const [name, setName] = useState(initialProject?.name ?? "")
+	const [path, setPath] = useState(initialProject?.path ?? "")
 	const [error, setError] = useState("")
 	const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -58,7 +65,7 @@ export default function NewProjectModal({ onCancel, onCreate }: NewProjectModalP
 			>
 				<header className="flex items-center justify-between border-b border-neutral-700 px-5 py-4">
 					<h2 id="new-project-title" className="text-2xl font-semibold">
-						Create a project
+						{isEditing ? `Edit ${initialProject?.name}` : "Create a project"}
 					</h2>
 					<button
 						type="button"
@@ -125,7 +132,13 @@ export default function NewProjectModal({ onCancel, onCreate }: NewProjectModalP
 							disabled={isSubmitting}
 							className="cursor-pointer bg-neutral-50 px-4 py-2 text-sm font-medium text-black transition duration-300 hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-60"
 						>
-							{isSubmitting ? "Creating..." : "Create a project"}
+							{isSubmitting
+								? isEditing
+									? "Saving..."
+									: "Creating..."
+								: isEditing
+									? "Save"
+									: "Create a project"}
 						</button>
 					</footer>
 				</form>

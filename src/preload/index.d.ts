@@ -36,6 +36,7 @@ import type {
 	GitStatusSnapshot,
 	GitWorkingTreeDiffSnapshot
 } from "../main/git/ipc"
+import type { SaveScopeFileInput, SaveScopeFileResult } from "../main/scopeFiles/ipc"
 
 interface BeaverApi {
 	agent: {
@@ -65,6 +66,10 @@ interface BeaverApi {
 	}
 	dialog: {
 		selectDirectory: () => Promise<string | null>
+		selectFile: () => Promise<string | null>
+	}
+	files: {
+		saveScopeFile: (input: SaveScopeFileInput) => Promise<SaveScopeFileResult>
 	}
 	projects: {
 		list: () => Promise<ProjectRow[]>

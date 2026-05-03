@@ -1,18 +1,29 @@
 import { useState } from "react"
-import { X, Plus, FolderOpen, AlignLeft } from "lucide-react"
-
-import { AgentRow } from "@renderer/types/models"
+import { Plus } from "lucide-react"
+import { motion } from "motion/react"
 import { useSessionData } from "@renderer/hooks/useSessionData"
+import type { AgentRow } from "@renderer/types/models"
+import AgentsSidebar, { type AgentStatus } from "../AgentsSidebar"
+import NewAgentModal, { type NewAgentInput } from "../NewAgentModal"
+
+type AgentCardRow = AgentRow & {
+	current_task: string
+	status: AgentStatus
+}
+
+type AgentProvider = "claudeCode" | "codex"
 
 // ── placeholder data ──────────────────────────────────────────────
-const PLACEHOLDER_AGENTS: AgentRow[] = [
+const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 	{
 		id: "1",
 		name: "Auth Refactor",
 		project_id: "proj-1",
 		model: "claude-opus-4-7",
 		scope_path: "@Pipeline.md",
-		effort: "high"
+		effort: "high",
+		status: "working",
+		current_task: "Extracting auth middleware boundaries"
 	},
 	{
 		id: "2",
@@ -20,104 +31,169 @@ const PLACEHOLDER_AGENTS: AgentRow[] = [
 		project_id: "proj-1",
 		model: "gpt-4o-mini",
 		scope_path: "@tests/README.md",
-		effort: "medium"
+		effort: "medium",
+		status: "pending",
+		current_task: "Writing renderer smoke tests"
 	},
 	{
 		id: "3",
 		name: "Docs Generator",
 		project_id: "proj-1",
 		model: "claude-sonnet-4-6",
-		scope_path: "",
-		effort: "low"
+		scope_path: "@docs",
+		effort: "low",
+		status: "idle",
+		current_task: "Summarizing review workflow"
+	},
+	{
+		id: "4",
+		name: "Merge Steward",
+		project_id: "proj-1",
+		model: "o4-mini",
+		scope_path: "@src/main/git",
+		effort: "medium",
+		status: "failure",
+		current_task: "Checking branch isolation rules"
+	},
+	{
+		id: "5",
+		name: "UI Polish",
+		project_id: "proj-1",
+		model: "claude-haiku-4-5",
+		scope_path: "@src/renderer",
+		effort: "low",
+		status: "working",
+		current_task: "Tightening sidebar spacing"
 	}
 ]
 
 // const PLACEHOLDER_TASK =
 // 	"Refactoring the authentication middleware to meet the new compliance requirements..."
 
-const MODEL_OPTIONS: { group: string; models: { value: string; label: string }[] }[] = [
-	{
-		group: "Anthropic",
-		models: [
-			{ value: "claude-opus-4-7", label: "Claude Opus 4.7" },
-			{ value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
-			{ value: "claude-haiku-4-5", label: "Claude Haiku 4.5" }
-		]
-	},
-	{
-		group: "OpenAI",
-		models: [
-			{ value: "gpt-4o", label: "GPT-4o" },
-			{ value: "gpt-4o-mini", label: "GPT-4o mini" },
-			{ value: "o3", label: "o3" },
-			{ value: "o4-mini", label: "o4-mini" }
-		]
-	}
-]
-
-const EFFORT_OPTIONS = ["low", "medium", "high"] as const
-
 const EFFORT_STYLES: Record<string, string> = {
-	low: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-	medium: "bg-yellow-500/15  text-yellow-400  border-yellow-500/30",
-	high: "bg-red-500/15     text-red-400     border-red-500/30"
+	low: "border-white/10 bg-white/8 text-neutral-200",
+	medium: "border-white/10 bg-white/8 text-neutral-200",
+	high: "border-white/10 bg-white/8 text-neutral-200"
 }
 
-// gradient per effort for card image area
-// const CARD_GRADIENTS: Record<string, string> = {
-// 	low: "from-emerald-900/40 to-neutral-900",
-// 	medium: "from-yellow-900/40 to-neutral-900",
-// 	high: "from-red-900/40    to-neutral-900"
-// }
-
-const DEFAULT_FORM = {
-	name: "",
-	model: "claude-sonnet-4-6",
-	effort: "medium" as (typeof EFFORT_OPTIONS)[number],
-	instructionMode: "text" as "text" | "path",
-	instructions: "",
-	scopePath: ""
+const STATUS_STYLES: Record<AgentStatus, string> = {
+	failure: "bg-red-500",
+	pending: "bg-orange-400",
+	working: "bg-blue-500",
+	idle: "bg-neutral-500"
 }
+
+const STATUS_BORDER_STYLES: Record<AgentStatus, string> = {
+	failure: "border-red-500/80",
+	pending: "border-orange-400/80",
+	working: "border-blue-500/80",
+	idle: "border-neutral-400/70"
+}
+
+function agentImage(agent: AgentCardRow) {
+	const isClaude = agent.model.includes("claude")
+	return {
+		label: isClaude ? "Claude Code" : "Codex",
+		provider: (isClaude ? "claudeCode" : "codex") as AgentProvider
+	}
+}
+
+function AgentLogo({ label, provider }: { label: string; provider: AgentProvider }) {
+	if (provider === "claudeCode") {
+		return (
+			<svg role="img" aria-label={label} viewBox="0 0 24 24" className="h-16 w-16">
+				<path
+					clipRule="evenodd"
+					d="M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487v-2.921H3V14.05H0V10.95h3V5h17.998v5.949zM6 10.949h1.488V8.102H6v2.847zm10.51 0H18V8.102h-1.49v2.847z"
+					fill="#D97757"
+					fillRule="evenodd"
+				/>
+			</svg>
+		)
+	}
+
+	return (
+		<svg role="img" aria-label={label} viewBox="0 0 24 24" className="h-18 w-18">
+			<path
+				d="M9.064 3.344a4.578 4.578 0 012.285-.312c1 .115 1.891.54 2.673 1.275.01.01.024.017.037.021a.09.09 0 00.043 0 4.55 4.55 0 013.046.275l.047.022.116.057a4.581 4.581 0 012.188 2.399c.209.51.313 1.041.315 1.595a4.24 4.24 0 01-.134 1.223.123.123 0 00.03.115c.594.607.988 1.33 1.183 2.17.289 1.425-.007 2.71-.887 3.854l-.136.166a4.548 4.548 0 01-2.201 1.388.123.123 0 00-.081.076c-.191.551-.383 1.023-.74 1.494-.9 1.187-2.222 1.846-3.711 1.838-1.187-.006-2.239-.44-3.157-1.302a.107.107 0 00-.105-.024c-.388.125-.78.143-1.204.138a4.441 4.441 0 01-1.945-.466 4.544 4.544 0 01-1.61-1.335c-.152-.202-.303-.392-.414-.617a5.81 5.81 0 01-.37-.961 4.582 4.582 0 01-.014-2.298.124.124 0 00.006-.056.085.085 0 00-.027-.048 4.467 4.467 0 01-1.034-1.651 3.896 3.896 0 01-.251-1.192 5.189 5.189 0 01.141-1.6c.337-1.112.982-1.985 1.933-2.618.212-.141.413-.251.601-.33.215-.089.43-.164.646-.227a.098.098 0 00.065-.066 4.51 4.51 0 01.829-1.615 4.535 4.535 0 011.837-1.388zm3.482 10.565a.637.637 0 000 1.272h3.636a.637.637 0 100-1.272h-3.636zM8.462 9.23a.637.637 0 00-1.106.631l1.272 2.224-1.266 2.136a.636.636 0 101.095.649l1.454-2.455a.636.636 0 00.005-.64L8.462 9.23z"
+				fill="url(#codex-logo-gradient)"
+			/>
+			<defs>
+				<linearGradient
+					gradientUnits="userSpaceOnUse"
+					id="codex-logo-gradient"
+					x1="12"
+					x2="12"
+					y1="3"
+					y2="21"
+				>
+					<stop stopColor="#B1A7FF" />
+					<stop offset=".5" stopColor="#7A9DFF" />
+					<stop offset="1" stopColor="#3941FF" />
+				</linearGradient>
+			</defs>
+		</svg>
+	)
+}
+
 // ─────────────────────────────────────────────────────────────────
 
-export default function Agents() {
-	const [agents, setAgents] = useState<AgentRow[]>(PLACEHOLDER_AGENTS)
+export default function Agents({ projectPath }: { projectPath: string }) {
 	const { project } = useSessionData()
-	const [showForm, setShowForm] = useState(false)
-	const [form, setForm] = useState({ ...DEFAULT_FORM })
-	const [submitting, setSubmitting] = useState(false)
+	const [agents, setAgents] = useState<AgentCardRow[]>(PLACEHOLDER_AGENTS)
+	const [isNewAgentModalOpen, setIsNewAgentModalOpen] = useState(false)
+	const [editingAgent, setEditingAgent] = useState<AgentCardRow | null>(null)
+	const [hoveredStatus, setHoveredStatus] = useState<AgentStatus | null>(null)
 
-	const set = <K extends keyof typeof DEFAULT_FORM>(key: K, value: (typeof DEFAULT_FORM)[K]) =>
-		setForm((prev) => ({ ...prev, [key]: value }))
+	const statusCounts = agents.reduce<Record<AgentStatus, number>>(
+		(counts, agent) => ({
+			...counts,
+			[agent.status]: counts[agent.status] + 1
+		}),
+		{ failure: 0, pending: 0, working: 0, idle: 0 }
+	)
 
-	const handleSubmit = async (e: React.FormEvent) => {
-		e.preventDefault()
-		setSubmitting(true)
+	const handleCreateAgent = async (input: NewAgentInput) => {
 		// simulate DB write
 		await new Promise((res) => setTimeout(res, 900))
-		const newAgent: AgentRow = {
+		const newAgent: AgentCardRow = {
 			id: crypto.randomUUID(),
-			name: form.name || "Unnamed Agent",
+			name: input.name || "Unnamed Agent",
 			project_id: project?.id ?? "",
-			model: form.model,
-			scope_path: form.instructionMode === "path" ? form.scopePath : "",
-			effort: form.effort
+			model: input.model,
+			scope_path: input.scopePath,
+			effort: input.effort,
+			status: "idle",
+			current_task: "Waiting for task"
 		}
 		setAgents((prev) => [newAgent, ...prev])
-		setSubmitting(false)
-		setShowForm(false)
-		setForm({ ...DEFAULT_FORM })
 	}
 
-	const handleClose = () => {
-		setShowForm(false)
-		setForm({ ...DEFAULT_FORM })
+	const handleUpdateAgent = async (input: NewAgentInput) => {
+		if (!editingAgent) return
+		// simulate DB write
+		await new Promise((res) => setTimeout(res, 900))
+		setAgents((prev) =>
+			prev.map((agent) =>
+				agent.id === editingAgent.id
+					? {
+							...agent,
+							name: input.name || "Unnamed Agent",
+							model: input.model,
+							scope_path: input.scopePath,
+							effort: input.effort
+						}
+					: agent
+			)
+		)
 	}
 
 	return (
 		<div className="flex h-full overflow-hidden">
+			<AgentsSidebar total={agents.length} counts={statusCounts} onStatusHover={setHoveredStatus} />
+
 			{/* main list */}
-			<div className="flex flex-col flex-1 overflow-auto">
+			<div className="flex flex-1 flex-col overflow-auto pl-6">
 				{/* header */}
 				<div className="flex items-center justify-between mb-6">
 					<div>
@@ -125,8 +201,8 @@ export default function Agents() {
 						<p className="text-xs text-neutral-500 mt-0.5">{agents.length} configured</p>
 					</div>
 					<button
-						onClick={() => setShowForm(true)}
-						className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/8 hover:bg-white/12 border border-white/10 text-sm text-white transition-colors duration-150"
+						onClick={() => setIsNewAgentModalOpen(true)}
+						className="flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/8 px-3 py-1.5 text-sm text-white transition-colors duration-300 hover:bg-white/12"
 					>
 						<Plus size={14} />
 						New Agent
@@ -139,176 +215,77 @@ export default function Agents() {
 						No agents yet. Create one to get started.
 					</div>
 				) : (
-					<div className="flex flex-col gap-2">
-						{agents.map((agent) => (
-							<div
-								key={agent.id}
-								className="flex items-center justify-between px-4 py-3 rounded-lg border border-white/5 bg-neutral-900 hover:border-white/10 transition-colors duration-150"
-							>
-								<div className="flex flex-col gap-0.5">
-									<span className="text-sm font-medium text-neutral-100">{agent.name}</span>
-									<span className="text-xs text-neutral-500 font-mono">{agent.model}</span>
-									{agent.scope_path && (
-										<span className="text-xs text-blue-400/70 font-mono">{agent.scope_path}</span>
-									)}
-								</div>
-								<span
-									className={`text-[11px] px-2 py-0.5 rounded-md border capitalize ${EFFORT_STYLES[agent.effort]}`}
+					<div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+						{agents.map((agent, index) => {
+							const image = agentImage(agent)
+							return (
+								<motion.button
+									type="button"
+									key={agent.id}
+									initial={{ opacity: 0, y: 32 }}
+									animate={{ opacity: 1, y: 0 }}
+									transition={{
+										delay: index * 0.045,
+										duration: 0.9,
+										ease: [0.22, 1, 0.36, 1]
+									}}
+									onClick={() => setEditingAgent(agent)}
+									className={`min-w-0 cursor-pointer rounded-lg border bg-neutral-900 p-4 text-left transition-colors duration-300 hover:border-white/20 ${
+										hoveredStatus === agent.status
+											? STATUS_BORDER_STYLES[agent.status]
+											: "border-white/5"
+									}`}
 								>
-									{agent.effort}
-								</span>
-							</div>
-						))}
+									<div className="relative mb-4 flex aspect-[16/9] items-center justify-center rounded-md border border-white/8 bg-neutral-950">
+										<span
+											className={`absolute right-3 top-3 h-2.5 w-2.5 rounded-full ${STATUS_STYLES[agent.status]}`}
+											aria-label={`${agent.status} status`}
+										/>
+										<AgentLogo provider={image.provider} label={image.label} />
+									</div>
+
+									<div className="flex min-w-0 flex-col gap-1.5">
+										<div className="flex items-center justify-between gap-3">
+											<span className="truncate text-sm font-medium text-neutral-100">
+												{agent.name}
+											</span>
+											<span
+												className={`shrink-0 rounded-md border px-2 py-0.5 text-[11px] capitalize ${EFFORT_STYLES[agent.effort]}`}
+											>
+												{agent.effort}
+											</span>
+										</div>
+										<span className="truncate font-mono text-xs text-neutral-500">
+											{agent.model}
+										</span>
+										<span className="truncate font-mono text-xs text-blue-400/70">
+											{agent.scope_path}
+										</span>
+										<span className="truncate text-xs text-neutral-400">{agent.current_task}</span>
+									</div>
+								</motion.button>
+							)
+						})}
 					</div>
 				)}
 			</div>
 
-			{/* slide-in form panel */}
-			<div
-				className={`flex flex-col shrink-0 w-[360px] ml-6 transition-all duration-250 ease-in-out overflow-hidden
-          ${showForm ? "opacity-100 translate-x-0" : "opacity-0 translate-x-4 pointer-events-none w-0 ml-0"}`}
-			>
-				<form
-					onSubmit={handleSubmit}
-					className="flex flex-col h-full rounded-xl border border-white/8 bg-neutral-900 overflow-hidden"
-					style={{ minWidth: 360 }}
-				>
-					{/* form header */}
-					<div className="flex items-center justify-between px-4 h-11 border-b border-white/5 bg-neutral-800/40 shrink-0">
-						<span className="text-sm font-medium text-white">New Agent</span>
-						<button
-							type="button"
-							onClick={handleClose}
-							className="text-neutral-500 hover:text-white transition-colors"
-						>
-							<X size={15} />
-						</button>
-					</div>
+			{isNewAgentModalOpen && (
+				<NewAgentModal
+					onCancel={() => setIsNewAgentModalOpen(false)}
+					onSubmit={handleCreateAgent}
+					projectPath={projectPath}
+				/>
+			)}
 
-					<div className="flex flex-col gap-5 px-4 py-5 overflow-auto flex-1">
-						{/* name */}
-						<Field label="Agent Name">
-							<input
-								type="text"
-								placeholder="e.g. Auth Refactor"
-								value={form.name}
-								onChange={(e) => set("name", e.target.value)}
-								className="w-full bg-neutral-800/60 border border-white/8 rounded-md px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-white/20 transition-colors"
-							/>
-						</Field>
-
-						{/* model */}
-						<Field label="Model">
-							<select
-								value={form.model}
-								onChange={(e) => set("model", e.target.value)}
-								className="w-full bg-neutral-800/60 border border-white/8 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-white/20 transition-colors appearance-none"
-							>
-								{MODEL_OPTIONS.map((group) => (
-									<optgroup key={group.group} label={group.group}>
-										{group.models.map((m) => (
-											<option key={m.value} value={m.value}>
-												{m.label}
-											</option>
-										))}
-									</optgroup>
-								))}
-							</select>
-						</Field>
-
-						{/* effort */}
-						<Field label="Effort Level">
-							<div className="flex gap-1.5">
-								{EFFORT_OPTIONS.map((level) => (
-									<button
-										key={level}
-										type="button"
-										onClick={() => set("effort", level)}
-										className={`flex-1 py-1.5 rounded-md text-xs capitalize border transition-colors duration-150
-                      ${
-												form.effort === level
-													? EFFORT_STYLES[level]
-													: "border-white/5 text-neutral-600 hover:text-neutral-400 hover:border-white/10"
-											}`}
-									>
-										{level}
-									</button>
-								))}
-							</div>
-						</Field>
-
-						{/* instructions */}
-						<Field label="Instructions">
-							{/* mode toggle */}
-							<div className="flex mb-2 rounded-md border border-white/5 overflow-hidden">
-								<button
-									type="button"
-									onClick={() => set("instructionMode", "text")}
-									className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs transition-colors duration-150
-                    ${form.instructionMode === "text" ? "bg-white/8 text-white" : "text-neutral-600 hover:text-neutral-400"}`}
-								>
-									<AlignLeft size={12} /> Describe
-								</button>
-								<button
-									type="button"
-									onClick={() => set("instructionMode", "path")}
-									className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs transition-colors duration-150
-                    ${form.instructionMode === "path" ? "bg-white/8 text-white" : "text-neutral-600 hover:text-neutral-400"}`}
-								>
-									<FolderOpen size={12} /> File Path
-								</button>
-							</div>
-
-							{form.instructionMode === "text" ? (
-								<textarea
-									rows={5}
-									placeholder="Describe what this agent should accomplish..."
-									value={form.instructions}
-									onChange={(e) => set("instructions", e.target.value)}
-									className="w-full bg-neutral-800/60 border border-white/8 rounded-md px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-white/20 transition-colors resize-none leading-relaxed"
-								/>
-							) : (
-								<input
-									type="text"
-									placeholder="./docs/agent-scope.md"
-									value={form.scopePath}
-									onChange={(e) => set("scopePath", e.target.value)}
-									className="w-full bg-neutral-800/60 border border-white/8 rounded-md px-3 py-2 text-sm text-white placeholder:text-neutral-600 font-mono focus:outline-none focus:border-white/20 transition-colors"
-								/>
-							)}
-						</Field>
-					</div>
-
-					{/* submit */}
-					<div className="px-4 py-4 border-t border-white/5 shrink-0">
-						<button
-							type="submit"
-							disabled={submitting}
-							className="w-full py-2 rounded-md bg-white/10 hover:bg-white/15 border border-white/10 text-sm text-white font-medium transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-						>
-							{submitting ? (
-								<>
-									<span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-									Saving...
-								</>
-							) : (
-								"Create Agent"
-							)}
-						</button>
-					</div>
-				</form>
-			</div>
-		</div>
-	)
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-	return (
-		<div className="flex flex-col gap-1.5">
-			<label className="text-[10px] uppercase tracking-widest text-neutral-600 font-medium">
-				{label}
-			</label>
-			{children}
+			{editingAgent && (
+				<NewAgentModal
+					initialAgent={editingAgent}
+					onCancel={() => setEditingAgent(null)}
+					onSubmit={handleUpdateAgent}
+					projectPath={projectPath}
+				/>
+			)}
 		</div>
 	)
 }

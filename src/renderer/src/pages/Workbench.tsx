@@ -71,7 +71,7 @@ export default function Workbench() {
 					/>
 				)
 			case "agents":
-				return <Agents />
+				return <Agents projectPath={project.path} />
 			case "settings":
 				return (
 					<Settings projectId={project.id} onWorkspacesChanged={() => workspacesQuery.refetch()} />

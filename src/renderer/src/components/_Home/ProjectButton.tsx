@@ -1,7 +1,13 @@
+import { motion } from "motion/react"
+import type { MouseEvent } from "react"
+
 type ProjectButtonProps = {
 	name: string
+	path: string
 	accessed: Date | string | number
+	animationDelay?: number
 	onClick?: () => void
+	onContextMenu?: (event: MouseEvent<HTMLButtonElement>) => void
 }
 
 const referenceTime = Date.now()
@@ -54,25 +60,41 @@ function formatAccessedDate(accessed: Date | string | number) {
 	return `${years} ${years === 1 ? "year" : "years"} ago`
 }
 
-export default function ProjectButton({ name, accessed, onClick }: ProjectButtonProps) {
+export default function ProjectButton({
+	name,
+	path,
+	accessed,
+	animationDelay = 0,
+	onClick,
+	onContextMenu
+}: ProjectButtonProps) {
 	return (
-		<button
+		<motion.button
 			type="button"
+			initial={{ opacity: 0, y: 32 }}
+			animate={{ opacity: 1, y: 0 }}
+			transition={{
+				delay: animationDelay,
+				duration: 0.9,
+				ease: [0.22, 1, 0.36, 1]
+			}}
 			onClick={onClick}
-			className="flex min-h-48 w-full cursor-pointer flex-col justify-between border
+			onContextMenu={onContextMenu}
+			className="flex min-h-52 w-full cursor-pointer flex-col justify-between border
       border-neutral-700/50 bg-neutral-800/50 p-4 text-left text-neutral-50
-      transition duration-300 hover:border-neutral-700 hover:bg-neutral-800/65"
+      transition-colors duration-300 hover:border-neutral-700 hover:bg-neutral-800/65"
 		>
-			<div className="flex min-h-24 items-center justify-center bg-neutral-950">
+			<div className="flex min-h-28 items-center justify-center bg-neutral-950">
 				<div className="relative h-6 w-9 rounded-sm bg-slate-600">
 					<div className="absolute -top-1 left-0 h-3 w-5 rounded-t-sm bg-slate-600" />
 				</div>
 			</div>
 
-			<div>
-				<h2 className="text-lg font-semibold">{name}</h2>
+			<div className="mt-3">
+				<h2 className="truncate text-lg font-semibold">{name}</h2>
+				<p className="mt-0.5 truncate font-mono text-[11px] text-neutral-500">{path}</p>
 				<p className="mt-1.5 text-xs text-neutral-400">Accessed {formatAccessedDate(accessed)}</p>
 			</div>
-		</button>
+		</motion.button>
 	)
 }
