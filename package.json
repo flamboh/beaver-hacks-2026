@@ -35,6 +35,7 @@
 		"@tanstack/react-router-devtools": "^1.166.13",
 		"effect": "^3.21.2",
 		"lucide-react": "^1.14.0",
+		"motion": "^12.38.0",
 		"react-router-dom": "^7.14.2",
 		"sqlite3": "^6.0.1"
 	},

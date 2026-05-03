@@ -17,9 +17,15 @@ export type Agent = {
 	effort: string
 }
 
-export type Task = {
+export type TaskRow = {
 	id: string
 	agent_id: string
 	status: string
 	description: string
+}
+
+export type BatchRow = {
+	id: string
+	agent_id: string
+	summary: string
 }

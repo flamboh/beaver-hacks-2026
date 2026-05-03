@@ -66,6 +66,28 @@ export class DatabaseService {
 				accessed TEXT NOT NULL
 			);
 
+			CREATE TABLE IF NOT EXISTS agents (
+				id TEXT PRIMARY KEY,
+				project_id TEXT NOT NULL,
+				model TEXT NOT NULL,
+				scope_path TEXT,
+				effort TEXT NOT NULL
+			);
+
+			CREATE TABLE IF NOT EXISTS task (
+				id TEXT PRIMARY KEY,
+				batch_id TEXT NOT NULL,
+				agent_id TEXT NOT NULL,
+				status TEXT NOT NULL,
+				description TEXT
+			);
+
+			CREATE TABLE IF NOT EXISTS batch (
+				id TEXT PRIMARY KEY,
+				agent_id TEXT NOT NULL,
+				summary TEXT NOT NULL
+			);
+
 			INSERT INTO app_meta (key, value)
 			VALUES ('schema_version', '${SCHEMA_VERSION}')
 			ON CONFLICT(key) DO UPDATE SET value = excluded.value;
