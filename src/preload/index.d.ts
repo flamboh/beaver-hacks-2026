@@ -29,6 +29,8 @@ import type {
 	ProjectIdInput,
 	ProjectRow,
 	ProjectWorkspaceInput,
+	ReorderProjectsInput,
+	ReorderWorkspacesInput,
 	TaskRow,
 	ToolCardRow,
 	UpdateAgentInput,
@@ -128,6 +130,7 @@ interface BeaverApi {
 		get: (input: ProjectIdInput) => Promise<ProjectRow>
 		create: (input: CreateProjectInput) => Promise<ProjectRow>
 		update: (input: UpdateProjectInput) => Promise<ProjectRow>
+		reorder: (input: ReorderProjectsInput) => Promise<ProjectRow[]>
 		touch: (input: ProjectIdInput) => Promise<ProjectRow>
 		delete: (input: ProjectIdInput) => Promise<void>
 	}
@@ -137,6 +140,7 @@ interface BeaverApi {
 		active: (input: ProjectWorkspaceInput) => Promise<WorkspaceRow>
 		create: (input: CreateWorkspaceInput) => Promise<WorkspaceRow>
 		update: (input: UpdateWorkspaceInput) => Promise<WorkspaceRow>
+		reorder: (input: ReorderWorkspacesInput) => Promise<void>
 		activate: (input: WorkspaceIdInput) => Promise<WorkspaceRow>
 		touchPrompted: (input: WorkspaceIdInput) => Promise<WorkspaceRow>
 		delete: (input: WorkspaceIdInput) => Promise<DeleteWorkspaceResult>

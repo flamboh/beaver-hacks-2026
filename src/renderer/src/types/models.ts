@@ -1,4 +1,5 @@
 export type WorkbenchTab = "control-panel" | "review" | "agents" | "skills" | "settings"
+export type WorkspaceSortMode = "project" | "workspace"
 
 export type ProjectRow = {
 	id: string
@@ -7,6 +8,7 @@ export type ProjectRow = {
 	enterDevAction: string
 	createdAt: string
 	accessed: string
+	sortOrder: number
 }
 
 export type AgentRow = {

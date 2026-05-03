@@ -285,22 +285,22 @@ export function GitCommitMenu({
 	}
 
 	return (
-		<div className="relative">
+		<div className="relative shrink-0">
 			<div className="inline-flex h-8 overflow-hidden rounded-lg border border-white/10 bg-white/[0.04] text-sm text-zinc-200 shadow-sm shadow-black/20">
 				<button
 					type="button"
 					onClick={() => openDialog(primary)}
 					disabled={primaryDisabled}
-					className="inline-flex h-full items-center gap-2 px-3 font-medium transition-colors duration-150 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-zinc-600"
+					className="inline-flex h-full shrink-0 items-center gap-2 whitespace-nowrap px-3 font-medium transition-colors duration-150 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-zinc-600"
 				>
-					<GitPullRequestArrow className="size-4" />
+					<GitPullRequestArrow className="size-4 shrink-0" />
 					{busy ? "Running..." : primary.label}
 				</button>
 				<button
 					type="button"
 					onClick={() => setMenuOpen((open) => !open)}
 					disabled={busy}
-					className="inline-flex h-full w-8 items-center justify-center border-l border-white/10 transition-colors duration-150 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-zinc-600"
+					className="inline-flex h-full w-8 shrink-0 items-center justify-center border-l border-white/10 transition-colors duration-150 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-zinc-600"
 					aria-label="Git action options"
 				>
 					<ChevronDown className="size-4" />

@@ -7,6 +7,7 @@ import type {
 	DeleteWorkspaceResult,
 	ProjectRow,
 	ProjectWorkspaceInput,
+	ReorderWorkspacesInput,
 	UpdateWorkspaceInput,
 	WorkspaceIdInput,
 	WorkspaceRow
@@ -25,6 +26,8 @@ import {
 	slugify
 } from "./workspaceUtils"
 
+const RAIL_COLORS = new Set(["#737373", "#60a5fa", "#34d399", "#f59e0b", "#f87171", "#c084fc"])
+
 function nowIso(): string {
 	return new Date().toISOString()
 }
@@ -40,10 +43,10 @@ export class WorkspaceService {
 	async list(input: ProjectWorkspaceInput): Promise<WorkspaceRow[]> {
 		const rows = await this.all<WorkspaceTableRow>(
 			`
-				SELECT id, project_id, name, path, git_root, active, created_at, accessed, last_prompted_at
+				SELECT id, project_id, name, path, git_root, active, created_at, accessed, last_prompted_at, rail_color, sort_order
 				FROM workspaces
 				WHERE project_id = ?
-				ORDER BY last_prompted_at DESC, created_at ASC
+				ORDER BY sort_order ASC, created_at ASC
 			`,
 			[input.projectId]
 		)
@@ -53,7 +56,7 @@ export class WorkspaceService {
 	async get(input: WorkspaceIdInput): Promise<WorkspaceRow> {
 		const row = await this.getRow<WorkspaceTableRow>(
 			`
-				SELECT id, project_id, name, path, git_root, active, created_at, accessed, last_prompted_at
+				SELECT id, project_id, name, path, git_root, active, created_at, accessed, last_prompted_at, rail_color, sort_order
 				FROM workspaces
 				WHERE id = ?
 			`,
@@ -66,7 +69,7 @@ export class WorkspaceService {
 	async getActive(input: ProjectWorkspaceInput): Promise<WorkspaceRow> {
 		const row = await this.getRow<WorkspaceTableRow>(
 			`
-				SELECT id, project_id, name, path, git_root, active, created_at, accessed, last_prompted_at
+				SELECT id, project_id, name, path, git_root, active, created_at, accessed, last_prompted_at, rail_color, sort_order
 				FROM workspaces
 				WHERE project_id = ? AND active = 1
 			`,
@@ -121,14 +124,16 @@ export class WorkspaceService {
 			active: existing.length === 0,
 			createdAt: timestamp,
 			accessed: timestamp,
-			lastPromptedAt: timestamp
+			lastPromptedAt: timestamp,
+			railColor: "#737373",
+			sortOrder: await this.nextWorkspaceSortOrder()
 		}
 
 		try {
 			await this.run(
 				`
-					INSERT INTO workspaces (id, project_id, name, path, git_root, active, created_at, accessed, last_prompted_at)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+					INSERT INTO workspaces (id, project_id, name, path, git_root, active, created_at, accessed, last_prompted_at, rail_color, sort_order)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				`,
 				[
 					workspace.id,
@@ -139,7 +144,9 @@ export class WorkspaceService {
 					workspace.active ? 1 : 0,
 					workspace.createdAt,
 					workspace.accessed,
-					workspace.lastPromptedAt
+					workspace.lastPromptedAt,
+					workspace.railColor,
+					workspace.sortOrder
 				]
 			)
 		} catch (error) {
@@ -153,18 +160,21 @@ export class WorkspaceService {
 	}
 
 	async update(input: UpdateWorkspaceInput): Promise<WorkspaceRow> {
-		const name = input.name.trim()
+		const current = await this.get(input)
+		const name = input.name?.trim() ?? current.name
 		if (!name) throw new Error("Workspace name is required.")
-		const path = canonicalPath(input.path)
+		const path = input.path ? canonicalPath(input.path) : current.path
 		assertDirectory(path)
 		const gitRoot = await resolveGitRoot(path)
+		const railColor = input.railColor ?? current.railColor
+		if (!RAIL_COLORS.has(railColor)) throw new Error("Invalid rail color.")
 		await this.run(
 			`
 				UPDATE workspaces
-				SET name = ?, path = ?, git_root = ?
+				SET name = ?, path = ?, git_root = ?, rail_color = ?
 				WHERE id = ?
 			`,
-			[name, path, gitRoot, input.id]
+			[name, path, gitRoot, railColor, input.id]
 		)
 		return this.get(input)
 	}
@@ -199,6 +209,19 @@ export class WorkspaceService {
 		return { activeWorkspace, deletedWorkspaceId: workspace.id }
 	}
 
+	async reorder(input: ReorderWorkspacesInput): Promise<void> {
+		await this.run(`BEGIN TRANSACTION`, [])
+		try {
+			for (const [index, id] of input.ids.entries()) {
+				await this.run(`UPDATE workspaces SET sort_order = ? WHERE id = ?`, [index, id])
+			}
+			await this.run(`COMMIT`, [])
+		} catch (error) {
+			await this.run(`ROLLBACK`, [])
+			throw error
+		}
+	}
+
 	async backfill(projects: ProjectRow[]): Promise<void> {
 		for (const project of projects) {
 			const existing = await this.list({ projectId: project.id })
@@ -214,7 +237,7 @@ export class WorkspaceService {
 	private async getProject(projectId: string): Promise<ProjectRow> {
 		const row = await this.getRow<ProjectTableRow>(
 			`
-				SELECT id, name, path, enter_dev_action, created_at, accessed
+				SELECT id, name, path, enter_dev_action, created_at, accessed, sort_order
 				FROM projects
 				WHERE id = ?
 			`,
@@ -222,6 +245,14 @@ export class WorkspaceService {
 		)
 		if (!row) throw new Error("Project not found.")
 		return toProjectRow(row)
+	}
+
+	private async nextWorkspaceSortOrder(): Promise<number> {
+		const row = await this.getRow<{ max_sort_order: number | null }>(
+			`SELECT MAX(sort_order) AS max_sort_order FROM workspaces`,
+			[]
+		)
+		return (row?.max_sort_order ?? -1) + 1
 	}
 
 	private async getSourceWorkspace(workspaceId: string, projectId: string): Promise<WorkspaceRow> {

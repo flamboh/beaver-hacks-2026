@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useMemo } from "react"
-import { RefreshCw } from "lucide-react"
+import { createPortal } from "react-dom"
 import type { CreateSide } from "../AgentCardSideCreateButton"
 import type { CardTypingHandle } from "../AgentCard"
 import NavigationMap from "../NavigationMap"
@@ -33,7 +33,9 @@ import { useActiveWorkspaceCentering } from "./useActiveWorkspaceCentering"
 
 interface ControlPanelProps {
 	activeWorkspaceId: string
+	minimapRoot: HTMLDivElement | null
 	onWorkspaceActivate: (workspaceId: string) => void
+	onWorkspaceColorChange: (workspaceId: string, railColor: string) => void
 	onWorkspaceCreate: (sourceWorkspaceId: string, side: "top" | "bottom") => void
 	projectIds: string[]
 	workspaces: WorkspaceLane[]
@@ -41,14 +43,15 @@ interface ControlPanelProps {
 
 export default function ControlPanel({
 	activeWorkspaceId,
+	minimapRoot,
 	onWorkspaceActivate,
+	onWorkspaceColorChange,
 	onWorkspaceCreate,
 	projectIds,
 	workspaces
 }: ControlPanelProps) {
 	const viewportRef = useRef<HTMLDivElement>(null)
 	const resizeObserver = useRef<ResizeObserver | null>(null)
-	const hideMapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const smoothPanTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const edgePanFrame = useRef<number | null>(null)
 	const wheelPanFrame = useRef<number | null>(null)
@@ -64,7 +67,6 @@ export default function ControlPanel({
 	const [offset, setOffset] = useState({ x: PADDING, y: PADDING })
 	const [zoom, setZoom] = useState(1)
 	const [vpSize, setVpSize] = useState({ w: 0, h: 0 })
-	const [showMap, setShowMap] = useState(false)
 	const [focusedIdx, setFocusedIdx] = useState(0)
 	const [smoothPan, setSmoothPan] = useState(false)
 	const [spacePanActive, setSpacePanActive] = useState(false)
@@ -72,11 +74,14 @@ export default function ControlPanel({
 		x: number
 		y: number
 		showAgents: boolean
-		sourceCardId: string
+		sourceCardId?: string
 		side: CreateSide
 	} | null>(null)
-	const { cards, createCard, deleteCard, deletingCardId, isCreatingCard, refetch } =
-		useControlPanelAgents(projectIds, workspaces, activeWorkspaceId)
+	const { cards, createCard, deleteCard, deletingCardId, isCreatingCard } = useControlPanelAgents(
+		projectIds,
+		workspaces,
+		activeWorkspaceId
+	)
 	const [cardSizes, setCardSizes] = useState<Record<string, CardSize>>({})
 	const [cardLayouts, setCardLayouts] = useState<Record<string, { layout_x: number }>>({})
 	const railCardHeight = useMemo(() => adaptiveRailCardHeight(vpSize.h), [vpSize.h])
@@ -96,6 +101,7 @@ export default function ControlPanel({
 	)
 	const hasCards = sizedCards.length > 0
 	const hasCanvas = workspaces.length > 0
+	const activeWorkspaceHasCards = sizedCards.some((card) => card.workspace_id === activeWorkspaceId)
 	const viewportCenter = useCallback(
 		(nextOffset: { x: number; y: number }, nextZoom: number) => ({
 			x: (vpSize.w / 2 - nextOffset.x) / nextZoom,
@@ -103,11 +109,7 @@ export default function ControlPanel({
 		}),
 		[vpSize.h, vpSize.w]
 	)
-	const flashMap = useCallback(() => {
-		setShowMap(true)
-		if (hideMapTimer.current) clearTimeout(hideMapTimer.current)
-		hideMapTimer.current = setTimeout(() => setShowMap(false), 2000)
-	}, [])
+	const flashMap = useCallback(() => undefined, [])
 
 	const stopWheelPan = useCallback(() => {
 		if (wheelPanFrame.current) cancelAnimationFrame(wheelPanFrame.current)
@@ -575,6 +577,20 @@ export default function ControlPanel({
 		if (!card) return
 		typingHandles.current[card.id]?.focusTyping()
 	}, [focusedIdx, sizedCards])
+	const openActiveWorkspacePicker = useCallback(() => {
+		if (activeWorkspaceHasCards) return false
+		setContextCreateMenu({
+			x: clampCreateMenuX(vpSize.w / 2 - CREATE_MENU_W / 2, vpSize.w),
+			y: clampCreateMenuY(
+				vpSize.h / 2 - CREATE_MENU_KEYBOARD_H / 2,
+				vpSize.h,
+				CREATE_MENU_KEYBOARD_H
+			),
+			showAgents: true,
+			side: "right"
+		})
+		return true
+	}, [activeWorkspaceHasCards, vpSize.h, vpSize.w])
 
 	useControlPanelKeyboard({
 		centerFocused: () => centerCard(focusedIdx),
@@ -582,6 +598,8 @@ export default function ControlPanel({
 		focusedIdx,
 		moveFocus,
 		moveFocusedWithinRail,
+		onSpace: openActiveWorkspacePicker,
+		onWorkspaceHotkey: centerWorkspaceLane,
 		resizeFocused,
 		setSpacePanActive,
 		snapToCard,
@@ -734,6 +752,21 @@ export default function ControlPanel({
 		[focusedIdx, hasCards, sizedCards]
 	)
 	const isActualSize = Math.abs(zoom - 1) < 0.01
+	const minimap = (
+		<NavigationMap
+			canvasWidth={canvas.w}
+			canvasHeight={canvas.h}
+			cards={sizedCards}
+			canvas={canvas}
+			viewportWidth={vpSize.w}
+			viewportHeight={vpSize.h}
+			offset={offset}
+			scale={zoom}
+			visible
+			placement="sidebar"
+			onNavigate={navigateToCanvasPoint}
+		/>
+	)
 
 	return (
 		<div
@@ -755,13 +788,6 @@ export default function ControlPanel({
 					backgroundPosition: `${offset.x % 24}px ${offset.y % 24}px`
 				}}
 			/>
-			<button
-				onClick={refetch}
-				className="nodrag absolute top-3 right-3 z-30 rounded-md p-1.5 text-neutral-600 transition-colors duration-150 hover:bg-white/5 hover:text-neutral-300"
-				title="Refresh agents"
-			>
-				<RefreshCw size={13} />
-			</button>
 			{hasCanvas ? (
 				<>
 					<ControlPanelCanvas
@@ -780,22 +806,12 @@ export default function ControlPanel({
 						onResizeCard={resizeCard}
 						onSnap={snapToCard}
 						onTypingRef={setTypingHandle}
+						onWorkspaceColorChange={onWorkspaceColorChange}
 						smoothPan={smoothPan}
 						workspaces={workspaces}
 						zoom={zoom}
 					/>
-					<NavigationMap
-						canvasWidth={canvas.w}
-						canvasHeight={canvas.h}
-						cards={sizedCards}
-						canvas={canvas}
-						viewportWidth={vpSize.w}
-						viewportHeight={vpSize.h}
-						offset={offset}
-						scale={zoom}
-						visible={showMap}
-						onNavigate={navigateToCanvasPoint}
-					/>
+					{minimapRoot ? createPortal(minimap, minimapRoot) : null}
 					<CanvasControls onToggleFit={toggleZoom} showFitAll={isActualSize} />
 				</>
 			) : null}

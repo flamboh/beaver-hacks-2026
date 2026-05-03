@@ -9,8 +9,9 @@ import NewProjectModal from "@renderer/components/_Home/NewProjectModal"
 import type { WorkspaceLane } from "@renderer/components/_Workbench/_ControlPanel/useControlPanelAgents"
 import { useAgentSnapshot } from "@renderer/agentStore"
 import { useSessionData } from "@renderer/hooks/useSessionData"
-import type { ProjectRow, WorkbenchTab } from "@renderer/types/models"
+import type { ProjectRow, WorkbenchTab, WorkspaceSortMode } from "@renderer/types/models"
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
+import { X } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 import { useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
@@ -18,13 +19,18 @@ import type { WorkspaceRow } from "../../../main/db/ipc"
 
 const WORKBENCH_TABS: WorkbenchTab[] = ["control-panel", "review", "agents", "skills", "settings"]
 const PAGE_TRANSITION = { type: "spring", duration: 0.32, bounce: 0 } as const
+const TOAST_TRANSITION = { type: "spring", duration: 0.22, bounce: 0 } as const
+
+type WorkbenchToast = {
+	message: string
+}
 
 export default function Workbench() {
 	const { projectId, tab } = useParams()
 	const navigate = useNavigate()
 	const queryClient = useQueryClient()
 	const snapshot = useAgentSnapshot()
-	const { project: sessionProject, setProject } = useSessionData()
+	const { project: sessionProject, setProject, clearProject } = useSessionData()
 	const [newProjectOpen, setNewProjectOpen] = useState(false)
 	const initialPage = WORKBENCH_TABS.includes(tab as WorkbenchTab)
 		? (tab as WorkbenchTab)
@@ -32,6 +38,9 @@ export default function Workbench() {
 	const currentPage = initialPage
 	const [sidebarOpen, setSidebarOpen] = useState(true)
 	const [controlPanelWorkspaceId, setControlPanelWorkspaceId] = useState<string | null>(null)
+	const [minimapRoot, setMinimapRoot] = useState<HTMLDivElement | null>(null)
+	const [workspaceSortMode, setWorkspaceSortMode] = useState<WorkspaceSortMode>("project")
+	const [toast, setToast] = useState<WorkbenchToast | null>(null)
 	const projectQuery = useQuery({
 		queryKey: ["project", projectId],
 		queryFn: () => window.api.projects.get({ id: projectId ?? "" }),
@@ -74,25 +83,28 @@ export default function Workbench() {
 	})
 	const workspaces = workspacesQuery.data ?? []
 	const activeWorkspace = workspaces.find((workspace) => workspace.active) ?? workspaces[0] ?? null
-	const stableProjects = [...projects].sort((a, b) => {
-		const createdOrder = a.createdAt.localeCompare(b.createdAt)
-		if (createdOrder !== 0) return createdOrder
-		return a.name.localeCompare(b.name)
-	})
-	const allWorkspaces: WorkspaceLane[] = stableProjects.flatMap((project) => {
-		const projectWorkspaces = workspacesByProjectId.get(project.id) ?? []
-		return [...projectWorkspaces]
-			.sort((a, b) => {
-				const createdOrder = a.createdAt.localeCompare(b.createdAt)
-				if (createdOrder !== 0) return createdOrder
-				return a.name.localeCompare(b.name)
-			})
-			.map((workspace) => ({
+	const projectById = new Map(projects.map((candidate) => [candidate.id, candidate]))
+	const groupedWorkspaces = projects.flatMap(
+		(project) => workspacesByProjectId.get(project.id) ?? []
+	)
+	const orderedWorkspaces =
+		workspaceSortMode === "workspace"
+			? [...groupedWorkspaces].sort((a, b) => {
+					if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+					return a.createdAt.localeCompare(b.createdAt)
+				})
+			: groupedWorkspaces
+	const allWorkspaces: WorkspaceLane[] = orderedWorkspaces.flatMap((workspace) => {
+		const workspaceProject = projectById.get(workspace.projectId)
+		if (!workspaceProject) return []
+		return [
+			{
 				...workspace,
-				projectName: project.name,
-				projectPath: project.path,
-				projectEnterDevAction: project.enterDevAction
-			}))
+				projectName: workspaceProject.name,
+				projectPath: workspaceProject.path,
+				projectEnterDevAction: workspaceProject.enterDevAction
+			}
+		]
 	})
 	const controlPanelLane =
 		currentPage === "control-panel"
@@ -111,6 +123,13 @@ export default function Workbench() {
 				)
 			}).length
 		: 0
+
+	const showToast = (message: string) => {
+		setToast({ message })
+	}
+
+	const errorMessage = (error: unknown, fallback: string) =>
+		error instanceof Error && error.message ? error.message : fallback
 
 	const setProjectPage = (nextTab: WorkbenchTab) => {
 		const targetProjectId = selectedProject?.id ?? projectId
@@ -166,7 +185,10 @@ export default function Workbench() {
 			workspaces.find((workspace) => workspace.active) ??
 			workspaces[0] ??
 			null
-		if (!sourceWorkspace) return
+		if (!sourceWorkspace) {
+			showToast("No source workspace available for this project.")
+			return
+		}
 
 		const slug = nextWorkspaceSlug(nextProject, workspaces)
 		void window.api.workspaces
@@ -189,7 +211,67 @@ export default function Workbench() {
 				navigate(`/project/${encodeURIComponent(nextProject.id)}/workbench/${currentPage}`)
 				if (nextProject.id === projectId) await workspacesQuery.refetch()
 			})
-			.catch(() => undefined)
+			.catch((error) => showToast(errorMessage(error, "Could not create workspace.")))
+	}
+
+	const reorderProjects = (projectIds: string[]) => {
+		const projectIdSet = new Set(projectIds)
+		const completeProjectIds = [
+			...projectIds,
+			...projects.map((project) => project.id).filter((id) => !projectIdSet.has(id))
+		]
+		queryClient.setQueryData<ProjectRow[]>(["projects"], (currentProjects) => {
+			if (!currentProjects) return currentProjects
+			const projectById = new Map(currentProjects.map((candidate) => [candidate.id, candidate]))
+			return completeProjectIds.flatMap((id) => {
+				const nextProject = projectById.get(id)
+				return nextProject ? [nextProject] : []
+			})
+		})
+		void window.api.projects
+			.reorder({ ids: completeProjectIds })
+			.then((nextProjects) => queryClient.setQueryData(["projects"], nextProjects))
+			.catch((error) => {
+				showToast(errorMessage(error, "Could not reorder projects."))
+				void queryClient.invalidateQueries({ queryKey: ["projects"] })
+			})
+	}
+
+	const reorderWorkspaces = (workspaceIds: string[]) => {
+		const workspaceIdSet = new Set(workspaceIds)
+		const completeWorkspaceIds = [
+			...workspaceIds,
+			...groupedWorkspaces.map((workspace) => workspace.id).filter((id) => !workspaceIdSet.has(id))
+		]
+		const nextSortOrderById = new Map(completeWorkspaceIds.map((id, index) => [id, index]))
+		for (const project of projects) {
+			queryClient.setQueryData<WorkspaceRow[]>(["workspaces", project.id], (currentWorkspaces) => {
+				if (!currentWorkspaces) return currentWorkspaces
+				const workspaceById = new Map(
+					currentWorkspaces.map((workspace) => [
+						workspace.id,
+						{ ...workspace, sortOrder: nextSortOrderById.get(workspace.id) ?? workspace.sortOrder }
+					])
+				)
+				return completeWorkspaceIds.flatMap((id) => {
+					const nextWorkspace = workspaceById.get(id)
+					return nextWorkspace ? [nextWorkspace] : []
+				})
+			})
+		}
+		void window.api.workspaces
+			.reorder({ ids: completeWorkspaceIds })
+			.then(() => {
+				for (const project of projects) {
+					void queryClient.invalidateQueries({ queryKey: ["workspaces", project.id] })
+				}
+			})
+			.catch((error) => {
+				showToast(errorMessage(error, "Could not reorder workspaces."))
+				for (const project of projects) {
+					void queryClient.invalidateQueries({ queryKey: ["workspaces", project.id] })
+				}
+			})
 	}
 
 	const selectWorkspace = (nextProject: ProjectRow, workspace: WorkspaceRow) => {
@@ -207,7 +289,7 @@ export default function Workbench() {
 				await queryClient.invalidateQueries({ queryKey: ["workspaces", nextProject.id] })
 				navigate(`/project/${encodeURIComponent(nextProject.id)}/workbench/${currentPage}`)
 			})
-			.catch(() => undefined)
+			.catch((error) => showToast(errorMessage(error, "Could not select workspace.")))
 	}
 
 	const activateWorkspace = (workspaceId: string) => {
@@ -229,12 +311,66 @@ export default function Workbench() {
 				await queryClient.invalidateQueries({ queryKey: ["workspaces", nextProject.id] })
 				navigate(`/project/${encodeURIComponent(nextProject.id)}/workbench/${currentPage}`)
 			})
-			.catch(() => undefined)
+			.catch((error) => showToast(errorMessage(error, "Could not activate workspace.")))
+	}
+
+	const updateWorkspaceColor = (workspaceId: string, railColor: string) => {
+		const workspace = allWorkspaces.find((candidate) => candidate.id === workspaceId)
+		if (!workspace) return
+		void window.api.workspaces
+			.update({ id: workspaceId, railColor })
+			.then(async () => {
+				await queryClient.invalidateQueries({ queryKey: ["workspaces", workspace.projectId] })
+				if (workspace.projectId === projectId) await workspacesQuery.refetch()
+			})
+			.catch((error) => showToast(errorMessage(error, "Could not update workspace color.")))
+	}
+
+	const deleteProject = (targetProject: ProjectRow, message?: string) => {
+		const confirmed = window.confirm(message ?? `Delete project "${targetProject.name}"?`)
+		if (!confirmed) return
+		void window.api.projects
+			.delete({ id: targetProject.id })
+			.then(async () => {
+				const nextProject = projects.find((candidate) => candidate.id !== targetProject.id) ?? null
+				await queryClient.invalidateQueries({ queryKey: ["projects"] })
+				queryClient.removeQueries({ queryKey: ["project", targetProject.id] })
+				queryClient.removeQueries({ queryKey: ["workspaces", targetProject.id] })
+				if (controlPanelLane?.projectId === targetProject.id) setControlPanelWorkspaceId(null)
+				if (selectedProject?.id !== targetProject.id) return
+				if (nextProject) {
+					setProject({
+						id: nextProject.id,
+						name: nextProject.name,
+						path: nextProject.path,
+						enterDevAction: nextProject.enterDevAction
+					})
+					const [firstWorkspace] = workspacesByProjectId.get(nextProject.id) ?? []
+					if (currentPage === "control-panel")
+						setControlPanelWorkspaceId(firstWorkspace?.id ?? null)
+					navigate(`/project/${encodeURIComponent(nextProject.id)}/workbench/${currentPage}`)
+				} else {
+					clearProject()
+					navigate("/")
+				}
+			})
+			.catch((error) => showToast(errorMessage(error, "Could not delete project.")))
 	}
 
 	const deleteWorkspace = (workspace: WorkspaceRow) => {
 		const projectWorkspaces = workspacesByProjectId.get(workspace.projectId) ?? []
-		if (projectWorkspaces.length <= 1) return
+		if (projectWorkspaces.length <= 1) {
+			const workspaceProject = projectById.get(workspace.projectId)
+			if (!workspaceProject) {
+				showToast("Could not find the project for that workspace.")
+				return
+			}
+			deleteProject(
+				workspaceProject,
+				`"${workspace.name}" is the only workspace in "${workspaceProject.name}". Delete the project instead?`
+			)
+			return
+		}
 		const confirmed = window.confirm(`Delete workspace "${workspace.name}"?`)
 		if (!confirmed) return
 		void window.api.workspaces
@@ -246,7 +382,7 @@ export default function Workbench() {
 				await queryClient.invalidateQueries({ queryKey: ["workspaces", workspace.projectId] })
 				if (workspace.projectId === projectId) await workspacesQuery.refetch()
 			})
-			.catch(() => undefined)
+			.catch((error) => showToast(errorMessage(error, "Could not delete workspace.")))
 	}
 
 	const renderPage = () => {
@@ -257,11 +393,13 @@ export default function Workbench() {
 				return (
 					<ControlPanel
 						activeWorkspaceId={selectedWorkspace.id}
+						minimapRoot={minimapRoot}
 						onWorkspaceActivate={activateWorkspace}
+						onWorkspaceColorChange={updateWorkspaceColor}
 						onWorkspaceCreate={(sourceWorkspaceId) =>
 							createWorkspace(selectedProject, sourceWorkspaceId)
 						}
-						projectIds={stableProjects.map((project) => project.id)}
+						projectIds={projects.map((project) => project.id)}
 						workspaces={allWorkspaces}
 					/>
 				)
@@ -310,14 +448,21 @@ export default function Workbench() {
 					activeProjectId={selectedProject?.id ?? null}
 					activeWorkspaceId={selectedWorkspace?.id ?? null}
 					onNewProject={() => setNewProjectOpen(true)}
+					onProjectDelete={deleteProject}
+					onProjectReorder={reorderProjects}
 					onProjectSelect={selectProject}
 					onWorkspaceCreate={createWorkspace}
 					onWorkspaceDelete={deleteWorkspace}
+					onWorkspaceReorder={reorderWorkspaces}
 					onWorkspaceSelect={selectWorkspace}
+					onMinimapSlot={setMinimapRoot}
 					onToggleSidebar={() => setSidebarOpen((open) => !open)}
 					open={sidebarOpen}
 					projects={projects}
+					showMinimap={currentPage === "control-panel"}
+					workspaceSortMode={workspaceSortMode}
 					workspacesByProjectId={workspacesByProjectId}
+					onWorkspaceSortModeChange={setWorkspaceSortMode}
 				/>
 				<main className="relative flex-1 overflow-hidden">
 					<AnimatePresence initial={false}>
@@ -359,6 +504,29 @@ export default function Workbench() {
 					onCreate={(input) => createProjectMutation.mutateAsync(input)}
 				/>
 			) : null}
+			<AnimatePresence>
+				{toast ? (
+					<motion.div
+						key="workbench-toast"
+						initial={{ opacity: 0, y: 8, scale: 0.98 }}
+						animate={{ opacity: 1, y: 0, scale: 1 }}
+						exit={{ opacity: 0, y: 8, scale: 0.98 }}
+						transition={TOAST_TRANSITION}
+						className="fixed right-4 bottom-4 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-red-400/20 bg-neutral-900 px-4 py-3 text-sm text-red-100 shadow-2xl shadow-black/40"
+						role="alert"
+					>
+						<span className="min-w-0 flex-1">{toast.message}</span>
+						<button
+							type="button"
+							onClick={() => setToast(null)}
+							className="-mr-1 flex size-5 shrink-0 items-center justify-center rounded text-red-200/60 transition-colors duration-150 hover:bg-white/5 hover:text-red-100"
+							aria-label="Dismiss"
+						>
+							<X size={13} />
+						</button>
+					</motion.div>
+				) : null}
+			</AnimatePresence>
 		</div>
 	)
 }

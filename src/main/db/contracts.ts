@@ -20,6 +20,14 @@ export interface ProjectIdInput {
 	id: string
 }
 
+export interface ReorderProjectsInput {
+	ids: string[]
+}
+
+export interface ReorderWorkspacesInput {
+	ids: string[]
+}
+
 export interface ProjectWorkspaceInput {
 	projectId: string
 }
@@ -47,8 +55,9 @@ export interface DeleteWorkspaceResult {
 
 export interface UpdateWorkspaceInput {
 	id: string
-	name: string
-	path: string
+	name?: string
+	path?: string
+	railColor?: string
 }
 
 export interface UpdateSettingInput {
@@ -65,6 +74,7 @@ export interface ProjectRow {
 	enterDevAction: string
 	createdAt: string
 	accessed: string
+	sortOrder: number
 }
 
 export interface WorkspaceRow {
@@ -77,6 +87,8 @@ export interface WorkspaceRow {
 	createdAt: string
 	accessed: string
 	lastPromptedAt: string
+	railColor: string
+	sortOrder: number
 }
 
 export type WorkspaceCreationMode = "existing-directory" | "new-directory" | "git-worktree"

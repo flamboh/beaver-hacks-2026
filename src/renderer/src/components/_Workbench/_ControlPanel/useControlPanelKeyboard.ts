@@ -6,6 +6,8 @@ interface UseControlPanelKeyboardProps {
 	focusedIdx: number
 	moveFocus: (direction: "left" | "right" | "up" | "down") => void
 	moveFocusedWithinRail: (direction: "left" | "right") => void
+	onSpace: () => boolean
+	onWorkspaceHotkey: (index: number) => void
 	resizeFocused: (direction: "grow" | "shrink") => void
 	setSpacePanActive: (active: boolean) => void
 	snapToCard: (idx: number) => void
@@ -19,6 +21,8 @@ export function useControlPanelKeyboard({
 	focusedIdx,
 	moveFocus,
 	moveFocusedWithinRail,
+	onSpace,
+	onWorkspaceHotkey,
 	resizeFocused,
 	setSpacePanActive,
 	snapToCard,
@@ -32,6 +36,11 @@ export function useControlPanelKeyboard({
 				if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
 				return
 			}
+			if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && /^[1-9]$/.test(e.key)) {
+				e.preventDefault()
+				onWorkspaceHotkey(Number(e.key) - 1)
+				return
+			}
 			if (target?.closest(".agent-create-popover")) return
 			if (target?.closest("input, textarea, [contenteditable='true']")) return
 			if (e.altKey && e.code === "KeyZ") {
@@ -40,6 +49,10 @@ export function useControlPanelKeyboard({
 				return
 			}
 			if (e.code === "Space") {
+				if (onSpace()) {
+					e.preventDefault()
+					return
+				}
 				spacePan.current = true
 				setSpacePanActive(true)
 				return
@@ -91,6 +104,8 @@ export function useControlPanelKeyboard({
 		focusedIdx,
 		moveFocus,
 		moveFocusedWithinRail,
+		onSpace,
+		onWorkspaceHotkey,
 		resizeFocused,
 		setSpacePanActive,
 		snapToCard,
