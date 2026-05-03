@@ -24,6 +24,7 @@ import type {
 	GitCommitMessage,
 	GitCommitResult,
 	GitCreateBranchInput,
+	GitDiffTour,
 	GitPushInput,
 	GitPushResult,
 	GitStatusSnapshot,
@@ -44,6 +45,7 @@ interface BeaverApi {
 		checkout: (input: GitCheckoutInput) => Promise<GitStatusSnapshot>
 		createBranch: (input: GitCreateBranchInput) => Promise<GitStatusSnapshot>
 		generateCommitMessage: (cwd: string) => Promise<GitCommitMessage>
+		generateDiffTour: (cwd: string) => Promise<GitDiffTour>
 		commitAll: (input: GitCommitAllInput) => Promise<GitCommitResult>
 		push: (input: GitPushInput) => Promise<GitPushResult>
 	}

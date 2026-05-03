@@ -5,6 +5,7 @@ import type {
 	GitCommitAllInput,
 	GitCommitMessage,
 	GitCreateBranchInput,
+	GitDiffTour,
 	GitPushInput,
 	GitStatusSnapshot
 } from "../../main/git/ipc"
@@ -153,6 +154,10 @@ export async function createGitBranch(input: GitCreateBranchInput): Promise<void
 
 export async function generateGitCommitMessage(cwd: string): Promise<GitCommitMessage> {
 	return window.api.git.generateCommitMessage(cwd)
+}
+
+export async function generateGitDiffTour(cwd: string): Promise<GitDiffTour> {
+	return window.api.git.generateDiffTour(cwd)
 }
 
 export async function commitAllGitChanges(input: GitCommitAllInput): Promise<void> {

@@ -35,6 +35,11 @@ export interface GitCommitMessage {
 	body: string
 }
 
+export interface GitDiffTour {
+	tour: string
+	updatedAt: string
+}
+
 export interface GitCheckoutInput {
 	cwd: string
 	branch: string
