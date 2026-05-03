@@ -1,8 +1,8 @@
 import type { FormEvent, JSX, KeyboardEvent } from "react"
-import { useRef, useState } from "react"
+import { useCallback, useRef, useState, useSyncExternalStore } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { ChevronDown } from "lucide-react"
-import { listAgentModels, sendAgentMessage } from "../agentStore"
+import { listAgentModels, sendAgentMessage, stopAgentMessage } from "../agentStore"
 import type { AgentSnapshot } from "../../../main/agent/ipc"
 import type { ComposerMentionSuggestion } from "../../../main/composer/ipc"
 import { AgentRunSettings } from "./AgentRunSettings"
@@ -59,6 +59,28 @@ const FALLBACK_MODELS: Record<AgentProvider, ModelOption[]> = {
 	]
 }
 
+function scrollToBottom(element: HTMLElement | null): void {
+	if (element) element.scrollTop = element.scrollHeight
+}
+
+function useAutoFollowTranscript(
+	scrollRef: React.RefObject<HTMLElement | null>,
+	version: string
+): void {
+	const subscribe = useCallback(
+		(listener: () => void) => {
+			const frame = requestAnimationFrame(() => {
+				listener()
+				requestAnimationFrame(() => scrollToBottom(scrollRef.current))
+			})
+			return () => cancelAnimationFrame(frame)
+		},
+		[scrollRef]
+	)
+	const getSnapshot = useCallback(() => version, [version])
+	useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
 interface ChatProps {
 	thread: AgentThread | null
 	threadId: string
@@ -96,13 +118,20 @@ export function Chat({
 }: ChatProps): JSX.Element {
 	const [draft, setDraft] = useState("")
 	const [isSending, setIsSending] = useState(false)
+	const [isCancelling, setIsCancelling] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [branchOpen, setBranchOpen] = useState(false)
 	const [cursor, setCursor] = useState(0)
 	const [suggestionIndex, setSuggestionIndex] = useState(0)
 	const inputRef = useRef<HTMLTextAreaElement | null>(null)
+	const transcriptScrollRef = useRef<HTMLElement | null>(null)
 	const canSend = draft.trim().length > 0 && !isSending && !isRunning
+	const canCancel = isRunning && !isCancelling
 	const transcript = thread ? buildTranscript(thread) : []
+	const transcriptVersion = thread
+		? `${thread.updatedAt}:${thread.messages.length}:${thread.activities.length}`
+		: ""
+	useAutoFollowTranscript(transcriptScrollRef, transcriptVersion)
 	const activeToken = activeComposerToken(draft, Math.min(cursor || draft.length, draft.length))
 	const { data: modelOptions = [] } = useQuery({
 		queryKey: ["agent-models", provider],
@@ -176,6 +205,18 @@ export function Chat({
 			.finally(() => setIsSending(false))
 	}
 
+	function handleCancel(): void {
+		if (!canCancel) return
+
+		setError(null)
+		setIsCancelling(true)
+		void stopAgentMessage(thread?.id ?? threadId)
+			.catch((cause: unknown) => {
+				setError(cause instanceof Error ? cause.message : String(cause))
+			})
+			.finally(() => setIsCancelling(false))
+	}
+
 	function syncCursor(element: HTMLTextAreaElement): void {
 		setCursor(element.selectionStart)
 	}
@@ -225,7 +266,9 @@ export function Chat({
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<section
+				ref={transcriptScrollRef}
 				data-selectable-text
+				data-scroll-boundary-stop="true"
 				className="nowheel nodrag min-h-0 flex-1 select-text overflow-y-auto px-4 py-5"
 			>
 				<div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
@@ -285,11 +328,12 @@ export function Chat({
 						/>
 					</div>
 					<button
-						type="submit"
-						disabled={!canSend}
+						type={isRunning ? "button" : "submit"}
+						onClick={isRunning ? handleCancel : undefined}
+						disabled={isRunning ? !canCancel : !canSend}
 						className="h-12 cursor-pointer rounded-lg bg-zinc-100 px-4 text-sm font-medium text-zinc-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
 					>
-						Send
+						{isRunning ? "Cancel" : "Send"}
 					</button>
 				</form>
 				<div className="mx-auto mt-3 flex max-w-3xl items-start justify-between gap-3">

@@ -11,7 +11,12 @@ import {
 } from "./agentNaming"
 import { recommendProjectSkills } from "../skills/skillRecommender"
 import { installProjectSkill } from "../skills/skillInstaller"
-import { listInstalledSkillKeys, matchesInstalledSkill } from "../skills/installedSkills"
+import {
+	listInstalledSkillKeys,
+	matchesInstalledSkill,
+	removeInstalledSkill
+} from "../skills/installedSkills"
+import { recommendProjectMcps } from "../mcp/mcpRecommender"
 import type {
 	AgentActivity,
 	AgentModelOption,
@@ -25,9 +30,12 @@ import type {
 	AgentThread,
 	ProviderRuntimeEvent,
 	FindSkillsInput,
+	FindMcpsInput,
 	InstallSkillInput,
 	SpawnThreadInput,
-	StartTurnInput
+	StopTurnInput,
+	StartTurnInput,
+	UninstallSkillInput
 } from "./contracts"
 
 const AGENT_NAME_MODEL = "gpt-5.4-mini"
@@ -157,6 +165,38 @@ export class AgentEngine {
 		return this.getSnapshot()
 	}
 
+	async stopTurn(input: StopTurnInput): Promise<AgentSnapshot> {
+		const thread = this.threads.get(input.threadId)
+		if (!thread) return this.getSnapshot()
+
+		const activeTurnId = thread.session?.activeTurnId ?? null
+		await this.providers[providerForThread(thread)].stopSession(thread.id)
+		for (const message of thread.messages) {
+			if (message.role === "assistant" && (!activeTurnId || message.turnId === activeTurnId)) {
+				message.streaming = false
+				message.updatedAt = nowIso()
+			}
+		}
+		thread.activities.push({
+			id: `activity:${randomUUID()}`,
+			kind: "turn.cancelled",
+			summary: "Agent turn cancelled.",
+			payload: {},
+			turnId: activeTurnId,
+			createdAt: nowIso()
+		})
+		this.setThreadSession(thread.id, {
+			status: "stopped",
+			provider: providerForThread(thread),
+			model: thread.session?.model ?? thread.model,
+			activeTurnId: null,
+			lastError: null,
+			updatedAt: nowIso()
+		})
+		this.emitSnapshot()
+		return this.getSnapshot()
+	}
+
 	async findSkills(input: FindSkillsInput): Promise<AgentSnapshot> {
 		const thread = this.ensureThread({
 			threadId: input.threadId,
@@ -173,6 +213,33 @@ export class AgentEngine {
 			thread.activities.push({
 				id: `activity:${randomUUID()}`,
 				kind: "skills.error",
+				summary: error instanceof Error ? error.message : String(error),
+				payload: {},
+				turnId: null,
+				createdAt: nowIso()
+			})
+		}
+
+		this.emitSnapshot()
+		return this.getSnapshot()
+	}
+
+	async findMcps(input: FindMcpsInput): Promise<AgentSnapshot> {
+		const thread = this.ensureThread({
+			threadId: input.threadId,
+			cwd: input.cwd,
+			prompt: input.prompt ?? "Find relevant MCP servers for this project.",
+			runtimeMode: input.runtimeMode
+		})
+		this.activeThreadId = thread.id
+		this.emitSnapshot()
+
+		try {
+			await this.updateMcpSuggestions(thread, input.prompt ?? thread.title)
+		} catch (error) {
+			thread.activities.push({
+				id: `activity:${randomUUID()}`,
+				kind: "mcps.error",
 				summary: error instanceof Error ? error.message : String(error),
 				payload: {},
 				turnId: null,
@@ -210,6 +277,31 @@ export class AgentEngine {
 		return this.getSnapshot()
 	}
 
+	async uninstallSkill(input: UninstallSkillInput): Promise<AgentSnapshot> {
+		const thread = this.threads.get(input.threadId)
+		const cwd = thread?.cwd ?? input.cwd
+
+		await removeInstalledSkill(cwd, input.skillPath)
+		if (thread) {
+			const installedKeys = await listInstalledSkillKeys(cwd)
+			thread.suggestedSkills = thread.suggestedSkills.map((suggestion) => ({
+				...suggestion,
+				installed: matchesInstalledSkill(installedKeys, suggestion)
+			}))
+			thread.activities.push({
+				id: `activity:${randomUUID()}`,
+				kind: "skills.uninstalled",
+				summary: "Uninstalled skill from this project.",
+				payload: { skillPath: input.skillPath },
+				turnId: null,
+				createdAt: nowIso()
+			})
+			thread.updatedAt = nowIso()
+		}
+		this.emitSnapshot()
+		return this.getSnapshot()
+	}
+
 	spawnThread(input: SpawnThreadInput): AgentSnapshot {
 		if (!this.threads.has(input.threadId)) {
 			const createdAt = nowIso()
@@ -224,6 +316,7 @@ export class AgentEngine {
 				activities: [],
 				plan: emptyPlan(),
 				suggestedSkills: [],
+				suggestedMcps: [],
 				session: null,
 				createdAt,
 				updatedAt: createdAt
@@ -271,6 +364,7 @@ export class AgentEngine {
 			activities: [],
 			plan: emptyPlan(),
 			suggestedSkills: [],
+			suggestedMcps: [],
 			session: null,
 			createdAt,
 			updatedAt: createdAt
@@ -410,8 +504,34 @@ export class AgentEngine {
 			summary: recommendation.marketplaceError
 				? recommendation.marketplaceError
 				: recommendation.suggestions.length > 0
-					? `Suggested ${recommendation.suggestions.length} skills from ${recommendation.profile.source} project profile.`
-					: `No skills suggested from ${recommendation.profile.source} project profile.`,
+					? `Suggested ${recommendation.suggestions.length} skills relevant to your project.`
+					: "No skills suggested for your project.",
+			payload: recommendation,
+			turnId: null,
+			createdAt: nowIso()
+		})
+		this.emitSnapshot()
+	}
+
+	private async updateMcpSuggestions(thread: AgentThread, prompt: string): Promise<void> {
+		const recommendation = await recommendProjectMcps(thread.cwd, prompt, {
+			runCodexPrompt: (input) =>
+				this.codexProvider.runOneShot({
+					cwd: thread.cwd,
+					prompt: input.prompt,
+					model: input.model,
+					runtimeMode: thread.runtimeMode
+				})
+		})
+		thread.suggestedMcps = recommendation.suggestions
+		thread.activities.push({
+			id: `activity:${randomUUID()}`,
+			kind: "mcps.suggested",
+			summary: recommendation.searchError
+				? recommendation.searchError
+				: recommendation.suggestions.length > 0
+					? `Suggested ${recommendation.suggestions.length} MCP servers from GitHub.`
+					: "No MCP servers suggested from GitHub.",
 			payload: recommendation,
 			turnId: null,
 			createdAt: nowIso()

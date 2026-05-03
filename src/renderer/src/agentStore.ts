@@ -90,6 +90,12 @@ export async function sendAgentMessage(input: {
 	return nextSnapshot
 }
 
+export async function stopAgentMessage(threadId: string): Promise<AgentSnapshot> {
+	const nextSnapshot = await window.api.agent.stopTurn({ threadId })
+	setSnapshot(nextSnapshot)
+	return nextSnapshot
+}
+
 export async function spawnAgentThread(input: {
 	threadId: string
 	cwd: string
@@ -114,11 +120,34 @@ export async function findProjectSkills(input: {
 	setSnapshot(nextSnapshot)
 }
 
+export async function findProjectMcps(input: {
+	threadId?: string
+	cwd?: string
+	prompt?: string
+}): Promise<void> {
+	const nextSnapshot = await window.api.agent.findMcps({
+		...(input.threadId ? { threadId: input.threadId } : {}),
+		...(input.cwd ? { cwd: input.cwd } : {}),
+		...(input.prompt ? { prompt: input.prompt } : {}),
+		runtimeMode: "full-access"
+	})
+	setSnapshot(nextSnapshot)
+}
+
 export async function installProjectSkill(input: {
 	threadId: string
 	skillId: string
 }): Promise<void> {
 	const nextSnapshot = await window.api.agent.installSkill(input)
+	setSnapshot(nextSnapshot)
+}
+
+export async function uninstallProjectSkill(input: {
+	threadId: string
+	cwd: string
+	skillPath: string
+}): Promise<void> {
+	const nextSnapshot = await window.api.agent.uninstallSkill(input)
 	setSnapshot(nextSnapshot)
 }
 

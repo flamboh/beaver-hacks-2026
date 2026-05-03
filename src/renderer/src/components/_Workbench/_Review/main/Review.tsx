@@ -138,7 +138,6 @@ export default function Review({
 	const generateTour = async () => {
 		if (!currentDiffKey) return
 		const previousTour = savedTour
-		setTourPanelHeight(EXPANDED_TOUR_PANEL_HEIGHT)
 		saveReviewTour(workspaceId, {
 			...previousTour,
 			error: null,

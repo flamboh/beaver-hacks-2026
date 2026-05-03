@@ -117,7 +117,7 @@ export async function buildProjectSkillProfile(
 			prompt: [
 				"Read these project files and suggest skills.sh CLI search queries.",
 				"Return only JSON with keys: summary, domains, tasks, searchQueries.",
-				"Use 3-5 specific multi-word searchQueries. No markdown.",
+				"Use 6-8 specific multi-word searchQueries. No markdown.",
 				JSON.stringify({ prompt, files })
 			].join("\n\n")
 		})

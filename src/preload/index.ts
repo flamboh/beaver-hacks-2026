@@ -4,10 +4,13 @@ import type {
 	AgentProvider,
 	AgentModelOption,
 	AgentSnapshot,
+	FindMcpsInput,
 	FindSkillsInput,
 	InstallSkillInput,
 	SpawnThreadInput,
-	StartTurnInput
+	StopTurnInput,
+	StartTurnInput,
+	UninstallSkillInput
 } from "../main/agent/ipc"
 import type {
 	ComposerFileSuggestion,
@@ -72,10 +75,16 @@ const api = {
 			ipcRenderer.invoke("agent:list-models", provider),
 		startTurn: (input: StartTurnInput): Promise<AgentSnapshot> =>
 			ipcRenderer.invoke("agent:start-turn", input),
+		stopTurn: (input: StopTurnInput): Promise<AgentSnapshot> =>
+			ipcRenderer.invoke("agent:stop-turn", input),
 		findSkills: (input: FindSkillsInput): Promise<AgentSnapshot> =>
 			ipcRenderer.invoke("agent:find-skills", input),
+		findMcps: (input: FindMcpsInput): Promise<AgentSnapshot> =>
+			ipcRenderer.invoke("agent:find-mcps", input),
 		installSkill: (input: InstallSkillInput): Promise<AgentSnapshot> =>
 			ipcRenderer.invoke("agent:install-skill", input),
+		uninstallSkill: (input: UninstallSkillInput): Promise<AgentSnapshot> =>
+			ipcRenderer.invoke("agent:uninstall-skill", input),
 		spawnThread: (input: SpawnThreadInput): Promise<AgentSnapshot> =>
 			ipcRenderer.invoke("agent:spawn-thread", input),
 		onSnapshot: (listener: (snapshot: AgentSnapshot) => void): (() => void) => {
