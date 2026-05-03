@@ -1,23 +1,17 @@
-import { type FormEvent, type MouseEvent, useCallback, useRef, useState } from "react"
+import { type MouseEvent, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useAgentSnapshot } from "@renderer/agentStore"
 import { Chat } from "@renderer/components/chat"
-import { ChevronDown, Plus } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 import type { AgentRow } from "@renderer/types/models"
-import { ProviderIcon } from "./ControlPanelAgentLauncher"
+import AgentCardScopeModal from "./AgentCardScopeModal"
+import AgentCardSideCreateButton, { type CreateSide } from "./AgentCardSideCreateButton"
+import { parseScopePath } from "./agentCardScopePath"
 import TaskList from "./TaskList"
 import { CARD_H, CARD_W } from "./controlPanelLayout"
 import { agentNameForPrompt, type StartAgentInput } from "./useControlPanelAgents"
 
-function parseScopePath(path: string): string {
-	if (!path) return ""
-	const parts = path.replace(/\\/g, "/").split("/")
-	return (
-		parts.findLast((segment) => segment.endsWith(".md") || segment.endsWith(".txt")) ??
-		parts.at(-1) ??
-		""
-	)
-}
+export type { CreateSide }
 
 const PRIORITY_LEVELS = ["low", "medium", "high"] as const
 const MODEL_OPTIONS: { group: string; models: { value: string; label: string }[] }[] = [
@@ -52,7 +46,6 @@ interface Props {
 	availableCreateSides: CreateSide[]
 	isDeleting: boolean
 	onCreateAgent: (input: StartAgentInput) => Promise<void>
-	onDeleted: () => void
 	onDeleteAgent: (id: string) => Promise<void>
 	workspaceId: string
 	workspacePath: string
@@ -63,19 +56,21 @@ export default function AgentCard({
 	availableCreateSides,
 	isDeleting,
 	onCreateAgent,
-	onDeleted,
 	onDeleteAgent,
 	workspaceId,
 	workspacePath
 }: Props) {
 	const [activeCreateSide, setActiveCreateSide] = useState<CreateSide | null>(null)
-	const [name, setName] = useState(agent.name)
+	const [isEditingName, setIsEditingName] = useState(false)
+	const [nameDraft, setNameDraft] = useState(agent.name)
+	const [isSavingName, setIsSavingName] = useState(false)
 	const [effort, setEffort] = useState(agent.effort)
 	const [model, setModel] = useState(agent.model)
 	const [scopePath, setScopePath] = useState(agent.scope_path)
 	const [scopeModalOpen, setScopeModalOpen] = useState(false)
 	const [deleteArmed, setDeleteArmed] = useState(false)
 	const [deleting, setDeleting] = useState(false)
+	const skipNameCommitRef = useRef(false)
 	const queryClient = useQueryClient()
 	const snapshot = useAgentSnapshot()
 	const activeThread =
@@ -92,6 +87,7 @@ export default function AgentCard({
 			.update({ id: agent.id, effort: nextEffort })
 			.then((updatedAgent) => {
 				setEffort(updatedAgent.effort)
+				void queryClient.invalidateQueries({ queryKey: ["agents"] })
 			})
 			.catch(() => setEffort(agent.effort))
 	}
@@ -101,18 +97,9 @@ export default function AgentCard({
 			.update({ id: agent.id, model: nextModel })
 			.then((updatedAgent) => {
 				setModel(updatedAgent.model)
+				void queryClient.invalidateQueries({ queryKey: ["agents"] })
 			})
 			.catch(() => setModel(agent.model))
-	}
-	const updateName = () => {
-		const nextName = name.trim() || agent.name
-		setName(nextName)
-		void window.api.agents
-			.update({ id: agent.id, name: nextName })
-			.then((updatedAgent) => {
-				setName(updatedAgent.name)
-			})
-			.catch(() => setName(agent.name))
 	}
 	const updateScope = async (nextScopePath: string) => {
 		const updatedAgent = await window.api.agents.update({
@@ -120,12 +107,11 @@ export default function AgentCard({
 			scope_path: nextScopePath
 		})
 		setScopePath(updatedAgent.scope_path)
+		await queryClient.invalidateQueries({ queryKey: ["agents"] })
 	}
 	const deleteAgent = () => {
 		setDeleting(true)
-		void onDeleteAgent(agent.id)
-			.then(onDeleted)
-			.finally(() => setDeleting(false))
+		void onDeleteAgent(agent.id).finally(() => setDeleting(false))
 	}
 	const requestDelete = () => {
 		if (deleteArmed) {
@@ -146,16 +132,48 @@ export default function AgentCard({
 			status: "working",
 			description: prompt
 		})
-		if (name === "New Agent") {
-			const nextName = agentNameForPrompt(prompt)
+		if (agent.name === "New Agent") {
+			const seedName = agentNameForPrompt(prompt)
 			await window.api.agents.update({
 				id: agent.id,
-				name: nextName
+				name: seedName
 			})
-			setName(nextName)
 			await queryClient.invalidateQueries({ queryKey: ["agents"] })
+			void window.api.agent
+				.generateName({ cwd: workspacePath, prompt })
+				.then(async ({ name }) => {
+					if (!name || name === seedName || name === "New Agent") return
+					await window.api.agents.update({
+						id: agent.id,
+						name,
+						expectedName: seedName
+					})
+					await queryClient.invalidateQueries({ queryKey: ["agents"] })
+				})
+				.catch(() => undefined)
 		}
 		await queryClient.invalidateQueries({ queryKey: ["tasks", agent.id] })
+	}
+
+	async function commitName(): Promise<void> {
+		if (skipNameCommitRef.current) {
+			skipNameCommitRef.current = false
+			return
+		}
+		const nextName = nameDraft.trim()
+		if (!nextName || nextName === agent.name) {
+			setNameDraft(agent.name)
+			setIsEditingName(false)
+			return
+		}
+		setIsSavingName(true)
+		try {
+			await window.api.agents.update({ id: agent.id, name: nextName })
+			await queryClient.invalidateQueries({ queryKey: ["agents"] })
+			setIsEditingName(false)
+		} finally {
+			setIsSavingName(false)
+		}
 	}
 
 	return (
@@ -166,7 +184,7 @@ export default function AgentCard({
 			onWheel={(event) => event.stopPropagation()}
 		>
 			{availableCreateSides.map((side) => (
-				<SideCreateButton
+				<AgentCardSideCreateButton
 					key={side}
 					active={activeCreateSide === side}
 					onClose={() => setActiveCreateSide(null)}
@@ -178,17 +196,42 @@ export default function AgentCard({
 			))}
 
 			<div className="flex h-full flex-col overflow-hidden rounded-xl border border-white/8 bg-neutral-900 shadow-2xl shadow-black/40">
-				<div className="flex h-11 shrink-0 items-center justify-between border-b border-white/5 bg-neutral-800/60 px-5">
-					<input
-						type="text"
-						value={name}
-						onChange={(event) => setName(event.currentTarget.value)}
-						onBlur={updateName}
-						onKeyDown={(event) => {
-							if (event.key === "Enter") event.currentTarget.blur()
-						}}
-						className="min-w-0 flex-1 cursor-text truncate bg-transparent pr-4 text-sm font-semibold tracking-wide text-neutral-100 outline-none transition-colors duration-150 hover:text-white focus:text-white"
-					/>
+				<div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-white/5 bg-neutral-800/60 px-5">
+					{isEditingName ? (
+						<input
+							value={nameDraft}
+							disabled={isSavingName}
+							autoFocus
+							style={{ width: `${Math.min(Math.max(nameDraft.length + 1, 8), 30)}ch` }}
+							onChange={(event) => setNameDraft(event.currentTarget.value)}
+							onBlur={() => void commitName()}
+							onKeyDown={(event) => {
+								if (event.key === "Enter") {
+									event.preventDefault()
+									event.currentTarget.blur()
+								}
+								if (event.key === "Escape") {
+									skipNameCommitRef.current = true
+									setNameDraft(agent.name)
+									setIsEditingName(false)
+								}
+							}}
+							className="nodrag min-w-0 max-w-full bg-transparent text-sm font-semibold tracking-wide text-neutral-100 outline-none"
+							aria-label="Agent name"
+						/>
+					) : (
+						<button
+							type="button"
+							onClick={() => {
+								setNameDraft(agent.name)
+								setIsEditingName(true)
+							}}
+							className="min-w-0 max-w-full cursor-text truncate text-left text-sm font-semibold tracking-wide text-neutral-100"
+							title="Rename agent"
+						>
+							{agent.name}
+						</button>
+					)}
 					<button
 						type="button"
 						onClick={requestDelete}
@@ -286,245 +329,13 @@ export default function AgentCard({
 			</div>
 
 			{scopeModalOpen ? (
-				<ScopeModal
-					agentName={name}
+				<AgentCardScopeModal
+					agentName={agent.name}
 					initialScopePath={scopePath}
 					onCancel={() => setScopeModalOpen(false)}
 					onSave={updateScope}
 					projectPath={workspacePath}
 				/>
-			) : null}
-		</div>
-	)
-}
-
-type ScopeModalProps = {
-	agentName: string
-	initialScopePath: string
-	onCancel: () => void
-	onSave: (scopePath: string) => Promise<void>
-	projectPath: string
-}
-
-function ScopeModal({
-	agentName,
-	initialScopePath,
-	onCancel,
-	onSave,
-	projectPath
-}: ScopeModalProps) {
-	const [mode, setMode] = useState<"describe" | "path">("path")
-	const [description, setDescription] = useState("")
-	const [path, setPath] = useState(initialScopePath)
-	const [saving, setSaving] = useState(false)
-
-	const fallbackFileName =
-		parseScopePath(path) || `${agentName.trim().replace(/[^A-Za-z0-9._-]+/g, "-") || "agent"}-scope`
-
-	const handleBrowse = async () => {
-		const selectedPath = await window.api.dialog.selectFile()
-		if (selectedPath) setPath(selectedPath)
-	}
-
-	const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-		event.preventDefault()
-		setSaving(true)
-		const nextScopePath =
-			mode === "describe"
-				? (
-						await window.api.files.saveScopeFile({
-							projectPath,
-							fileName: fallbackFileName,
-							contents: description
-						})
-					).relativePath
-				: path
-		await onSave(nextScopePath)
-		setSaving(false)
-		onCancel()
-	}
-
-	return (
-		<div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-6">
-			<form
-				onSubmit={handleSubmit}
-				className="w-full max-w-md rounded-lg border border-white/10 bg-neutral-900 shadow-2xl"
-			>
-				<div className="flex h-12 items-center justify-between border-b border-white/5 px-4">
-					<h2 className="text-sm font-medium text-white">Edit Scope</h2>
-				</div>
-				<div className="flex flex-col gap-4 p-4">
-					<div className="grid grid-cols-2 overflow-hidden rounded-md border border-white/5 text-xs">
-						<button
-							type="button"
-							onClick={() => setMode("describe")}
-							className={`cursor-pointer py-2 transition-colors ${
-								mode === "describe"
-									? "bg-white/8 text-white"
-									: "text-neutral-500 hover:text-neutral-300"
-							}`}
-						>
-							Describe
-						</button>
-						<button
-							type="button"
-							onClick={() => setMode("path")}
-							className={`cursor-pointer py-2 transition-colors ${
-								mode === "path"
-									? "bg-white/8 text-white"
-									: "text-neutral-500 hover:text-neutral-300"
-							}`}
-						>
-							File Path
-						</button>
-					</div>
-
-					{mode === "describe" ? (
-						<textarea
-							value={description}
-							onChange={(event) => setDescription(event.currentTarget.value)}
-							rows={5}
-							placeholder="Describe what this agent should accomplish..."
-							className="resize-none rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/20"
-						/>
-					) : null}
-
-					<div className="flex gap-2">
-						<input
-							type="text"
-							value={path}
-							onChange={(event) => setPath(event.currentTarget.value)}
-							placeholder="./scopes/test-coverage.md"
-							className="min-w-0 flex-1 rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 font-mono text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/20"
-						/>
-						<button
-							type="button"
-							onClick={handleBrowse}
-							className="cursor-pointer rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm text-white transition-colors hover:bg-white/15"
-						>
-							Browse
-						</button>
-					</div>
-				</div>
-				<div className="flex justify-end gap-2 border-t border-white/5 p-4">
-					<button
-						type="button"
-						onClick={onCancel}
-						disabled={saving}
-						className="cursor-pointer rounded-md border border-white/8 px-4 py-2 text-sm text-neutral-300 transition-colors hover:border-white/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						Cancel
-					</button>
-					<button
-						type="submit"
-						disabled={saving}
-						className="cursor-pointer rounded-md border border-white/10 bg-white/10 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						{saving ? "Saving..." : "Save"}
-					</button>
-				</div>
-			</form>
-		</div>
-	)
-}
-
-export type CreateSide = "left" | "right" | "top" | "bottom"
-
-const PROVIDERS: StartAgentInput[] = [{ provider: "codex" }, { provider: "claude" }]
-
-function SideCreateButton({
-	active,
-	onClose,
-	onCreateAgent,
-	onOpen,
-	side,
-	sourceAgentId
-}: {
-	active: boolean
-	onClose: () => void
-	onCreateAgent: (input: StartAgentInput) => Promise<void>
-	onOpen: () => void
-	side: CreateSide
-	sourceAgentId: string
-}) {
-	const lightDismissCleanup = useRef<(() => void) | null>(null)
-	const sideClass: Record<CreateSide, string> = {
-		left: "left-[-62px] top-1/2 -translate-y-1/2",
-		right: "right-[-62px] top-1/2 -translate-y-1/2",
-		top: "left-1/2 top-[-62px] -translate-x-1/2",
-		bottom: "bottom-[-62px] left-1/2 -translate-x-1/2"
-	}
-	const setPopoverRef = useCallback(
-		(node: HTMLDivElement | null) => {
-			lightDismissCleanup.current?.()
-			lightDismissCleanup.current = null
-			if (!node) return
-			const popover = node
-
-			function handlePointerDown(event: PointerEvent): void {
-				if (popover.contains(event.target as Node | null)) return
-				lightDismissCleanup.current?.()
-				lightDismissCleanup.current = null
-				onClose()
-			}
-
-			const timer = window.setTimeout(() => {
-				document.addEventListener("pointerdown", handlePointerDown, true)
-			}, 0)
-			lightDismissCleanup.current = () => {
-				window.clearTimeout(timer)
-				document.removeEventListener("pointerdown", handlePointerDown, true)
-			}
-		},
-		[onClose]
-	)
-
-	return (
-		<div className={`nodrag absolute z-40 ${sideClass[side]}`}>
-			<button
-				type="button"
-				onClick={(event) => {
-					event.preventDefault()
-					event.stopPropagation()
-					if (active) {
-						onClose()
-						return
-					}
-					onOpen()
-				}}
-				className="flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-neutral-400 opacity-35 transition-all duration-150 hover:scale-110 hover:text-white hover:opacity-100 group-hover/card:opacity-70"
-				aria-label="Start another agent"
-				title="Start another agent"
-			>
-				<Plus size={17} />
-			</button>
-			{active ? (
-				<div
-					ref={setPopoverRef}
-					className="agent-create-popover absolute top-1/2 left-1/2 z-50 flex w-[120px] items-center gap-2 rounded-lg border border-white/10 bg-neutral-900 p-2 shadow-2xl shadow-black/50"
-					onClick={(event) => event.stopPropagation()}
-				>
-					{PROVIDERS.map((provider) => (
-						<button
-							key={provider.provider}
-							type="button"
-							onClick={(event) => {
-								event.preventDefault()
-								event.stopPropagation()
-								void onCreateAgent({
-									...provider,
-									sourceAgentId,
-									side
-								}).then(onClose)
-							}}
-							className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-white/8 bg-neutral-950 text-neutral-400 transition-colors duration-150 hover:border-white/15 hover:bg-white/8 hover:text-white"
-							aria-label={`Start ${provider.provider} agent`}
-							title={provider.provider}
-						>
-							<ProviderIcon provider={provider.provider} />
-						</button>
-					))}
-				</div>
 			) : null}
 		</div>
 	)

@@ -3,6 +3,12 @@ import { randomUUID } from "node:crypto"
 import { ClaudeAdapter } from "./claudeAdapter"
 import { CodexAdapter } from "./codexAdapter"
 import { assistantMessageId } from "./runtimeIds"
+import {
+	buildAgentNamePrompt,
+	parseAgentName,
+	type GenerateAgentNameInput,
+	type GenerateAgentNameResult
+} from "./agentNaming"
 import { recommendProjectSkills } from "../skills/skillRecommender"
 import { installProjectSkill } from "../skills/skillInstaller"
 import { listInstalledSkillKeys, matchesInstalledSkill } from "../skills/installedSkills"
@@ -21,6 +27,8 @@ import type {
 	ProviderAdapter,
 	StartTurnInput
 } from "./contracts"
+
+const AGENT_NAME_MODEL = "gpt-5.4-mini"
 
 function nowIso(): string {
 	return new Date().toISOString()
@@ -186,6 +194,17 @@ export class AgentEngine {
 		timeoutMs?: number
 	}): Promise<string> {
 		return this.codexProvider.runOneShot(input)
+	}
+
+	async generateAgentName(input: GenerateAgentNameInput): Promise<GenerateAgentNameResult> {
+		const raw = await this.runOneShot({
+			cwd: input.cwd,
+			prompt: buildAgentNamePrompt(input.prompt),
+			model: AGENT_NAME_MODEL,
+			runtimeMode: "approval-required",
+			timeoutMs: 45_000
+		})
+		return { name: parseAgentName(raw) }
 	}
 
 	private ensureThread(input: StartTurnInput): AgentThread {

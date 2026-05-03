@@ -34,6 +34,7 @@ export interface UpdateAgentInput {
 	model?: string
 	scope_path?: string
 	effort?: string
+	expectedName?: string
 }
 
 // ── mapper ────────────────────────────────────────────────────────
@@ -104,17 +105,38 @@ export class AgentService {
 	}
 
 	async updateAgent(input: UpdateAgentInput): Promise<AgentRow> {
-		await this.run(
-			`
-				UPDATE agents
-				SET name = COALESCE(?, name),
-					model = COALESCE(?, model),
-					scope_path = COALESCE(?, scope_path),
-					effort = COALESCE(?, effort)
-				WHERE id = ?
-			`,
-			[input.name, input.model, input.scope_path, input.effort, input.id]
-		)
+		if (input.expectedName === undefined) {
+			await this.run(
+				`
+					UPDATE agents
+					SET name = COALESCE(?, name),
+						model = COALESCE(?, model),
+						scope_path = COALESCE(?, scope_path),
+						effort = COALESCE(?, effort)
+					WHERE id = ?
+				`,
+				[input.name?.trim(), input.model, input.scope_path, input.effort, input.id]
+			)
+		} else {
+			await this.run(
+				`
+					UPDATE agents
+					SET name = COALESCE(?, name),
+						model = COALESCE(?, model),
+						scope_path = COALESCE(?, scope_path),
+						effort = COALESCE(?, effort)
+					WHERE id = ? AND name = ?
+				`,
+				[
+					input.name?.trim(),
+					input.model,
+					input.scope_path,
+					input.effort,
+					input.id,
+					input.expectedName
+				]
+			)
+		}
 		const row = await this.get<AgentTableRow>(
 			`SELECT id, name, project_id, workspace_id, provider, model, scope_path, effort, layout_x, layout_y
 			 FROM agents

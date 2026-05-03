@@ -412,7 +412,6 @@ export default function ControlPanel({ workspaceId, workspacePath }: ControlPane
 						onCreateAgent={handleCreateAgent}
 						onDeleteAgent={handleDeleteAgent}
 						onFocus={setFocusedIdx}
-						onAgentDeleted={refetch}
 						onSnap={snapToCard}
 						smoothPan={smoothPan}
 						workspaceId={workspaceId}

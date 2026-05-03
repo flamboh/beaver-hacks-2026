@@ -13,7 +13,6 @@ interface ControlPanelCanvasProps {
 	onCreateAgent: (input: StartAgentInput) => Promise<void>
 	onDeleteAgent: (id: string) => Promise<void>
 	onFocus: (idx: number) => void
-	onAgentDeleted: () => void
 	onSnap: (idx: number) => void
 	smoothPan: boolean
 	workspaceId: string
@@ -31,7 +30,6 @@ export function ControlPanelCanvas({
 	onCreateAgent,
 	onDeleteAgent,
 	onFocus,
-	onAgentDeleted,
 	onSnap,
 	smoothPan,
 	workspaceId,
@@ -88,7 +86,6 @@ export function ControlPanelCanvas({
 								availableCreateSides={availableCreateSides(agent, agents)}
 								isDeleting={deletingAgentId === agent.id}
 								onCreateAgent={onCreateAgent}
-								onDeleted={onAgentDeleted}
 								onDeleteAgent={onDeleteAgent}
 								workspaceId={workspaceId}
 								workspacePath={workspacePath}
