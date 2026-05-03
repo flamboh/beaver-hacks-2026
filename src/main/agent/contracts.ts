@@ -58,6 +58,7 @@ export interface AgentSkillSuggestion {
 export interface AgentSession {
 	status: AgentSessionStatus
 	provider: AgentProvider
+	model: string | null
 	activeTurnId: string | null
 	lastError: string | null
 	updatedAt: string
@@ -131,7 +132,7 @@ export type ProviderRuntimeEvent =
 			type: "session.state.changed"
 			threadId: string
 			createdAt: string
-			payload: { status: AgentSessionStatus; reason?: string }
+			payload: { status: AgentSessionStatus; reason?: string; model?: string | null }
 	  }
 	| {
 			type: "turn.started"

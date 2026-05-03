@@ -31,7 +31,9 @@ interface CodexThreadStartResponse {
 interface CodexTurnStartResponse {
 	turn: {
 		id: string
+		model?: string
 	}
+	model?: string
 }
 
 const DEFAULT_MODEL = "gpt-5.5"
@@ -130,17 +132,20 @@ export class CodexAdapter implements ProviderAdapter {
 		await this.ensureInitialized()
 
 		const config = runtimeModeToThreadConfig(input.runtimeMode)
+		const requestedModel = input.model ?? DEFAULT_MODEL
 		const opened = (await this.rpc.request("thread/start", {
 			cwd: input.cwd,
 			approvalPolicy: config.approvalPolicy,
 			sandbox: config.sandbox,
-			model: input.model ?? DEFAULT_MODEL
+			model: requestedModel
 		})) as CodexThreadStartResponse
 
 		const providerThreadId = String(opened.thread.id)
+		const model = opened.model ?? requestedModel
 		const session: AgentSession = {
 			status: "ready",
 			provider: "codex",
+			model,
 			activeTurnId: null,
 			lastError: null,
 			updatedAt: nowIso()
@@ -150,7 +155,7 @@ export class CodexAdapter implements ProviderAdapter {
 			appThreadId: input.threadId,
 			providerThreadId,
 			cwd: opened.cwd ?? input.cwd,
-			model: opened.model ?? input.model ?? DEFAULT_MODEL,
+			model,
 			runtimeMode: input.runtimeMode,
 			session
 		})
@@ -159,7 +164,7 @@ export class CodexAdapter implements ProviderAdapter {
 			type: "session.state.changed",
 			threadId: input.threadId,
 			createdAt: session.updatedAt,
-			payload: { status: "ready", reason: "Codex session ready." }
+			payload: { status: "ready", reason: "Codex session ready.", model }
 		})
 
 		return session
@@ -170,18 +175,22 @@ export class CodexAdapter implements ProviderAdapter {
 		if (!thread) throw new Error(`Codex session not started for thread ${input.threadId}`)
 
 		const config = runtimeModeToThreadConfig(thread.runtimeMode)
+		const requestedModel = thread.model ?? input.model ?? DEFAULT_MODEL
 		const response = (await this.rpc.request("turn/start", {
 			threadId: thread.providerThreadId,
 			input: [{ type: "text", text: input.prompt }],
 			approvalPolicy: config.approvalPolicy,
 			sandboxPolicy: config.sandboxPolicy,
-			model: input.model ?? thread.model ?? DEFAULT_MODEL
+			model: requestedModel
 		})) as CodexTurnStartResponse
 
 		const turnId = String(response.turn.id)
+		const model = response.turn.model ?? response.model ?? thread.model ?? requestedModel
+		thread.model = model
 		this.setSession(input.threadId, {
 			...thread.session,
 			status: "running",
+			model,
 			activeTurnId: turnId,
 			updatedAt: nowIso()
 		})
@@ -201,6 +210,7 @@ export class CodexAdapter implements ProviderAdapter {
 		this.setSession(threadId, {
 			...thread.session,
 			status: "stopped",
+			model: thread.model,
 			activeTurnId: null,
 			updatedAt: nowIso()
 		})
@@ -309,7 +319,11 @@ export class CodexAdapter implements ProviderAdapter {
 			type: "session.state.changed",
 			threadId,
 			createdAt: session.updatedAt,
-			payload: { status: session.status, reason: session.lastError ?? undefined }
+			payload: {
+				status: session.status,
+				reason: session.lastError ?? undefined,
+				model: session.model
+			}
 		})
 	}
 
