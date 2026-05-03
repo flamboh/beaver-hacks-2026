@@ -4,6 +4,7 @@ import ControlPanel from "@renderer/components/_Workbench/_ControlPanel/main/Con
 import Review from "@renderer/components/_Workbench/_Review/main/Review"
 import Agents from "@renderer/components/_Workbench/_Agents/main/Agents"
 import Settings from "@renderer/components/_Workbench/_Settings/main/Settings"
+import { useSessionData } from "@renderer/hooks/useSessionData"
 import { WorkbenchTab } from "@renderer/types/models"
 import { useState } from "react"
 import { useParams } from "react-router-dom"
@@ -12,6 +13,7 @@ const WORKBENCH_TABS: WorkbenchTab[] = ["control-panel", "gallery", "review", "a
 
 export default function Workbench() {
 	const { tab } = useParams()
+	const { project } = useSessionData()
 	const initialPage = WORKBENCH_TABS.includes(tab as WorkbenchTab)
 		? (tab as WorkbenchTab)
 		: "control-panel"
@@ -42,7 +44,7 @@ export default function Workbench() {
 			<div className="flex flex-1 overflow-hidden">
 				<SideBar
 					currentPage={currentPage}
-					projectName="Test Project"
+					projectName={project?.name ?? "No project selected"}
 					setCurrentPage={setCurrentPage}
 					open={sidebarOpen}
 				/>

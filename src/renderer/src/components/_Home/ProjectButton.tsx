@@ -1,6 +1,7 @@
 type ProjectButtonProps = {
 	name: string
 	accessed: Date | string | number
+	onClick?: () => void
 }
 
 const referenceTime = Date.now()
@@ -53,10 +54,11 @@ function formatAccessedDate(accessed: Date | string | number) {
 	return `${years} ${years === 1 ? "year" : "years"} ago`
 }
 
-export default function ProjectButton({ name, accessed }: ProjectButtonProps) {
+export default function ProjectButton({ name, accessed, onClick }: ProjectButtonProps) {
 	return (
 		<button
 			type="button"
+			onClick={onClick}
 			className="flex min-h-48 w-full cursor-pointer flex-col justify-between border
       border-neutral-700/50 bg-neutral-800/50 p-4 text-left text-neutral-50
       transition duration-300 hover:border-neutral-700 hover:bg-neutral-800/65"

@@ -8,7 +8,7 @@ export type ProjectRow = {
 	accessed: string
 }
 
-export type AgentRow = {
+export type Agent = {
 	id: string
 	name: string
 	project_id: string
