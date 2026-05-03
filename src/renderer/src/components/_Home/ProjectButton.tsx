@@ -63,9 +63,7 @@ export default function ProjectButton({ name, accessed, onClick }: ProjectButton
       border-neutral-700/50 bg-neutral-800/50 p-4 text-left text-neutral-50
       transition duration-300 hover:border-neutral-700 hover:bg-neutral-800/65"
 		>
-			{/* Black Bbg */}
 			<div className="flex min-h-24 items-center justify-center bg-neutral-950">
-				{/* Folder Icon */}
 				<div className="relative h-6 w-9 rounded-sm bg-slate-600">
 					<div className="absolute -top-1 left-0 h-3 w-5 rounded-t-sm bg-slate-600" />
 				</div>

@@ -5,6 +5,7 @@ import type { CreateProjectInput, ProjectIdInput, UpdateProjectInput } from "./c
 export function registerDatabaseIpc(database: DatabaseService): void {
 	ipcMain.handle("db:get-info", () => database.getInfo())
 	ipcMain.handle("project:list", () => database.listProjects())
+	ipcMain.handle("project:get", (_event, input: ProjectIdInput) => database.getProject(input))
 	ipcMain.handle("project:create", (_event, input: CreateProjectInput) =>
 		database.createProject(input)
 	)

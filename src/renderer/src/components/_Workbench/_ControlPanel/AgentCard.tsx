@@ -26,14 +26,20 @@ const priorityStyles: Record<(typeof PRIORITY_LEVELS)[number], string> = {
 	high: "bg-red-500/15     text-red-400     border-red-500/30"
 }
 
-export default function AgentCard() {
+interface AgentCardProps {
+	projectCwd: string
+}
+
+export default function AgentCard({ projectCwd }: AgentCardProps) {
 	const snapshot = useAgentSnapshot()
 	const activeThread = useMemo(
 		() =>
-			snapshot.threads.find((thread) => thread.id === snapshot.activeThreadId) ??
-			snapshot.threads.at(-1) ??
+			snapshot.threads.find(
+				(thread) => thread.id === snapshot.activeThreadId && thread.cwd === projectCwd
+			) ??
+			snapshot.threads.findLast((thread) => thread.cwd === projectCwd) ??
 			null,
-		[snapshot]
+		[projectCwd, snapshot]
 	)
 	const sessionStatus = activeThread?.session?.status ?? "idle"
 	const isRunning = sessionStatus === "starting" || sessionStatus === "running"
@@ -53,7 +59,7 @@ export default function AgentCard() {
 					<span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-xs text-zinc-500">
 						{sessionStatus}
 					</span>
-					<GitCommitMenu cwd={activeThread?.cwd ?? null} />
+					<GitCommitMenu cwd={activeThread?.cwd ?? projectCwd} />
 					<button className="text-xs px-2.5 py-1 rounded-md border border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-500/60 transition-all duration-150">
 						Terminate
 					</button>
@@ -127,7 +133,7 @@ export default function AgentCard() {
 							<span className="ml-2 text-[10px] text-neutral-700 font-mono">chat</span>
 						</div>
 						<div className="min-h-0 flex-1">
-							<Chat thread={activeThread} isRunning={isRunning} />
+							<Chat thread={activeThread} isRunning={isRunning} cwd={projectCwd} />
 						</div>
 					</div>
 				</div>

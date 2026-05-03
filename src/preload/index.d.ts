@@ -12,13 +12,19 @@ import type {
 	ProjectRow,
 	UpdateProjectInput
 } from "../main/db/ipc"
-import type { ReviewDevServerLaunch } from "../main/devServer/ipc"
+import type {
+	LaunchProjectDevServerInput,
+	ProjectDevServerInput,
+	ProjectDevServerLaunch,
+	ProjectDevServerStatus
+} from "../main/devServer/ipc"
 import type {
 	GitCheckoutInput,
 	GitCommitAllInput,
 	GitCommitMessage,
 	GitCommitResult,
 	GitCreateBranchInput,
+	GitDiffTour,
 	GitPushInput,
 	GitPushResult,
 	GitStatusSnapshot,
@@ -39,6 +45,7 @@ interface BeaverApi {
 		checkout: (input: GitCheckoutInput) => Promise<GitStatusSnapshot>
 		createBranch: (input: GitCreateBranchInput) => Promise<GitStatusSnapshot>
 		generateCommitMessage: (cwd: string) => Promise<GitCommitMessage>
+		generateDiffTour: (cwd: string) => Promise<GitDiffTour>
 		commitAll: (input: GitCommitAllInput) => Promise<GitCommitResult>
 		push: (input: GitPushInput) => Promise<GitPushResult>
 	}
@@ -46,13 +53,16 @@ interface BeaverApi {
 		getInfo: () => Promise<DatabaseInfo>
 	}
 	devServer: {
-		launchReview: () => Promise<ReviewDevServerLaunch>
+		launchProject: (input: LaunchProjectDevServerInput) => Promise<ProjectDevServerLaunch>
+		getProjectStatus: (input: ProjectDevServerInput) => Promise<ProjectDevServerStatus>
+		stopProject: (input: ProjectDevServerInput) => Promise<ProjectDevServerStatus>
 	}
 	dialog: {
 		selectDirectory: () => Promise<string | null>
 	}
 	projects: {
 		list: () => Promise<ProjectRow[]>
+		get: (input: ProjectIdInput) => Promise<ProjectRow>
 		create: (input: CreateProjectInput) => Promise<ProjectRow>
 		update: (input: UpdateProjectInput) => Promise<ProjectRow>
 		touch: (input: ProjectIdInput) => Promise<ProjectRow>

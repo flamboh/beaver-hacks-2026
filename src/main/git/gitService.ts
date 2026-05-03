@@ -5,6 +5,7 @@ import type {
 	GitCommitMessage,
 	GitCommitResult,
 	GitCreateBranchInput,
+	GitDiffTour,
 	GitFileChange,
 	GitPushInput,
 	GitPushResult,
@@ -21,6 +22,7 @@ const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_BUFFER = 2 * 1024 * 1024
 const COMMIT_CONTEXT_MAX_BUFFER = 256 * 1024
 const MINI_MODEL = "gpt-5.4-mini"
+const TOUR_MODEL = "gpt-5.5"
 
 function nowIso(): string {
 	return new Date().toISOString()
@@ -344,6 +346,37 @@ export class GitService {
 		].join("\n")
 	}
 
+	async buildDiffTourPrompt(cwd: string): Promise<string> {
+		const [status, stat, diff] = await Promise.all([
+			this.status(cwd),
+			runGit(cwd, ["diff", "--stat", "HEAD", "--"], COMMIT_CONTEXT_MAX_BUFFER).catch(() => ({
+				stdout: "",
+				stderr: ""
+			})),
+			this.workingTreeDiff(cwd)
+		])
+		const changedFiles = status.files.map((file) => `${file.status}\t${file.path}`).join("\n")
+		return [
+			"Create a comprehensive high-level tour of these working tree changes.",
+			"Audience: a maintainer reviewing the branch before merge.",
+			"Cover important implementation details, changed behavior, code-base impact, risk areas, and likely follow-up checks.",
+			"Do not write a line-by-line review. Do not invent details absent from the diff.",
+			"Use concise markdown with these sections: Overview, Important Changes, Codebase Impact, Review Focus.",
+			"",
+			`Branch: ${status.branch ?? "detached"}`,
+			`Files:\n${changedFiles || "(none)"}`,
+			`Stat:\n${stat.stdout.trim() || "(none)"}`,
+			`Patch:\n${diff.patch.slice(0, 60_000).trim() || "(none)"}`
+		].join("\n")
+	}
+
+	parseDiffTour(raw: string): GitDiffTour {
+		return {
+			tour: raw.trim(),
+			updatedAt: nowIso()
+		}
+	}
+
 	parseCommitMessage(raw: string): GitCommitMessage {
 		const match = /\{[\s\S]*\}/.exec(raw.trim())
 		if (!match) throw new Error("Mini model did not return JSON.")
@@ -355,4 +388,4 @@ export class GitService {
 	}
 }
 
-export { MINI_MODEL }
+export { MINI_MODEL, TOUR_MODEL }

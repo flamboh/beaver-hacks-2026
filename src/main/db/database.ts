@@ -176,6 +176,19 @@ export class DatabaseService {
 		await this.run(`DELETE FROM projects WHERE id = ?`, [input.id])
 	}
 
+	async getProject(input: ProjectIdInput): Promise<ProjectRow> {
+		const row = await this.get<ProjectTableRow>(
+			`
+				SELECT id, name, path, created_at, accessed
+				FROM projects
+				WHERE id = ?
+			`,
+			[input.id]
+		)
+		if (!row) throw new Error("Project not found.")
+		return toProjectRow(row)
+	}
+
 	async close(): Promise<void> {
 		await new Promise<void>((resolve, reject) => {
 			this.db.close((error) => {
@@ -186,18 +199,6 @@ export class DatabaseService {
 				resolve()
 			})
 		})
-	}
-
-	private async getProject(input: ProjectIdInput): Promise<ProjectRow> {
-		const row = await this.get<ProjectTableRow>(
-			`
-				SELECT id, name, path, created_at, accessed
-				FROM projects
-				WHERE id = ?
-			`,
-			[input.id]
-		)
-		return toProjectRow(row)
 	}
 
 	private async exec(sql: string): Promise<void> {

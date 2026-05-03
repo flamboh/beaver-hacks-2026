@@ -1,5 +1,3 @@
-import WorkbenchButton from "./WorkbenchButton"
-
 export default function Header() {
 	return (
 		<header
@@ -10,7 +8,7 @@ export default function Header() {
 
 			<div className="absolute left-1/2 -translate-x-1/2 text-base font-semibold">Gallery</div>
 
-			<WorkbenchButton />
+			<div className="w-20" />
 		</header>
 	)
 }
