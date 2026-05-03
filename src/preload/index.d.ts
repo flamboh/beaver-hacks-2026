@@ -46,7 +46,15 @@ import type {
 	GitWorkingTreeDiffSnapshot
 } from "../main/git/ipc"
 import type { SaveScopeFileInput, SaveScopeFileResult } from "../main/scopeFiles/ipc"
-import type { TerminalRunInput, TerminalRunResult } from "../main/terminal/ipc"
+import type {
+	TerminalCreateInput,
+	TerminalCreateResult,
+	TerminalDisposeInput,
+	TerminalResizeInput,
+	TerminalRunInput,
+	TerminalRunResult,
+	TerminalWriteInput
+} from "../main/terminal/ipc"
 
 interface BeaverApi {
 	agent: {
@@ -116,6 +124,17 @@ interface BeaverApi {
 	}
 	terminal: {
 		run: (input: TerminalRunInput) => Promise<TerminalRunResult>
+		session: {
+			create: (input: TerminalCreateInput) => Promise<TerminalCreateResult>
+			write: (input: TerminalWriteInput) => void
+			resize: (input: TerminalResizeInput) => void
+			dispose: (input: TerminalDisposeInput) => void
+			onData: (sessionId: string, listener: (data: string) => void) => () => void
+			onExit: (
+				sessionId: string,
+				listener: (info: { exitCode: number; signal: number | null }) => void
+			) => () => void
+		}
 	}
 }
 

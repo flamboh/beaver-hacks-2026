@@ -95,14 +95,14 @@ export function GitCommitMenu({ workspaceId }: GitCommitMenuProps): JSX.Element 
 								<input
 									value={subject}
 									onChange={(event) => setSubject(event.currentTarget.value)}
-									placeholder="leave empty for auto-generated message"
+									placeholder="Leave empty for auto-generated message"
 									className="h-9 rounded-md border border-white/10 bg-[#0f0f12] px-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-white/20"
 								/>
 								<textarea
 									value={body}
 									onChange={(event) => setBody(event.currentTarget.value)}
 									rows={2}
-									placeholder="optional commit body"
+									placeholder="Commit Body (optional)"
 									className="min-h-14 resize-none rounded-md border border-white/10 bg-[#0f0f12] px-2 py-1.5 text-xs leading-5 text-zinc-300 outline-none placeholder:text-zinc-600 focus:border-white/20"
 								/>
 								<div className="grid grid-cols-2 gap-2">
@@ -110,7 +110,7 @@ export function GitCommitMenu({ workspaceId }: GitCommitMenuProps): JSX.Element 
 										type="button"
 										disabled={busy !== null || !hasChanges}
 										onClick={commit}
-										className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-zinc-100 px-2.5 text-xs font-medium text-zinc-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+										className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-zinc-100 px-2.5 text-xs font-medium text-zinc-950 transition hover:bg-blue-200 disabled:cursor-not-allowed disabled:opacity-40"
 									>
 										<GitCommitHorizontal className="size-3.5" />
 										Commit

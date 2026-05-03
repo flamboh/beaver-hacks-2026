@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow } from "electron"
+import { app, shell, BrowserWindow, type WebContents } from "electron"
 import { join } from "path"
 import { electronApp, optimizer, is } from "@electron-toolkit/utils"
 import icon from "../../resources/icon.png?asset"
@@ -15,12 +15,25 @@ import { registerGitIpc } from "./git/ipc"
 import { registerScopeFileIpc } from "./scopeFiles/ipc"
 import { registerTerminalIpc } from "./terminal/ipc"
 import { TerminalService } from "./terminal/terminalService"
+import { TerminalSessionService } from "./terminal/terminalSessionService"
 
 const agentEngine = new AgentEngine({ cwd: process.cwd() })
 const gitService = new GitService()
 const devServer = new DevServerService()
 const terminalService = new TerminalService()
+const terminalSessionService = new TerminalSessionService()
 let database: DatabaseService | null = null
+const CHROMIUM_USER_AGENT =
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+
+function configureBrowserWebview(contents: WebContents): void {
+	contents.setUserAgent(CHROMIUM_USER_AGENT)
+	contents.session.setUserAgent(CHROMIUM_USER_AGENT)
+	contents.setWindowOpenHandler(({ url }) => {
+		void contents.loadURL(url, { userAgent: CHROMIUM_USER_AGENT })
+		return { action: "deny" }
+	})
+}
 
 function createWindow(): void {
 	// Create the browser window.
@@ -44,6 +57,14 @@ function createWindow(): void {
 	mainWindow.webContents.setWindowOpenHandler((details) => {
 		shell.openExternal(details.url)
 		return { action: "deny" }
+	})
+	mainWindow.webContents.on("will-attach-webview", (_event, _webPreferences, params) => {
+		params.partition = "persist:control-panel-browser"
+		params.allowpopups = "true"
+		params.useragent = CHROMIUM_USER_AGENT
+	})
+	mainWindow.webContents.on("did-attach-webview", (_event, contents) => {
+		configureBrowserWebview(contents)
 	})
 
 	// HMR for renderer base on electron-vite cli.
@@ -79,7 +100,7 @@ app.whenReady().then(async () => {
 	registerDialogIpc()
 	registerScopeFileIpc()
 	registerGitIpc(gitService, agentEngine, database)
-	registerTerminalIpc(terminalService)
+	registerTerminalIpc(terminalService, terminalSessionService)
 
 	createWindow()
 
@@ -101,6 +122,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
 	devServer.stop()
+	terminalSessionService.disposeAll()
 	void database?.close()
 })
 

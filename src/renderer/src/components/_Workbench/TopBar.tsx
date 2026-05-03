@@ -3,7 +3,7 @@ import { AlertTriangle, GitBranch, GitFork, PanelLeft, Tally1, Trash2 } from "lu
 import { checkoutGitBranch, createGitBranch, useGitStatus } from "@renderer/agentStore"
 import logoUrl from "@renderer/assets/logo.png"
 import { GitCommitMenu } from "../GitCommitMenu"
-import type { WorkspaceRow } from "../../../../main/db/ipc"
+import type { WorkspaceRow } from "src/main/db/contracts"
 import { useNavigate } from "react-router-dom"
 import type { WorkbenchTab } from "@renderer/types/models"
 

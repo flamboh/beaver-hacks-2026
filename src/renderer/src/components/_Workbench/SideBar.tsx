@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { ChevronRight } from "lucide-react"
 import type { ProjectRow } from "@renderer/types/models"
-import type { WorkspaceRow } from "../../../../main/db/ipc"
+import type { WorkspaceRow } from "src/main/db/contracts"
 
 interface Props {
 	activeProjectId: string | null
@@ -51,11 +51,11 @@ export default function SideBar({
 
 	return (
 		<div
-			className="flex h-full shrink-0 flex-col overflow-hidden border-r border-white/5 bg-neutral-900 transition-[width] duration-200 ease-in-out"
-			style={{ width: open ? 220 : 0 }}
+			className="h-full bg-neutral-900 border-r border-white/5 flex flex-col shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out"
+			style={{ width: open ? 250 : 0 }}
 		>
-			<div className="flex min-h-0 w-[220px] flex-1 flex-col">
-				<div className="flex h-[60px] items-center border-b border-white/5 px-3">
+			<div className="w-[250px] flex flex-col flex-1">
+				<div className="flex items-center gap-1 px-1.5 border-b border-white/5 h-[60px]">
 					<div
 						className="min-w-0 flex-1 p-1 transition-opacity duration-150 ease-in-out"
 						style={{ opacity: open ? 1 : 0 }}

@@ -9,6 +9,8 @@ declare global {
 				src?: string
 				allowpopups?: string
 				partition?: string
+				useragent?: string
+				webpreferences?: string
 			}
 		}
 	}

@@ -1,17 +1,17 @@
 import AgentCard, { type CreateSide } from "./AgentCard"
-import type { AgentRow } from "@renderer/types/models"
 import { type CanvasLayout, cardPos } from "./controlPanelLayout"
-import type { StartAgentInput } from "./useControlPanelAgents"
+import ToolCard from "./ToolCard"
+import type { ControlPanelCard, StartCardInput } from "./useControlPanelAgents"
 
 interface ControlPanelCanvasProps {
-	agents: AgentRow[]
+	cards: ControlPanelCard[]
 	canvas: CanvasLayout
 	draggedDuringPan: { current: boolean }
 	focusedIdx: number
 	offset: { x: number; y: number }
-	deletingAgentId: string | null
-	onCreateAgent: (input: StartAgentInput) => Promise<void>
-	onDeleteAgent: (id: string) => Promise<void>
+	deletingCardId: string | null
+	onCreateCard: (input: StartCardInput) => Promise<void>
+	onDeleteCard: (id: string) => Promise<void>
 	onFocus: (idx: number) => void
 	onSnap: (idx: number) => void
 	smoothPan: boolean
@@ -21,14 +21,14 @@ interface ControlPanelCanvasProps {
 }
 
 export function ControlPanelCanvas({
-	agents,
+	cards,
 	canvas,
 	draggedDuringPan,
 	focusedIdx,
 	offset,
-	deletingAgentId,
-	onCreateAgent,
-	onDeleteAgent,
+	deletingCardId,
+	onCreateCard,
+	onDeleteCard,
 	onFocus,
 	onSnap,
 	smoothPan,
@@ -49,12 +49,13 @@ export function ControlPanelCanvas({
 			}}
 		>
 			<div className="pointer-events-none absolute inset-0 rounded-sm border border-white/10" />
-			{agents.map((agent, i) => {
-				const pos = cardPos(agent, canvas)
+			{cards.map((card, i) => {
+				const pos = cardPos(card, canvas)
 				const focused = focusedIdx === i
+				const sides = availableCreateSides(card, cards)
 				return (
 					<div
-						key={agent.id}
+						key={card.id}
 						className="absolute"
 						style={{
 							left: pos.x,
@@ -81,15 +82,26 @@ export function ControlPanelCanvas({
 								focused ? "ring-2 ring-white/20 ring-offset-4 ring-offset-neutral-950" : ""
 							}`}
 						>
-							<AgentCard
-								agent={agent}
-								availableCreateSides={availableCreateSides(agent, agents)}
-								isDeleting={deletingAgentId === agent.id}
-								onCreateAgent={onCreateAgent}
-								onDeleteAgent={onDeleteAgent}
-								workspaceId={workspaceId}
-								workspacePath={workspacePath}
-							/>
+							{card.kind === "agent" ? (
+								<AgentCard
+									agent={card}
+									availableCreateSides={sides}
+									isDeleting={deletingCardId === card.id}
+									onCreateCard={onCreateCard}
+									onDeleteCard={onDeleteCard}
+									workspaceId={workspaceId}
+									workspacePath={workspacePath}
+								/>
+							) : (
+								<ToolCard
+									card={card}
+									availableCreateSides={sides}
+									isDeleting={deletingCardId === card.id}
+									onCreateCard={onCreateCard}
+									onDeleteCard={onDeleteCard}
+									workspacePath={workspacePath}
+								/>
+							)}
 						</div>
 					</div>
 				)
@@ -98,15 +110,15 @@ export function ControlPanelCanvas({
 	)
 }
 
-function availableCreateSides(agent: AgentRow, agents: AgentRow[]): CreateSide[] {
+function availableCreateSides(card: ControlPanelCard, cards: ControlPanelCard[]): CreateSide[] {
 	const sides: CreateSide[] = []
-	if (!hasAgentAt(agents, agent.layout_x - 1, agent.layout_y)) sides.push("left")
-	if (!hasAgentAt(agents, agent.layout_x + 1, agent.layout_y)) sides.push("right")
-	if (!hasAgentAt(agents, agent.layout_x, agent.layout_y - 1)) sides.push("top")
-	if (!hasAgentAt(agents, agent.layout_x, agent.layout_y + 1)) sides.push("bottom")
+	if (!hasCardAt(cards, card.layout_x - 1, card.layout_y)) sides.push("left")
+	if (!hasCardAt(cards, card.layout_x + 1, card.layout_y)) sides.push("right")
+	if (!hasCardAt(cards, card.layout_x, card.layout_y - 1)) sides.push("top")
+	if (!hasCardAt(cards, card.layout_x, card.layout_y + 1)) sides.push("bottom")
 	return sides
 }
 
-function hasAgentAt(agents: AgentRow[], x: number, y: number): boolean {
-	return agents.some((agent) => agent.layout_x === x && agent.layout_y === y)
+function hasCardAt(cards: ControlPanelCard[], x: number, y: number): boolean {
+	return cards.some((card) => card.layout_x === x && card.layout_y === y)
 }
