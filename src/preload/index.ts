@@ -10,6 +10,11 @@ import type {
 	StartTurnInput
 } from "../main/agent/ipc"
 import type {
+	ComposerFileSuggestion,
+	ComposerMentionSuggestion,
+	ComposerSearchFilesInput
+} from "../main/composer/ipc"
+import type {
 	AgentRow,
 	CreateAgentInput,
 	CreateProjectInput,
@@ -79,6 +84,12 @@ const api = {
 			return () => ipcRenderer.off("agent:snapshot", handler)
 		}
 	},
+	composer: {
+		searchFiles: (input: ComposerSearchFilesInput): Promise<ComposerFileSuggestion[]> =>
+			ipcRenderer.invoke("composer:search-files", input),
+		listMentions: (cwd: string): Promise<ComposerMentionSuggestion[]> =>
+			ipcRenderer.invoke("composer:list-mentions", cwd)
+	},
 	git: {
 		getStatus: (workspaceId: string): Promise<GitStatusSnapshot> =>
 			ipcRenderer.invoke("git:get-status", workspaceId),
@@ -138,6 +149,8 @@ const api = {
 			ipcRenderer.invoke("workspace:update", input),
 		activate: (input: WorkspaceIdInput): Promise<WorkspaceRow> =>
 			ipcRenderer.invoke("workspace:activate", input),
+		touchPrompted: (input: WorkspaceIdInput): Promise<WorkspaceRow> =>
+			ipcRenderer.invoke("workspace:touch-prompted", input),
 		delete: (input: WorkspaceIdInput): Promise<DeleteWorkspaceResult> =>
 			ipcRenderer.invoke("workspace:delete", input)
 	},

@@ -1,39 +1,52 @@
 import AgentCard, { type CreateSide } from "./AgentCard"
-import { type CanvasLayout, cardPos } from "./controlPanelLayout"
+import {
+	CARD_H,
+	CARD_W,
+	LANE_LABEL_GUTTER,
+	PADDING,
+	STEP_Y,
+	type CanvasLayout,
+	cardPos
+} from "./controlPanelLayout"
+import ControlPanelAgentLauncher from "./ControlPanelAgentLauncher"
 import ToolCard from "./ToolCard"
-import type { ControlPanelCard, StartCardInput } from "./useControlPanelAgents"
+import type { ControlPanelCard, StartCardInput, WorkspaceLane } from "./useControlPanelAgents"
 
 interface ControlPanelCanvasProps {
+	activeWorkspaceId: string
 	cards: ControlPanelCard[]
 	canvas: CanvasLayout
 	draggedDuringPan: { current: boolean }
 	focusedIdx: number
 	offset: { x: number; y: number }
 	deletingCardId: string | null
+	isCreatingCard: boolean
 	onCreateCard: (input: StartCardInput) => Promise<void>
+	onCreateWorkspace: (sourceCardId: string, side: "top" | "bottom") => void
 	onDeleteCard: (id: string) => Promise<void>
 	onFocus: (idx: number) => void
 	onSnap: (idx: number) => void
 	smoothPan: boolean
-	workspaceId: string
-	workspacePath: string
+	workspaces: WorkspaceLane[]
 	zoom: number
 }
 
 export function ControlPanelCanvas({
+	activeWorkspaceId,
 	cards,
 	canvas,
 	draggedDuringPan,
 	focusedIdx,
 	offset,
 	deletingCardId,
+	isCreatingCard,
 	onCreateCard,
+	onCreateWorkspace,
 	onDeleteCard,
 	onFocus,
 	onSnap,
 	smoothPan,
-	workspaceId,
-	workspacePath,
+	workspaces,
 	zoom
 }: ControlPanelCanvasProps) {
 	return (
@@ -49,6 +62,40 @@ export function ControlPanelCanvas({
 			}}
 		>
 			<div className="pointer-events-none absolute inset-0 rounded-sm border border-white/10" />
+			{workspaces.map((workspace, index) => {
+				const y = PADDING + (index - canvas.minY) * STEP_Y
+				const active = workspace.id === activeWorkspaceId
+				const hasCards = cards.some((card) => card.workspace_id === workspace.id)
+				return (
+					<div
+						key={workspace.id}
+						className="pointer-events-none absolute left-0 right-0 border-t border-white/8"
+						style={{ top: y, height: CARD_H + LANE_LABEL_GUTTER }}
+					>
+						<span className="absolute top-3 left-8 max-w-96 truncate rounded bg-neutral-950 px-2 py-1 text-[11px] font-medium text-neutral-500">
+							<span className="text-neutral-400">{workspace.projectName}</span>
+							<span className="px-1 text-neutral-700">/</span>
+							{workspace.name}
+						</span>
+						{active && !hasCards ? (
+							<div
+								className="pointer-events-auto absolute"
+								style={{
+									left: PADDING + CARD_W / 2,
+									top: LANE_LABEL_GUTTER + CARD_H / 2,
+									transform: "translate(-50%, -50%)"
+								}}
+							>
+								<ControlPanelAgentLauncher
+									hasAgents={false}
+									isCreatingCard={isCreatingCard}
+									onCreateCard={onCreateCard}
+								/>
+							</div>
+						) : null}
+					</div>
+				)
+			})}
 			{cards.map((card, i) => {
 				const pos = cardPos(card, canvas)
 				const focused = focusedIdx === i
@@ -88,9 +135,11 @@ export function ControlPanelCanvas({
 									availableCreateSides={sides}
 									isDeleting={deletingCardId === card.id}
 									onCreateCard={onCreateCard}
+									onCreateWorkspace={onCreateWorkspace}
 									onDeleteCard={onDeleteCard}
-									workspaceId={workspaceId}
-									workspacePath={workspacePath}
+									workspaceId={card.workspace_id}
+									workspaceName={card.workspaceName}
+									workspacePath={card.workspacePath}
 								/>
 							) : (
 								<ToolCard
@@ -98,8 +147,9 @@ export function ControlPanelCanvas({
 									availableCreateSides={sides}
 									isDeleting={deletingCardId === card.id}
 									onCreateCard={onCreateCard}
+									onCreateWorkspace={onCreateWorkspace}
 									onDeleteCard={onDeleteCard}
-									workspacePath={workspacePath}
+									workspacePath={card.workspacePath}
 								/>
 							)}
 						</div>
@@ -114,8 +164,6 @@ function availableCreateSides(card: ControlPanelCard, cards: ControlPanelCard[])
 	const sides: CreateSide[] = []
 	if (!hasCardAt(cards, card.layout_x - 1, card.layout_y)) sides.push("left")
 	if (!hasCardAt(cards, card.layout_x + 1, card.layout_y)) sides.push("right")
-	if (!hasCardAt(cards, card.layout_x, card.layout_y - 1)) sides.push("top")
-	if (!hasCardAt(cards, card.layout_x, card.layout_y + 1)) sides.push("bottom")
 	return sides
 }
 

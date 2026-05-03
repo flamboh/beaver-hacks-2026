@@ -19,7 +19,7 @@ interface CreateCardOptionsPopoverProps {
 	onCreateCard: (input: StartCardInput) => Promise<void>
 	showAgents?: boolean
 	side: CreateSide
-	sourceCardId: string
+	sourceCardId?: string
 	style?: CSSProperties
 }
 
@@ -76,8 +76,8 @@ export default function CreateCardOptionsPopover({
 								event.stopPropagation()
 								void onCreateCard({
 									...option,
-									sourceCardId,
-									side
+									side,
+									...(sourceCardId ? { sourceCardId } : {})
 								}).then(onClose)
 							}}
 							className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-white/8 bg-neutral-950 text-neutral-400 transition-colors duration-150 hover:border-white/15 hover:bg-white/8 hover:text-white"
@@ -99,8 +99,8 @@ export default function CreateCardOptionsPopover({
 							event.stopPropagation()
 							void onCreateCard({
 								...option,
-								sourceCardId,
-								side
+								side,
+								...(sourceCardId ? { sourceCardId } : {})
 							}).then(onClose)
 						}}
 						className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-white/8 bg-neutral-950 text-neutral-400 transition-colors duration-150 hover:border-white/15 hover:bg-white/8 hover:text-white"

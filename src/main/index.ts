@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils"
 import icon from "../../resources/icon.png?asset"
 import { AgentEngine } from "./agent/agentEngine"
 import { registerAgentIpc } from "./agent/ipc"
+import { registerComposerIpc } from "./composer/ipc"
 import { DatabaseService } from "./db/database"
 import { registerDatabaseIpc } from "./db/ipc"
 import { TaskService } from "./db/tasks"
@@ -95,6 +96,7 @@ app.whenReady().then(async () => {
 	agentEngine.setPlanSink(new TaskService(database.db))
 
 	registerAgentIpc(agentEngine)
+	registerComposerIpc()
 	registerDatabaseIpc(database)
 	registerDevServerIpc(devServer)
 	registerDialogIpc()

@@ -34,6 +34,10 @@ export interface WorkspaceIdInput {
 	id: string
 }
 
+export interface WorkspacePromptInput {
+	id: string
+}
+
 export interface DeleteWorkspaceResult {
 	activeWorkspace: WorkspaceRow
 	deletedWorkspaceId: string
@@ -69,6 +73,7 @@ export interface WorkspaceRow {
 	active: boolean
 	createdAt: string
 	accessed: string
+	lastPromptedAt: string
 }
 
 export type WorkspaceCreationMode = "existing-directory" | "new-directory" | "git-worktree"

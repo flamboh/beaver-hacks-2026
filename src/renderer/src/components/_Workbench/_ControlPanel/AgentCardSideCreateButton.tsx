@@ -8,6 +8,7 @@ export default function AgentCardSideCreateButton({
 	active,
 	onClose,
 	onCreateCard,
+	onCreateWorkspace,
 	onOpen,
 	side,
 	sourceCardId
@@ -15,6 +16,7 @@ export default function AgentCardSideCreateButton({
 	active: boolean
 	onClose: () => void
 	onCreateCard: (input: StartCardInput) => Promise<void>
+	onCreateWorkspace?: (sourceCardId: string, side: "top" | "bottom") => void
 	onOpen: () => void
 	side: CreateSide
 	sourceCardId: string
@@ -33,6 +35,10 @@ export default function AgentCardSideCreateButton({
 				onClick={(event) => {
 					event.preventDefault()
 					event.stopPropagation()
+					if ((side === "top" || side === "bottom") && onCreateWorkspace) {
+						onCreateWorkspace(sourceCardId, side)
+						return
+					}
 					if (active) {
 						onClose()
 						return
@@ -40,8 +46,8 @@ export default function AgentCardSideCreateButton({
 					onOpen()
 				}}
 				className="flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-neutral-400 opacity-35 transition-all duration-150 hover:scale-110 hover:text-white hover:opacity-100 group-hover/card:opacity-70"
-				aria-label="Create card"
-				title="Create card"
+				aria-label={side === "top" || side === "bottom" ? "Create workspace" : "Create card"}
+				title={side === "top" || side === "bottom" ? "Create workspace" : "Create card"}
 			>
 				<Plus size={17} />
 			</button>

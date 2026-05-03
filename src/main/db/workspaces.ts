@@ -40,10 +40,10 @@ export class WorkspaceService {
 	async list(input: ProjectWorkspaceInput): Promise<WorkspaceRow[]> {
 		const rows = await this.all<WorkspaceTableRow>(
 			`
-				SELECT id, project_id, name, path, git_root, active, created_at, accessed
+				SELECT id, project_id, name, path, git_root, active, created_at, accessed, last_prompted_at
 				FROM workspaces
 				WHERE project_id = ?
-				ORDER BY active DESC, accessed DESC
+				ORDER BY last_prompted_at DESC, created_at ASC
 			`,
 			[input.projectId]
 		)
@@ -53,7 +53,7 @@ export class WorkspaceService {
 	async get(input: WorkspaceIdInput): Promise<WorkspaceRow> {
 		const row = await this.getRow<WorkspaceTableRow>(
 			`
-				SELECT id, project_id, name, path, git_root, active, created_at, accessed
+				SELECT id, project_id, name, path, git_root, active, created_at, accessed, last_prompted_at
 				FROM workspaces
 				WHERE id = ?
 			`,
@@ -64,10 +64,20 @@ export class WorkspaceService {
 	}
 
 	async getActive(input: ProjectWorkspaceInput): Promise<WorkspaceRow> {
-		const rows = await this.list(input)
-		const workspace = rows[0]
-		if (!workspace) throw new Error("Workspace not found.")
-		return workspace
+		const row = await this.getRow<WorkspaceTableRow>(
+			`
+				SELECT id, project_id, name, path, git_root, active, created_at, accessed, last_prompted_at
+				FROM workspaces
+				WHERE project_id = ? AND active = 1
+			`,
+			[input.projectId]
+		)
+		if (!row) {
+			const [workspace] = await this.list(input)
+			if (!workspace) throw new Error("Workspace not found.")
+			return workspace
+		}
+		return toWorkspaceRow(row)
 	}
 
 	async create(input: CreateWorkspaceInput): Promise<WorkspaceRow> {
@@ -104,14 +114,15 @@ export class WorkspaceService {
 			gitRoot,
 			active: existing.length === 0,
 			createdAt: timestamp,
-			accessed: timestamp
+			accessed: timestamp,
+			lastPromptedAt: timestamp
 		}
 
 		try {
 			await this.run(
 				`
-					INSERT INTO workspaces (id, project_id, name, path, git_root, active, created_at, accessed)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+					INSERT INTO workspaces (id, project_id, name, path, git_root, active, created_at, accessed, last_prompted_at)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 				`,
 				[
 					workspace.id,
@@ -121,7 +132,8 @@ export class WorkspaceService {
 					workspace.gitRoot,
 					workspace.active ? 1 : 0,
 					workspace.createdAt,
-					workspace.accessed
+					workspace.accessed,
+					workspace.lastPromptedAt
 				]
 			)
 		} catch (error) {
@@ -148,6 +160,12 @@ export class WorkspaceService {
 			`,
 			[name, path, gitRoot, input.id]
 		)
+		return this.get(input)
+	}
+
+	async touchPrompted(input: WorkspaceIdInput): Promise<WorkspaceRow> {
+		const timestamp = nowIso()
+		await this.run(`UPDATE workspaces SET last_prompted_at = ? WHERE id = ?`, [timestamp, input.id])
 		return this.get(input)
 	}
 
@@ -181,7 +199,7 @@ export class WorkspaceService {
 			if (existing.length > 0) continue
 			await this.create({
 				projectId: project.id,
-				name: "Source",
+				name: slugify(project.name || basename(project.path)),
 				path: project.path
 			})
 		}

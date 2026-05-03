@@ -45,6 +45,9 @@ export function registerDatabaseIpc(database: DatabaseService): void {
 	ipcMain.handle("workspace:activate", (_event, input: WorkspaceIdInput) =>
 		database.activateWorkspace(input)
 	)
+	ipcMain.handle("workspace:touch-prompted", (_event, input: WorkspaceIdInput) =>
+		database.touchWorkspacePrompted(input)
+	)
 	ipcMain.handle("workspace:delete", (_event, input: WorkspaceIdInput) =>
 		database.deleteWorkspace(input)
 	)

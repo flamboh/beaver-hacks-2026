@@ -4,10 +4,12 @@ import ControlPanel from "@renderer/components/_Workbench/_ControlPanel/main/Con
 import Review from "@renderer/components/_Workbench/_Review/main/Review"
 import Agents from "@renderer/components/_Workbench/_Agents/main/Agents"
 import Settings from "@renderer/components/_Workbench/_Settings/main/Settings"
+import NewProjectModal from "@renderer/components/_Home/NewProjectModal"
+import type { WorkspaceLane } from "@renderer/components/_Workbench/_ControlPanel/useControlPanelAgents"
 import { useAgentSnapshot } from "@renderer/agentStore"
 import { useSessionData } from "@renderer/hooks/useSessionData"
 import type { ProjectRow, WorkbenchTab } from "@renderer/types/models"
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import type { WorkspaceRow } from "../../../main/db/ipc"
@@ -20,6 +22,7 @@ export default function Workbench() {
 	const queryClient = useQueryClient()
 	const snapshot = useAgentSnapshot()
 	const { project: sessionProject, setProject } = useSessionData()
+	const [newProjectOpen, setNewProjectOpen] = useState(false)
 	const initialPage = WORKBENCH_TABS.includes(tab as WorkbenchTab)
 		? (tab as WorkbenchTab)
 		: "control-panel"
@@ -27,11 +30,26 @@ export default function Workbench() {
 	const [sidebarOpen, setSidebarOpen] = useState(true)
 	const projectQuery = useQuery({
 		queryKey: ["project", projectId],
-		queryFn: () => window.api.projects.get({ id: projectId ?? "" })
+		queryFn: () => window.api.projects.get({ id: projectId ?? "" }),
+		enabled: Boolean(projectId)
 	})
 	const projectsQuery = useQuery({
 		queryKey: ["projects"],
 		queryFn: () => window.api.projects.list()
+	})
+	const createProjectMutation = useMutation({
+		mutationFn: (input: { name: string; path: string }) => window.api.projects.create(input),
+		onSuccess: async (nextProject) => {
+			await queryClient.invalidateQueries({ queryKey: ["projects"] })
+			setNewProjectOpen(false)
+			setProject({
+				id: nextProject.id,
+				name: nextProject.name,
+				path: nextProject.path
+			})
+			void window.api.projects.touch({ id: nextProject.id })
+			navigate(`/project/${encodeURIComponent(nextProject.id)}/workbench/${currentPage}`)
+		}
 	})
 	const project = projectQuery.data ?? (sessionProject?.id === projectId ? sessionProject : null)
 	const projects = projectsQuery.data ?? []
@@ -51,6 +69,21 @@ export default function Workbench() {
 	})
 	const workspaces = workspacesQuery.data ?? []
 	const activeWorkspace = workspaces.find((workspace) => workspace.active) ?? workspaces[0] ?? null
+	const stableProjects = [...projects].sort((a, b) => {
+		const createdOrder = a.createdAt.localeCompare(b.createdAt)
+		if (createdOrder !== 0) return createdOrder
+		return a.name.localeCompare(b.name)
+	})
+	const allWorkspaces: WorkspaceLane[] = stableProjects.flatMap((project) => {
+		const projectWorkspaces = workspacesByProjectId.get(project.id) ?? []
+		return [...projectWorkspaces]
+			.sort((a, b) => {
+				const createdOrder = a.createdAt.localeCompare(b.createdAt)
+				if (createdOrder !== 0) return createdOrder
+				return a.name.localeCompare(b.name)
+			})
+			.map((workspace) => ({ ...workspace, projectName: project.name }))
+	})
 	const activeAgentCount = activeWorkspace
 		? snapshot.threads.filter((thread) => {
 				const status = thread.session?.status
@@ -64,6 +97,13 @@ export default function Workbench() {
 		if (projectId) navigate(`/project/${encodeURIComponent(projectId)}/workbench/${nextTab}`)
 	}
 
+	const slugify = (value: string): string =>
+		value
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9._/-]+/g, "-")
+			.replace(/^[-/]+|[-/]+$/g, "") || "worktree"
+
 	const selectProject = (nextProject: ProjectRow) => {
 		setProject({
 			id: nextProject.id,
@@ -72,6 +112,58 @@ export default function Workbench() {
 		})
 		void window.api.projects.touch({ id: nextProject.id })
 		navigate(`/project/${encodeURIComponent(nextProject.id)}/workbench/${currentPage}`)
+	}
+
+	const nextWorkspaceSlug = (
+		nextProject: Pick<ProjectRow, "name" | "path">,
+		existingWorkspaces: WorkspaceRow[]
+	): string => {
+		const projectBase = slugify(
+			(nextProject.name || nextProject.path.split("/").at(-1)) ?? "project"
+		)
+		const base = `${projectBase}-work`
+		let candidate = `${base}-${existingWorkspaces.length + 1}`
+		let suffix = existingWorkspaces.length + 2
+		const names = new Set(existingWorkspaces.map((workspace) => workspace.name))
+		while (names.has(candidate)) {
+			candidate = `${base}-${suffix}`
+			suffix += 1
+		}
+		return candidate
+	}
+
+	const createWorkspace = (
+		nextProject: Pick<ProjectRow, "id" | "name" | "path">,
+		sourceWorkspaceId?: string
+	) => {
+		const workspaces = workspacesByProjectId.get(nextProject.id) ?? []
+		const sourceWorkspace =
+			workspaces.find((workspace) => workspace.id === sourceWorkspaceId) ??
+			workspaces.find((workspace) => workspace.active) ??
+			workspaces[0] ??
+			null
+		if (!sourceWorkspace) return
+
+		const slug = nextWorkspaceSlug(nextProject, workspaces)
+		void window.api.workspaces
+			.create({
+				projectId: nextProject.id,
+				name: slug,
+				branch: slug,
+				sourceWorkspaceId: sourceWorkspace.id
+			})
+			.then((workspace) => window.api.workspaces.activate({ id: workspace.id }))
+			.then(async () => {
+				setProject({
+					id: nextProject.id,
+					name: nextProject.name,
+					path: nextProject.path
+				})
+				await queryClient.invalidateQueries({ queryKey: ["workspaces", nextProject.id] })
+				navigate(`/project/${encodeURIComponent(nextProject.id)}/workbench/${currentPage}`)
+				if (nextProject.id === projectId) await workspacesQuery.refetch()
+			})
+			.catch(() => undefined)
 	}
 
 	const selectWorkspace = (nextProject: ProjectRow, workspace: WorkspaceRow) => {
@@ -90,11 +182,37 @@ export default function Workbench() {
 			.catch(() => undefined)
 	}
 
-	const setWorkspace = (workspaceId: string) => {
-		if (!workspaceId) return
+	const activateWorkspace = (workspaceId: string) => {
+		if (workspaceId === activeWorkspace?.id) return
+		const workspace = allWorkspaces.find((candidate) => candidate.id === workspaceId)
+		const nextProject = projects.find((candidate) => candidate.id === workspace?.projectId)
+		if (!workspace || !nextProject) return
+		setProject({
+			id: nextProject.id,
+			name: nextProject.name,
+			path: nextProject.path
+		})
+		void window.api.projects.touch({ id: nextProject.id })
 		void window.api.workspaces
-			.activate({ id: workspaceId })
-			.then(() => workspacesQuery.refetch())
+			.activate({ id: workspace.id })
+			.then(async () => {
+				await queryClient.invalidateQueries({ queryKey: ["workspaces", nextProject.id] })
+				navigate(`/project/${encodeURIComponent(nextProject.id)}/workbench/${currentPage}`)
+			})
+			.catch(() => undefined)
+	}
+
+	const deleteWorkspace = (workspace: WorkspaceRow) => {
+		const projectWorkspaces = workspacesByProjectId.get(workspace.projectId) ?? []
+		if (projectWorkspaces.length <= 1) return
+		const confirmed = window.confirm(`Delete workspace "${workspace.name}"?`)
+		if (!confirmed) return
+		void window.api.workspaces
+			.delete({ id: workspace.id })
+			.then(async () => {
+				await queryClient.invalidateQueries({ queryKey: ["workspaces", workspace.projectId] })
+				if (workspace.projectId === projectId) await workspacesQuery.refetch()
+			})
 			.catch(() => undefined)
 	}
 
@@ -104,7 +222,13 @@ export default function Workbench() {
 		switch (currentPage) {
 			case "control-panel":
 				return (
-					<ControlPanel workspaceId={activeWorkspace.id} workspacePath={activeWorkspace.path} />
+					<ControlPanel
+						activeWorkspaceId={activeWorkspace.id}
+						onWorkspaceActivate={activateWorkspace}
+						onWorkspaceCreate={(sourceWorkspaceId) => createWorkspace(project, sourceWorkspaceId)}
+						projectIds={stableProjects.map((project) => project.id)}
+						workspaces={allWorkspaces}
+					/>
 				)
 			case "review":
 				return (
@@ -131,20 +255,20 @@ export default function Workbench() {
 		<div className="flex h-screen flex-col bg-neutral-950 text-white">
 			<TopBar
 				activeAgentCount={activeAgentCount}
+				activeProject={project}
 				activeWorkspace={activeWorkspace}
 				currentPage={currentPage}
-				onWorkspacesChanged={() => workspacesQuery.refetch()}
 				onTabChange={setProjectPage}
 				onToggleSidebar={() => setSidebarOpen((open) => !open)}
-				onWorkspaceChange={setWorkspace}
-				projectId={project?.id ?? null}
-				workspaces={workspaces}
 			/>
 			<div className="flex flex-1 overflow-hidden">
 				<SideBar
 					activeProjectId={project?.id ?? null}
 					activeWorkspaceId={activeWorkspace?.id ?? null}
+					onNewProject={() => setNewProjectOpen(true)}
 					onProjectSelect={selectProject}
+					onWorkspaceCreate={createWorkspace}
+					onWorkspaceDelete={deleteWorkspace}
 					onWorkspaceSelect={selectWorkspace}
 					open={sidebarOpen}
 					projects={projects}
@@ -155,6 +279,10 @@ export default function Workbench() {
 					(!project || !activeWorkspace) ? (
 						<div className="flex h-full items-center justify-center text-xs text-neutral-500">
 							Loading project.
+						</div>
+					) : !projectId ? (
+						<div className="flex h-full items-center justify-center text-xs text-neutral-500">
+							Select a project or create one from the sidebar.
 						</div>
 					) : projectQuery.error || workspacesQuery.error ? (
 						<div className="flex h-full items-center justify-center px-4 text-center text-xs text-red-300/80">
@@ -169,6 +297,12 @@ export default function Workbench() {
 					)}
 				</main>
 			</div>
+			{newProjectOpen ? (
+				<NewProjectModal
+					onCancel={() => setNewProjectOpen(false)}
+					onCreate={(input) => createProjectMutation.mutateAsync(input)}
+				/>
+			) : null}
 		</div>
 	)
 }

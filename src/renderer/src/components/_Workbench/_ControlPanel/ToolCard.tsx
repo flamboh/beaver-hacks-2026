@@ -13,6 +13,7 @@ interface ToolCardProps {
 	availableCreateSides: CreateSide[]
 	isDeleting: boolean
 	onCreateCard: (input: StartCardInput) => Promise<void>
+	onCreateWorkspace: (sourceCardId: string, side: "top" | "bottom") => void
 	onDeleteCard: (id: string) => Promise<void>
 	workspacePath: string
 }
@@ -22,6 +23,7 @@ export default function ToolCard({
 	availableCreateSides,
 	isDeleting,
 	onCreateCard,
+	onCreateWorkspace,
 	onDeleteCard,
 	workspacePath
 }: ToolCardProps) {
@@ -90,6 +92,7 @@ export default function ToolCard({
 					active={activeCreateSide === side}
 					onClose={() => setActiveCreateSide(null)}
 					onCreateCard={onCreateCard}
+					onCreateWorkspace={onCreateWorkspace}
 					onOpen={() => setActiveCreateSide(side)}
 					side={side}
 					sourceCardId={card.id}

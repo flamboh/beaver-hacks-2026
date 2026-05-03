@@ -23,7 +23,7 @@ import { INITIALIZE_SCHEMA_SQL } from "./schema"
 import { assertDirectory, assertWorkspaceTemplate, canonicalPath } from "./workspaceUtils"
 import { WorkspaceService } from "./workspaces"
 
-const SCHEMA_VERSION = 5
+const SCHEMA_VERSION = 6
 
 function nowIso(): string {
 	return new Date().toISOString()
@@ -32,6 +32,15 @@ function nowIso(): string {
 function isUniqueProjectPathError(error: unknown): boolean {
 	if (!(error instanceof Error)) return false
 	return error.message.includes("SQLITE_CONSTRAINT") && error.message.includes("projects.path")
+}
+
+function slugifyProjectName(value: string): string {
+	const slug = value
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9._-]+/g, "-")
+		.replace(/^-+|-+$/g, "")
+	return slug || "main"
 }
 
 export class DatabaseService {
@@ -47,6 +56,7 @@ export class DatabaseService {
 
 	async initialize(): Promise<void> {
 		await this.exec(INITIALIZE_SCHEMA_SQL)
+		await this.ensureWorkspacePromptColumn()
 		await this.backfillProjectWorkspaces()
 
 		// Base tables — no FK constraints yet so migration can recreate agents safely
@@ -181,6 +191,8 @@ export class DatabaseService {
 
 		await this.ensureAgentLayoutColumns()
 		await this.ensureAgentThreadColumn()
+		await this.ensureWorkspacePromptColumn()
+		await this.ensureDefaultWorkspaceNames()
 
 		await this.run(
 			`INSERT INTO app_meta (key, value) VALUES ('schema_version', ?)
@@ -234,6 +246,39 @@ export class DatabaseService {
 		}
 	}
 
+	private async ensureWorkspacePromptColumn(): Promise<void> {
+		const columns = await this.all<{ name: string }>(`PRAGMA table_info(workspaces)`, [])
+		const columnNames = new Set(columns.map((column) => column.name))
+		if (!columnNames.has("last_prompted_at")) {
+			await this.run(
+				`ALTER TABLE workspaces ADD COLUMN last_prompted_at TEXT NOT NULL DEFAULT ''`,
+				[]
+			)
+		}
+		await this.run(
+			`UPDATE workspaces SET last_prompted_at = created_at WHERE last_prompted_at = ''`,
+			[]
+		)
+	}
+
+	private async ensureDefaultWorkspaceNames(): Promise<void> {
+		const rows = await this.all<{ id: string; project_name: string }>(
+			`
+				SELECT workspaces.id, projects.name AS project_name
+				FROM workspaces
+				INNER JOIN projects ON projects.id = workspaces.project_id
+				WHERE lower(workspaces.name) = 'source'
+			`,
+			[]
+		)
+		for (const row of rows) {
+			await this.run(`UPDATE workspaces SET name = ? WHERE id = ?`, [
+				slugifyProjectName(row.project_name),
+				row.id
+			])
+		}
+	}
+
 	async listProjects(): Promise<ProjectRow[]> {
 		const rows = await this.all<ProjectTableRow>(
 			`
@@ -277,7 +322,7 @@ export class DatabaseService {
 
 		await this.createWorkspace({
 			projectId: project.id,
-			name: "Source",
+			name: slugifyProjectName(project.name),
 			path: project.path
 		})
 
@@ -354,6 +399,10 @@ export class DatabaseService {
 
 	async activateWorkspace(input: WorkspaceIdInput): Promise<WorkspaceRow> {
 		return this.workspaces.activate(input)
+	}
+
+	async touchWorkspacePrompted(input: WorkspaceIdInput): Promise<WorkspaceRow> {
+		return this.workspaces.touchPrompted(input)
 	}
 
 	async deleteWorkspace(input: WorkspaceIdInput): Promise<DeleteWorkspaceResult> {

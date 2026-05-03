@@ -9,6 +9,11 @@ import type {
 	StartTurnInput
 } from "../main/agent/ipc"
 import type {
+	ComposerFileSuggestion,
+	ComposerMentionSuggestion,
+	ComposerSearchFilesInput
+} from "../main/composer/ipc"
+import type {
 	AgentRow,
 	CreateAgentInput,
 	CreateProjectInput,
@@ -66,6 +71,10 @@ interface BeaverApi {
 		spawnThread: (input: SpawnThreadInput) => Promise<AgentSnapshot>
 		onSnapshot: (listener: (snapshot: AgentSnapshot) => void) => () => void
 	}
+	composer: {
+		searchFiles: (input: ComposerSearchFilesInput) => Promise<ComposerFileSuggestion[]>
+		listMentions: (cwd: string) => Promise<ComposerMentionSuggestion[]>
+	}
 	git: {
 		getStatus: (workspaceId: string) => Promise<GitStatusSnapshot>
 		getWorkingTreeDiff: (workspaceId: string) => Promise<GitWorkingTreeDiffSnapshot>
@@ -106,6 +115,7 @@ interface BeaverApi {
 		create: (input: CreateWorkspaceInput) => Promise<WorkspaceRow>
 		update: (input: UpdateWorkspaceInput) => Promise<WorkspaceRow>
 		activate: (input: WorkspaceIdInput) => Promise<WorkspaceRow>
+		touchPrompted: (input: WorkspaceIdInput) => Promise<WorkspaceRow>
 		delete: (input: WorkspaceIdInput) => Promise<DeleteWorkspaceResult>
 	}
 	settings: {
