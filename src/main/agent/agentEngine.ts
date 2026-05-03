@@ -44,6 +44,7 @@ const AGENT_NAME_MODEL = "gpt-5.4-mini"
 
 interface AgentPlanSink {
 	syncPlan(agentId: string, turnId: string | null, plan: AgentPlan): Promise<void>
+	updatePlanProgress(agentId: string, plan: AgentPlan): Promise<void>
 }
 
 function nowIso(): string {
@@ -78,23 +79,37 @@ function promptForTurn(input: {
 	planningMode: boolean
 	securityMode: boolean
 	semgrepSummary: string | null
+	existingPlan: AgentPlan
 }): string {
-	if (!input.planningMode && !input.securityMode) return input.prompt
+	if (!input.planningMode && !input.securityMode && input.existingPlan.items.length === 0) {
+		return input.prompt
+	}
 
 	const lines: string[] = []
 	if (input.planningMode) {
 		const planningTool = planningToolForProvider(input.provider)
 		lines.push(
 			"Planning mode is enabled for this turn.",
-			`Before doing anything else, your first tool call must be ${planningTool}.`,
-			"This turn is plan-only.",
-			"Do not modify files, do not run write operations, and do not apply patches.",
-			"Lay out a concrete task list and stop after planning.",
-			"Plan-only rules:",
+			"This is the only mode where you may create or revise tasks.",
+			`Your only action is a single ${planningTool} call. Skip preamble, skip reasoning, skip explanation.`,
+			"Do not read files, do not run commands, do not modify anything, do not call any other tool.",
+			`After ${planningTool} returns, stop immediately. Produce no further text and no further tool calls.`,
+			"The user can ask you to revise the task list or implement it in a later turn.",
+			"Task list rules:",
 			"- Include clear actionable tasks.",
 			"- Mark exactly one task as in_progress.",
 			"- Leave remaining tasks as pending unless already completed.",
-			"If you cannot call the planning tool, stop and explain why."
+			`If you cannot call ${planningTool}, reply with a single short sentence and stop.`
+		)
+	}
+
+	if (!input.planningMode && input.existingPlan.items.length > 0) {
+		lines.push(
+			"Planning mode is disabled for this turn.",
+			"Do not create new tasks. Work the relevant unfinished tasks from the existing task list.",
+			"If you update task status, update only existing tasks and mark completed tasks as completed.",
+			"Existing task list:",
+			...input.existingPlan.items.map((item) => `- ${item.status}: ${item.title}`)
 		)
 	}
 
@@ -119,6 +134,39 @@ function runtimeModeForTurn(input: StartTurnInput): AgentRuntimeMode {
 
 function turnPolicyKey(threadId: string, turnId: string): string {
 	return `${threadId}:${turnId}`
+}
+
+function mergePlanProgress(existing: AgentPlan, incoming: AgentPlan): AgentPlan {
+	if (existing.items.length === 0) return existing
+	const incomingById = new Map(incoming.items.map((item) => [item.id, item]))
+	const incomingByTitle = new Map(incoming.items.map((item) => [item.title, item]))
+	return {
+		...existing,
+		updatedAt: incoming.updatedAt,
+		items: existing.items.map((item) => {
+			const update = incomingById.get(item.id) ?? incomingByTitle.get(item.title)
+			if (!update) return item
+			return {
+				...item,
+				status: update.status,
+				detail: update.detail
+			}
+		})
+	}
+}
+
+const REASONING_PREVIEW_CHARS = 240
+
+function readDeltaText(detail: unknown): string {
+	if (!detail || typeof detail !== "object") return ""
+	const value = (detail as Record<string, unknown>).delta
+	return typeof value === "string" ? value : ""
+}
+
+function appendReasoning(previous: string | null, delta: string): string {
+	const next = (previous ?? "") + delta
+	if (next.length <= REASONING_PREVIEW_CHARS) return next
+	return next.slice(next.length - REASONING_PREVIEW_CHARS)
 }
 
 function newMessage(input: {
@@ -147,6 +195,7 @@ export class AgentEngine {
 	private threads = new Map<string, AgentThread>()
 	private planningOnlyTurns = new Set<string>()
 	private planningTurnRequests = new Set<string>()
+	private planningStoppedTurns = new Set<string>()
 	private activeThreadId: string | null = null
 
 	constructor(options: { cwd: string }) {
@@ -207,7 +256,7 @@ export class AgentEngine {
 					id: `activity:${randomUUID()}`,
 					kind: "security.scan.started",
 					summary: "Running Semgrep security scan.",
-					payload: {},
+					payload: { service: "semgrep", tool: "semgrep.scan" },
 					turnId: null,
 					createdAt: nowIso()
 				})
@@ -221,7 +270,7 @@ export class AgentEngine {
 						semgrep.findingCount > 0
 							? `Semgrep found ${semgrep.findingCount} issue${semgrep.findingCount === 1 ? "" : "s"}.`
 							: "Semgrep found no issues.",
-					payload: semgrep,
+					payload: { service: "semgrep", tool: "semgrep.scan", ...semgrep },
 					turnId: null,
 					createdAt: nowIso()
 				})
@@ -232,7 +281,8 @@ export class AgentEngine {
 				prompt: input.prompt,
 				planningMode: input.planningMode ?? false,
 				securityMode: input.securityMode ?? false,
-				semgrepSummary
+				semgrepSummary,
+				existingPlan: thread.plan
 			})
 			const session = await provider.startSession({
 				threadId: thread.id,
@@ -253,7 +303,8 @@ export class AgentEngine {
 			})
 			if (input.planningMode) {
 				this.planningTurnRequests.delete(thread.id)
-				this.planningOnlyTurns.add(turnPolicyKey(thread.id, turn.turnId))
+				const key = turnPolicyKey(thread.id, turn.turnId)
+				if (!this.planningStoppedTurns.has(key)) this.planningOnlyTurns.add(key)
 			}
 		} catch (error) {
 			this.planningTurnRequests.delete(thread.id)
@@ -421,6 +472,7 @@ export class AgentEngine {
 				messages: [],
 				activities: [],
 				plan: emptyPlan(),
+				reasoningPreview: null,
 				suggestedSkills: [],
 				suggestedMcps: [],
 				session: null,
@@ -469,6 +521,7 @@ export class AgentEngine {
 			messages: [],
 			activities: [],
 			plan: emptyPlan(),
+			reasoningPreview: null,
 			suggestedSkills: [],
 			suggestedMcps: [],
 			session: null,
@@ -482,6 +535,16 @@ export class AgentEngine {
 	private ingestProviderEvent(event: ProviderRuntimeEvent): void {
 		const thread = this.threads.get(event.threadId)
 		if (!thread) return
+
+		if (
+			event.type !== "session.state.changed" &&
+			event.type !== "turn.completed" &&
+			"turnId" in event &&
+			event.turnId &&
+			this.planningStoppedTurns.has(turnPolicyKey(event.threadId, event.turnId))
+		) {
+			return
+		}
 
 		switch (event.type) {
 			case "session.state.changed":
@@ -501,6 +564,7 @@ export class AgentEngine {
 					this.planningOnlyTurns.add(turnPolicyKey(event.threadId, event.turnId))
 					this.planningTurnRequests.delete(event.threadId)
 				}
+				thread.reasoningPreview = null
 				this.setThreadSession(event.threadId, {
 					status: "running",
 					provider: providerForThread(thread),
@@ -534,7 +598,9 @@ export class AgentEngine {
 			case "turn.completed":
 				if (event.turnId) {
 					this.planningOnlyTurns.delete(turnPolicyKey(event.threadId, event.turnId))
+					this.planningStoppedTurns.delete(turnPolicyKey(event.threadId, event.turnId))
 				}
+				thread.reasoningPreview = null
 				for (const message of thread.messages) {
 					if (message.role === "assistant" && message.turnId === event.turnId) {
 						message.streaming = false
@@ -552,12 +618,22 @@ export class AgentEngine {
 				break
 
 			case "activity":
+				if (event.payload.kind === "reasoning.delta") {
+					const delta = readDeltaText(event.payload.detail)
+					if (delta) thread.reasoningPreview = appendReasoning(thread.reasoningPreview, delta)
+					break
+				}
 				thread.activities.push(this.toActivity(event))
 				break
 
 			case "plan.updated":
-				thread.plan = event.payload.plan
-				this.syncPlanTasks(thread, event)
+				if (this.isPlanningTurn(thread.id, event.turnId)) {
+					thread.plan = event.payload.plan
+					this.syncPlanTasks(thread, event)
+				} else {
+					thread.plan = mergePlanProgress(thread.plan, event.payload.plan)
+					this.updatePlanTaskProgress(thread, event)
+				}
 				this.stopPlanningModeTurn(thread, event.turnId, event.createdAt)
 				break
 
@@ -678,6 +754,35 @@ export class AgentEngine {
 			})
 	}
 
+	private updatePlanTaskProgress(
+		thread: AgentThread,
+		event: Extract<ProviderRuntimeEvent, { type: "plan.updated" }>
+	): void {
+		const agentId = agentIdForThread(thread.id)
+		if (!this.planSink || !agentId) return
+		void this.planSink.updatePlanProgress(agentId, event.payload.plan).catch((error: unknown) => {
+			thread.activities.push({
+				id: `activity:${randomUUID()}`,
+				kind: "task.update.error",
+				summary: error instanceof Error ? error.message : String(error),
+				payload: {},
+				turnId: event.turnId,
+				createdAt: nowIso()
+			})
+			this.emitSnapshot()
+		})
+	}
+
+	private isPlanningTurn(threadId: string, turnId: string | null): boolean {
+		if (!turnId) return this.planningTurnRequests.has(threadId)
+		const key = turnPolicyKey(threadId, turnId)
+		return (
+			this.planningOnlyTurns.has(key) ||
+			this.planningStoppedTurns.has(key) ||
+			this.planningTurnRequests.has(threadId)
+		)
+	}
+
 	private stopPlanningModeTurn(
 		thread: AgentThread,
 		turnId: string | null,
@@ -687,6 +792,7 @@ export class AgentEngine {
 		if (!activeTurnId) return
 		const key = turnPolicyKey(thread.id, activeTurnId)
 		if (!this.planningOnlyTurns.delete(key)) return
+		this.planningStoppedTurns.add(key)
 
 		thread.activities.push({
 			id: `activity:${randomUUID()}`,
@@ -695,6 +801,20 @@ export class AgentEngine {
 			payload: {},
 			turnId: activeTurnId,
 			createdAt
+		})
+		for (const message of thread.messages) {
+			if (message.role === "assistant" && message.turnId === activeTurnId) {
+				message.streaming = false
+				message.updatedAt = createdAt
+			}
+		}
+		this.setThreadSession(thread.id, {
+			status: "ready",
+			provider: providerForThread(thread),
+			model: thread.session?.model ?? thread.model,
+			activeTurnId: null,
+			lastError: null,
+			updatedAt: createdAt
 		})
 		const provider = this.providers[providerForThread(thread)]
 		void provider.stopSession(thread.id).catch((error: unknown) => {

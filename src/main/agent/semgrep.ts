@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process"
+import { homedir } from "node:os"
 
 export interface SemgrepFinding {
 	ruleId: string
@@ -24,6 +25,15 @@ const SEMGREP_TIMEOUT_MS = 180_000
 const SEMGREP_AVAILABILITY_TIMEOUT_MS = 5_000
 const MAX_FINDINGS_IN_PROMPT = 12
 const SEMGREP_CONFIG = "p/default"
+const SEMGREP_CANDIDATE_COMMANDS = [
+	process.env.SEMGREP_BIN?.trim(),
+	"/opt/homebrew/bin/semgrep",
+	"/usr/local/bin/semgrep",
+	`${homedir()}/.local/bin/semgrep`,
+	"semgrep"
+].filter((command): command is string => Boolean(command))
+
+let resolvedSemgrepCommand: string | null = null
 
 function readPath(payload: unknown, path: string[]): unknown {
 	let cursor = payload as Record<string, unknown> | undefined | null
@@ -85,8 +95,7 @@ function semgrepCommand(): string {
 	return process.env.SEMGREP_BIN?.trim() || "semgrep"
 }
 
-export async function checkSemgrepAvailability(): Promise<SemgrepAvailability> {
-	const command = semgrepCommand()
+function probeSemgrepAvailability(command: string): Promise<SemgrepAvailability> {
 	return new Promise<SemgrepAvailability>((resolve) => {
 		let stdout = ""
 		let stderr = ""
@@ -153,8 +162,39 @@ export async function checkSemgrepAvailability(): Promise<SemgrepAvailability> {
 	})
 }
 
+async function resolveSemgrepCommand(): Promise<SemgrepAvailability> {
+	for (const command of SEMGREP_CANDIDATE_COMMANDS) {
+		const status = await probeSemgrepAvailability(command)
+		if (status.available) {
+			resolvedSemgrepCommand = command
+			return status
+		}
+	}
+
+	return {
+		available: false,
+		command: resolvedSemgrepCommand ?? semgrepCommand(),
+		detail: "Semgrep CLI not found in common install locations."
+	}
+}
+
+export async function checkSemgrepAvailability(): Promise<SemgrepAvailability> {
+	if (resolvedSemgrepCommand != null) {
+		const status = await probeSemgrepAvailability(resolvedSemgrepCommand)
+		if (status.available) return status
+		resolvedSemgrepCommand = null
+	}
+
+	return resolveSemgrepCommand()
+}
+
 export async function runSemgrepScan(cwd: string): Promise<SemgrepScanSummary> {
-	const command = semgrepCommand()
+	const availability = await checkSemgrepAvailability()
+	if (!availability.available) {
+		throw new Error(availability.detail ?? "Semgrep CLI not found.")
+	}
+
+	const command = availability.command
 	const args = ["scan", "--config", SEMGREP_CONFIG, "--json", "--metrics=off", "."]
 	const commandLabel = `${command} ${args.join(" ")}`
 

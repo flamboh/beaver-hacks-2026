@@ -42,7 +42,7 @@ export function buildTranscript(thread: AgentThread): TranscriptBlock[] {
 			index
 		})),
 		...thread.activities
-			.filter((activity) => activity.turnId)
+			.filter((activity) => activity.turnId || activity.kind.startsWith("security.scan."))
 			.map((activity, index) => ({
 				type: "activity" as const,
 				activity,

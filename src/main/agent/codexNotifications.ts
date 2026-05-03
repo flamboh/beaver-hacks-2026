@@ -149,6 +149,12 @@ export function codexNotificationEvents(input: {
 		]
 	}
 
+	if (method === "item/reasoning/summaryTextDelta" || method === "item/reasoning/textDelta") {
+		const delta = readText(readPath(params, ["delta"]) ?? readPath(params, ["textDelta"]))
+		if (!delta) return []
+		return [activity(input, turnId, "reasoning.delta", "Reasoning…", { delta })]
+	}
+
 	if (method === "item/agentMessage/delta") {
 		const delta = readText(readPath(params, ["delta"]) ?? readPath(params, ["textDelta"]))
 		if (!delta) return []

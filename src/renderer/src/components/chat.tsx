@@ -1,4 +1,4 @@
-import type { CSSProperties, FormEvent, JSX, KeyboardEvent, RefObject } from "react"
+import type { CSSProperties, FormEvent, JSX, KeyboardEvent, RefObject, UIEvent } from "react"
 import { useCallback, useRef, useState, useSyncExternalStore } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "motion/react"
@@ -124,6 +124,8 @@ export function Chat({
 	const [error, setError] = useState<string | null>(null)
 	const [cursor, setCursor] = useState(0)
 	const [suggestionIndex, setSuggestionIndex] = useState(0)
+	const [isPinnedToBottom, setIsPinnedToBottom] = useState(true)
+	const transcriptViewportRef = useRef<HTMLDivElement | null>(null)
 	const inputRef = useRef<HTMLTextAreaElement | null>(null)
 	const transcriptScrollRef = useRef<HTMLElement | null>(null)
 	const canSend = draft.trim().length > 0 && !isSending && !isRunning
@@ -190,7 +192,16 @@ export function Chat({
 
 	function scrollAnchorRef(node: HTMLDivElement | null): void {
 		if (!node) return
-		node.scrollIntoView({ block: "end" })
+		if (!isPinnedToBottom) return
+		const viewport = transcriptViewportRef.current
+		if (!viewport) return
+		viewport.scrollTop = viewport.scrollHeight
+	}
+
+	function handleTranscriptScroll(event: UIEvent<HTMLDivElement>): void {
+		const target = event.currentTarget
+		const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight
+		setIsPinnedToBottom(distanceFromBottom < 24)
 	}
 
 	function handleSubmit(event: FormEvent<HTMLFormElement>): void {
@@ -293,6 +304,7 @@ export function Chat({
 				data-selectable-text
 				data-scroll-boundary-stop="true"
 				className="nowheel nodrag min-h-0 flex-1 select-text overflow-y-auto px-4 py-5"
+				onScroll={handleTranscriptScroll}
 			>
 				<div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
 					{thread ? (
@@ -308,11 +320,16 @@ export function Chat({
 										animate={{ opacity: 1, y: 0 }}
 										exit={{ opacity: 0, y: -2 }}
 										transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-										className="mr-auto flex max-w-[86%] items-center rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5"
+										className="mr-auto flex max-w-[86%] flex-col gap-1.5 rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5"
 										aria-live="polite"
 										aria-label="Agent is thinking"
 									>
 										<StreamingDots />
+										{thread?.reasoningPreview ? (
+											<p className="line-clamp-3 whitespace-pre-wrap text-[11px] leading-snug text-zinc-500">
+												{thread.reasoningPreview}
+											</p>
+										) : null}
 									</motion.article>
 								) : null}
 							</AnimatePresence>

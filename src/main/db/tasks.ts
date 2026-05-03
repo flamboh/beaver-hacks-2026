@@ -58,7 +58,7 @@ export class TaskService {
 			await this.run(
 				`INSERT INTO task (id, batch_id, agent_id, turn_id, status, description)
 				 VALUES (?, ?, ?, ?, ?, ?)`,
-				[`task:${agentId}:${item.id}`, batchId, agentId, turnId, item.status, item.title]
+				[`task:${batchId}:${item.id}`, batchId, agentId, turnId, item.status, item.title]
 			)
 		}
 		if (plan.items.length === 0) {
@@ -66,9 +66,32 @@ export class TaskService {
 		}
 	}
 
+	async updatePlanProgress(agentId: string, plan: AgentPlan): Promise<void> {
+		for (const item of plan.items) {
+			const updates = await this.runWithChanges(
+				`UPDATE task SET status = ? WHERE agent_id = ? AND id = ?`,
+				[item.status, agentId, `task:${agentId}:${item.id}`]
+			)
+			if (updates > 0) continue
+			await this.run(`UPDATE task SET status = ? WHERE agent_id = ? AND description = ?`, [
+				item.status,
+				agentId,
+				item.title
+			])
+		}
+	}
+
 	private async run(sql: string, params: unknown[]): Promise<void> {
 		return new Promise((resolve, reject) => {
 			this.db.run(sql, params, (err) => (err ? reject(err) : resolve()))
+		})
+	}
+
+	private async runWithChanges(sql: string, params: unknown[]): Promise<number> {
+		return new Promise((resolve, reject) => {
+			this.db.run(sql, params, function (err) {
+				return err ? reject(err) : resolve(this.changes)
+			})
 		})
 	}
 

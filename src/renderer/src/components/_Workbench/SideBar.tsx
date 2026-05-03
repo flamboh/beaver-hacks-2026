@@ -22,7 +22,7 @@ interface Props {
 	workspacesByProjectId: Map<string, WorkspaceRow[]>
 }
 
-const SIDEBAR_WIDTH = 255
+const SIDEBAR_WIDTH = 300
 
 function sortWorkspaces(workspaces: WorkspaceRow[]) {
 	return [...workspaces].sort((a, b) => {
@@ -67,7 +67,7 @@ export default function SideBar({
 						className="flex min-w-0 flex-1 items-center gap-2 p-1 transition-opacity duration-150 ease-in-out"
 						style={{ opacity: open ? 1 : 0 }}
 					>
-						<p className="min-w-0 flex-1 text-[10px] font-medium tracking-widest text-neutral-500 uppercase">
+						<p className="min-w-0 flex-1 text-md font-medium tracking-widest text-neutral-500 uppercase">
 							Projects
 						</p>
 						<button
@@ -77,7 +77,7 @@ export default function SideBar({
 							aria-label="Create project"
 							title="Create project"
 						>
-							<FolderPlus size={15} />
+							<FolderPlus size={"1.4rem"} />
 						</button>
 					</div>
 				</div>
@@ -93,7 +93,7 @@ export default function SideBar({
 							return (
 								<div key={project.id} className="flex flex-col">
 									<div
-										className={`flex items-center rounded-md text-sm whitespace-nowrap transition-colors duration-150 ${
+										className={`flex items-center rounded-md text-[1rem] whitespace-nowrap transition-colors duration-150 ${
 											active
 												? "bg-white/8 text-white"
 												: "text-neutral-500 hover:bg-white/5 hover:text-neutral-200"
@@ -151,11 +151,11 @@ export default function SideBar({
 														title={workspace.name}
 													>
 														<GitBranch
-															size={13}
+															size={20}
 															className="mr-2 shrink-0 text-neutral-600"
 															aria-hidden="true"
 														/>
-														<span className="min-w-0 truncate">{workspace.name}</span>
+														<span className="min-w-0 truncate text-[0.9rem]">{workspace.name}</span>
 													</button>
 													<button
 														type="button"
