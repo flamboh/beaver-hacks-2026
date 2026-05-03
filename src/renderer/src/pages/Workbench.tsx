@@ -47,6 +47,7 @@ export default function Workbench() {
 					projectName={project?.name ?? "No project selected"}
 					setCurrentPage={setCurrentPage}
 					open={sidebarOpen}
+					onToggle={() => setSidebarOpen((o) => !o)}
 				/>
 				<main className={`flex-1 overflow-hidden ${isCanvas ? "" : "overflow-auto p-6"}`}>
 					{renderPage()}

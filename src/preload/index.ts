@@ -7,10 +7,14 @@ import type {
 	StartTurnInput
 } from "../main/agent/ipc"
 import type {
+	AgentRow,
+	CreateAgentInput,
 	CreateProjectInput,
+	CreateTaskInput,
 	DatabaseInfo,
 	ProjectIdInput,
 	ProjectRow,
+	TaskRow,
 	UpdateProjectInput
 } from "../main/db/ipc"
 import type { ReviewDevServerLaunch } from "../main/devServer/ipc"
@@ -78,6 +82,16 @@ const api = {
 		touch: (input: ProjectIdInput): Promise<ProjectRow> =>
 			ipcRenderer.invoke("project:touch", input),
 		delete: (input: ProjectIdInput): Promise<void> => ipcRenderer.invoke("project:delete", input)
+	},
+	agents: {
+		list: (projectId: string): Promise<AgentRow[]> => ipcRenderer.invoke("agent:list", projectId),
+		create: (input: CreateAgentInput): Promise<AgentRow> =>
+			ipcRenderer.invoke("agent:create", input),
+		delete: (id: string): Promise<void> => ipcRenderer.invoke("agent:delete", id)
+	},
+	tasks: {
+		list: (agentId: string): Promise<TaskRow[]> => ipcRenderer.invoke("task:list", agentId),
+		create: (input: CreateTaskInput): Promise<TaskRow> => ipcRenderer.invoke("task:create", input)
 	}
 }
 

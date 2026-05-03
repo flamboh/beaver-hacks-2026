@@ -1,36 +1,8 @@
 import { useState } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { X, Plus, FolderOpen, AlignLeft } from "lucide-react"
 
-import { AgentRow } from "@renderer/types/models"
 import { useSessionData } from "@renderer/hooks/useSessionData"
-
-// ── placeholder data ──────────────────────────────────────────────
-const PLACEHOLDER_AGENTS: AgentRow[] = [
-	{
-		id: "1",
-		name: "Auth Refactor",
-		project_id: "proj-1",
-		model: "claude-opus-4-7",
-		scope_path: "@Pipeline.md",
-		effort: "high"
-	},
-	{
-		id: "2",
-		name: "Test Coverage",
-		project_id: "proj-1",
-		model: "gpt-4o-mini",
-		scope_path: "@tests/README.md",
-		effort: "medium"
-	},
-	{
-		id: "3",
-		name: "Docs Generator",
-		project_id: "proj-1",
-		model: "claude-sonnet-4-6",
-		scope_path: "",
-		effort: "low"
-	}
-]
 
 // const PLACEHOLDER_TASK =
 // 	"Refactoring the authentication middleware to meet the new compliance requirements..."
@@ -81,8 +53,16 @@ const DEFAULT_FORM = {
 // ─────────────────────────────────────────────────────────────────
 
 export default function Agents() {
-	const [agents, setAgents] = useState<AgentRow[]>(PLACEHOLDER_AGENTS)
 	const { project } = useSessionData()
+	const projectId = project?.id ?? ""
+	const queryClient = useQueryClient()
+
+	const { data: agents = [] } = useQuery({
+		queryKey: ["agents", projectId],
+		queryFn: () => window.api.agents.list(projectId),
+		enabled: !!projectId
+	})
+
 	const [showForm, setShowForm] = useState(false)
 	const [form, setForm] = useState({ ...DEFAULT_FORM })
 	const [submitting, setSubmitting] = useState(false)
@@ -93,17 +73,14 @@ export default function Agents() {
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault()
 		setSubmitting(true)
-		// simulate DB write
-		await new Promise((res) => setTimeout(res, 900))
-		const newAgent: AgentRow = {
-			id: crypto.randomUUID(),
+		await window.api.agents.create({
 			name: form.name || "Unnamed Agent",
-			project_id: project?.id ?? "",
+			project_id: projectId,
 			model: form.model,
 			scope_path: form.instructionMode === "path" ? form.scopePath : "",
 			effort: form.effort
-		}
-		setAgents((prev) => [newAgent, ...prev])
+		})
+		await queryClient.invalidateQueries({ queryKey: ["agents", projectId] })
 		setSubmitting(false)
 		setShowForm(false)
 		setForm({ ...DEFAULT_FORM })

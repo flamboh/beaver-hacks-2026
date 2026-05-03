@@ -1,5 +1,6 @@
 import type { FormEvent, JSX } from "react"
 import { useState } from "react"
+import { ChevronDown } from "lucide-react"
 import { sendAgentMessage } from "../agentStore"
 import type { AgentSnapshot } from "../../../main/agent/ipc"
 import { GitBranchControls } from "./GitBranchControls"
@@ -15,6 +16,7 @@ export function Chat({ thread, isRunning }: ChatProps): JSX.Element {
 	const [draft, setDraft] = useState("")
 	const [isSending, setIsSending] = useState(false)
 	const [error, setError] = useState<string | null>(null)
+	const [branchOpen, setBranchOpen] = useState(false)
 	const canSend = draft.trim().length > 0 && !isSending && !isRunning
 
 	function handleSubmit(event: FormEvent<HTMLFormElement>): void {
@@ -52,7 +54,11 @@ export function Chat({ thread, isRunning }: ChatProps): JSX.Element {
 							>
 								<p className="whitespace-pre-wrap">{message.text}</p>
 								{message.streaming ? (
-									<span className="mt-2 block text-xs text-zinc-500">Streaming</span>
+									<span className="mt-2 flex items-center gap-1">
+										<span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:0ms]" />
+										<span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:150ms]" />
+										<span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:300ms]" />
+									</span>
 								) : null}
 							</article>
 						))
@@ -88,7 +94,27 @@ export function Chat({ thread, isRunning }: ChatProps): JSX.Element {
 						Send
 					</button>
 				</form>
-				<GitBranchControls cwd={thread?.cwd ?? null} />
+				<div className="mx-auto mt-3 max-w-3xl">
+					<button
+						type="button"
+						onClick={() => setBranchOpen((v) => !v)}
+						className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-neutral-600 hover:text-neutral-400 transition-colors duration-150"
+					>
+						<ChevronDown
+							size={12}
+							className={`transition-transform duration-200 ${branchOpen ? "rotate-180" : ""}`}
+						/>
+						Branch
+					</button>
+					<div
+						className="overflow-hidden transition-[max-height] duration-200"
+						style={{ maxHeight: branchOpen ? 200 : 0 }}
+					>
+						<div className="pt-2">
+							<GitBranchControls cwd={thread?.cwd ?? null} />
+						</div>
+					</div>
+				</div>
 				{error ? <p className="mx-auto mt-2 max-w-3xl text-xs text-red-400">{error}</p> : null}
 			</footer>
 		</div>
