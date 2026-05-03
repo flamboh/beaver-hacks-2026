@@ -15,7 +15,7 @@ export class TaskService {
 
 	async listTasks(agentId: string): Promise<TaskRow[]> {
 		return this.all<TaskRow>(
-			`SELECT id, batch_id, agent_id, status, COALESCE(description, '') AS description
+			`SELECT id, batch_id, agent_id, turn_id, status, COALESCE(description, '') AS description
 			 FROM task WHERE agent_id = ? ORDER BY rowid ASC`,
 			[agentId]
 		)
@@ -25,7 +25,7 @@ export class TaskService {
 		const batchId = input.batch_id ?? `batch:${randomUUID()}`
 		const task: TaskRow = {
 			id: `task:${randomUUID()}`,
-			batch_id: input.batch_id ?? `batch:${randomUUID()}`,
+			batch_id: batchId,
 			agent_id: input.agent_id,
 			turn_id: input.turn_id ?? null,
 			status: input.status,
