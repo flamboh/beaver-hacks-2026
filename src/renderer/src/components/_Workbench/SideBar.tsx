@@ -1,6 +1,5 @@
 import { useState } from "react"
 import { ChevronRight } from "lucide-react"
-import { AnimatePresence, motion } from "motion/react"
 import type { ProjectRow } from "@renderer/types/models"
 import type { WorkspaceRow } from "../../../../main/db/ipc"
 
@@ -36,11 +35,12 @@ export default function SideBar({
 	const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set())
 	const toggleProject = (projectId: string) => {
 		setExpandedProjectIds((current) => {
+			const next = new Set(current)
 			if (current.has(projectId)) {
-				return new Set()
+				next.delete(projectId)
+			} else {
+				next.add(projectId)
 			}
-			const next = new Set<string>()
-			next.add(projectId)
 			return next
 		})
 	}
@@ -54,7 +54,7 @@ export default function SideBar({
 			className="flex h-full shrink-0 flex-col overflow-hidden border-r border-white/5 bg-neutral-900 transition-[width] duration-200 ease-in-out"
 			style={{ width: open ? 220 : 0 }}
 		>
-			<div className="flex w-[220px] flex-1 flex-col">
+			<div className="flex min-h-0 w-[220px] flex-1 flex-col">
 				<div className="flex h-[60px] items-center border-b border-white/5 px-3">
 					<div
 						className="min-w-0 flex-1 p-1 transition-opacity duration-150 ease-in-out"
@@ -68,7 +68,7 @@ export default function SideBar({
 				</div>
 
 				<div
-					className="min-h-0 flex-1 overflow-y-auto px-2 py-3 transition-opacity duration-150 ease-in-out"
+					className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 py-3 transition-opacity duration-150 ease-in-out"
 					style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }}
 				>
 					<nav className="flex flex-col gap-0.5">
@@ -108,46 +108,29 @@ export default function SideBar({
 											<span className="min-w-0 truncate">{project.name}</span>
 										</button>
 									</div>
-									<AnimatePresence initial={false}>
-										{expanded ? (
-											<motion.div
-												key="workspaces"
-												initial={{ height: 0, opacity: 0 }}
-												animate={{ height: "auto", opacity: 1 }}
-												exit={{ height: 0, opacity: 0 }}
-												transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-												className="ml-5 overflow-hidden"
-											>
-												<motion.div
-													initial={{ y: -4 }}
-													animate={{ y: 0 }}
-													exit={{ y: -4 }}
-													transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-													className="flex flex-col gap-0.5 py-0.5"
-												>
-													{workspaces.map((workspace) => {
-														const workspaceActive =
-															activeProjectId === project.id && activeWorkspaceId === workspace.id
-														return (
-															<button
-																key={workspace.id}
-																type="button"
-																onClick={() => onWorkspaceSelect(project, workspace)}
-																className={`flex cursor-pointer items-center rounded-md px-4 py-2.5 text-left text-xs whitespace-nowrap transition-colors duration-150 ${
-																	workspaceActive
-																		? "bg-white/8 text-neutral-100"
-																		: "text-neutral-600 hover:bg-white/5 hover:text-neutral-300"
-																}`}
-																title={workspace.name}
-															>
-																<span className="min-w-0 truncate">{workspace.name}</span>
-															</button>
-														)
-													})}
-												</motion.div>
-											</motion.div>
-										) : null}
-									</AnimatePresence>
+									{expanded ? (
+										<div className="ml-5 flex flex-col gap-0.5 py-0.5">
+											{workspaces.map((workspace) => {
+												const workspaceActive =
+													activeProjectId === project.id && activeWorkspaceId === workspace.id
+												return (
+													<button
+														key={workspace.id}
+														type="button"
+														onClick={() => onWorkspaceSelect(project, workspace)}
+														className={`flex cursor-pointer items-center rounded-md px-4 py-2.5 text-left text-xs whitespace-nowrap transition-colors duration-150 ${
+															workspaceActive
+																? "bg-white/8 text-neutral-100"
+																: "text-neutral-600 hover:bg-white/5 hover:text-neutral-300"
+														}`}
+														title={workspace.name}
+													>
+														<span className="min-w-0 truncate">{workspace.name}</span>
+													</button>
+												)
+											})}
+										</div>
+									) : null}
 								</div>
 							)
 						})}
