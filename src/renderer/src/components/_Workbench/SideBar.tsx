@@ -13,6 +13,8 @@ interface Props {
 	workspacesByProjectId: Map<string, WorkspaceRow[]>
 }
 
+const SIDEBAR_WIDTH = 255
+
 function sortWorkspaces(workspaces: WorkspaceRow[]) {
 	return [...workspaces].sort((a, b) => {
 		const createdOrder = a.createdAt.localeCompare(b.createdAt)
@@ -52,9 +54,9 @@ export default function SideBar({
 	return (
 		<div
 			className="flex h-full shrink-0 flex-col overflow-hidden border-r border-white/5 bg-neutral-900 transition-[width] duration-200 ease-in-out"
-			style={{ width: open ? 220 : 0 }}
+			style={{ width: open ? SIDEBAR_WIDTH : 0 }}
 		>
-			<div className="flex min-h-0 w-[220px] flex-1 flex-col">
+			<div className="flex min-h-0 flex-1 flex-col" style={{ width: SIDEBAR_WIDTH }}>
 				<div className="flex h-[60px] items-center border-b border-white/5 px-3">
 					<div
 						className="min-w-0 flex-1 p-1 transition-opacity duration-150 ease-in-out"
