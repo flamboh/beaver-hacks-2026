@@ -4,6 +4,7 @@ interface UseControlPanelKeyboardProps {
 	centerFocused: () => void
 	focusedIdx: number
 	moveFocus: (direction: "left" | "right" | "up" | "down") => void
+	moveFocusedWithinRail: (direction: "left" | "right") => void
 	resizeFocused: (direction: "grow" | "shrink") => void
 	setSpacePanActive: (active: boolean) => void
 	snapToCard: (idx: number) => void
@@ -14,6 +15,7 @@ export function useControlPanelKeyboard({
 	centerFocused,
 	focusedIdx,
 	moveFocus,
+	moveFocusedWithinRail,
 	resizeFocused,
 	setSpacePanActive,
 	snapToCard,
@@ -26,6 +28,7 @@ export function useControlPanelKeyboard({
 				if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
 				return
 			}
+			if (target?.closest(".agent-create-popover")) return
 			if (target?.closest("input, textarea, [contenteditable='true']")) return
 			if (e.code === "Space") {
 				spacePan.current = true
@@ -40,6 +43,11 @@ export function useControlPanelKeyboard({
 			if (e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
 				e.preventDefault()
 				resizeFocused(e.key === "ArrowRight" ? "grow" : "shrink")
+				return
+			}
+			if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+				e.preventDefault()
+				moveFocusedWithinRail(e.key === "ArrowRight" ? "right" : "left")
 				return
 			}
 			if (
@@ -67,5 +75,14 @@ export function useControlPanelKeyboard({
 			window.removeEventListener("keydown", keyDown)
 			window.removeEventListener("keyup", keyUp)
 		}
-	}, [centerFocused, focusedIdx, moveFocus, resizeFocused, setSpacePanActive, snapToCard, spacePan])
+	}, [
+		centerFocused,
+		focusedIdx,
+		moveFocus,
+		moveFocusedWithinRail,
+		resizeFocused,
+		setSpacePanActive,
+		snapToCard,
+		spacePan
+	])
 }

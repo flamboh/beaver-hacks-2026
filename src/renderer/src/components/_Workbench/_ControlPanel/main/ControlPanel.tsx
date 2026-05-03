@@ -14,6 +14,8 @@ import {
 	type CardSize,
 	canElementScroll,
 	canStartPan,
+	cardPos,
+	cardSize,
 	canvasSize,
 	cardCenter,
 	centerOffset,
@@ -68,20 +70,23 @@ export default function ControlPanel({
 	const [contextCreateMenu, setContextCreateMenu] = useState<{
 		x: number
 		y: number
+		showAgents: boolean
 		sourceCardId: string
 		side: CreateSide
 	} | null>(null)
 	const { cards, createCard, deleteCard, deletingCardId, isCreatingCard, refetch } =
 		useControlPanelAgents(projectIds, workspaces, activeWorkspaceId)
 	const [cardSizes, setCardSizes] = useState<Record<string, CardSize>>({})
+	const [cardLayouts, setCardLayouts] = useState<Record<string, { layout_x: number }>>({})
 	const sizedCards = useMemo(
 		() =>
 			cards.map((card) => ({
 				...card,
+				layout_x: cardLayouts[card.id]?.layout_x ?? card.layout_x,
 				width: cardSizes[card.id]?.w,
 				height: cardSizes[card.id]?.h
 			})),
-		[cards, cardSizes]
+		[cards, cardLayouts, cardSizes]
 	)
 	const canvas = useMemo(
 		() => canvasSize(sizedCards, workspaces.length),
@@ -270,15 +275,45 @@ export default function ControlPanel({
 				return
 			}
 			if (!hasCards) return
-			centerCard(
-				nearestCardInDirection(viewportCenter(offset, zoom), sizedCards, canvas, direction)
+			if (direction === "left" || direction === "right") {
+				const sourceCard = sizedCards[focusedIdx]
+				const sameRailCards = sourceCard
+					? sizedCards.filter((card) => card.layout_y === sourceCard.layout_y)
+					: []
+				const hasSameRailNeighbor = sameRailCards.some((card) =>
+					direction === "right"
+						? card.layout_x > (sourceCard?.layout_x ?? 0)
+						: card.layout_x < (sourceCard?.layout_x ?? 0)
+				)
+				if (sourceCard && !hasSameRailNeighbor) {
+					const side = direction
+					if (!resolveCreateSide(side, sourceCard, sizedCards)) return
+					const pos = cardPos(sourceCard, canvas)
+					const size = cardSize(sourceCard)
+					setContextCreateMenu({
+						x: offset.x + (side === "left" ? pos.x - 64 : pos.x + size.w + 16) * zoom,
+						y: offset.y + (pos.y + size.h / 2 - 41) * zoom,
+						showAgents: true,
+						sourceCardId: sourceCard.id,
+						side
+					})
+					return
+				}
+			}
+			const nextIndex = nearestCardInDirection(
+				viewportCenter(offset, zoom),
+				sizedCards,
+				canvas,
+				direction
 			)
+			centerCard(nextIndex)
 		},
 		[
 			activeWorkspaceId,
 			canvas,
 			centerCard,
 			centerWorkspaceLane,
+			focusedIdx,
 			hasCards,
 			offset,
 			sizedCards,
@@ -320,11 +355,56 @@ export default function ControlPanel({
 		},
 		[cardSizes, focusedIdx, resizeCard, sizedCards]
 	)
+	const moveFocusedWithinRail = useCallback(
+		(direction: "left" | "right") => {
+			const card = sizedCards[Math.max(0, Math.min(focusedIdx, sizedCards.length - 1))]
+			if (!card) return
+			const railCards = sizedCards
+				.filter((candidate) => candidate.layout_y === card.layout_y)
+				.sort((a, b) => a.layout_x - b.layout_x)
+			const cardIndex = railCards.findIndex((candidate) => candidate.id === card.id)
+			const swapIndex = direction === "right" ? cardIndex + 1 : cardIndex - 1
+			const swapCard = railCards[swapIndex]
+			if (!swapCard) return
+			const nextCards = sizedCards.map((candidate) => {
+				if (candidate.id === card.id) return { ...candidate, layout_x: swapCard.layout_x }
+				if (candidate.id === swapCard.id) return { ...candidate, layout_x: card.layout_x }
+				return candidate
+			})
+			const nextCanvas = canvasSize(nextCards, workspaces.length)
+			const nextFocusedIdx = nextCards.findIndex((candidate) => candidate.id === card.id)
+			setSmoothPan(true)
+			setCardLayouts((current) => ({
+				...current,
+				[card.id]: { layout_x: swapCard.layout_x },
+				[swapCard.id]: { layout_x: card.layout_x }
+			}))
+			setFocusedIdx(Math.max(0, nextFocusedIdx))
+			activateCardWorkspace(card)
+			const movedCard = nextCards[Math.max(0, nextFocusedIdx)] ?? card
+			const movedCenter = cardCenter(movedCard, nextCanvas)
+			commitOffset(centerOffset(movedCenter, vpSize, nextCanvas, zoom), zoom, false, nextCanvas)
+			flashMap()
+			if (smoothPanTimer.current) clearTimeout(smoothPanTimer.current)
+			smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 260)
+		},
+		[
+			activateCardWorkspace,
+			commitOffset,
+			flashMap,
+			focusedIdx,
+			sizedCards,
+			vpSize,
+			workspaces.length,
+			zoom
+		]
+	)
 
 	useControlPanelKeyboard({
 		centerFocused: () => centerCard(focusedIdx),
 		focusedIdx,
 		moveFocus,
+		moveFocusedWithinRail,
 		resizeFocused,
 		setSpacePanActive,
 		snapToCard,
@@ -632,6 +712,7 @@ export default function ControlPanel({
 			setContextCreateMenu({
 				x: Math.min(Math.max(event.clientX - rect.left, padding), rect.width - menuW - padding),
 				y: Math.min(Math.max(event.clientY - rect.top, padding), rect.height - menuH - padding),
+				showAgents: false,
 				sourceCardId: sourceCard.id,
 				side
 			})
@@ -712,9 +793,10 @@ export default function ControlPanel({
 			) : null}
 			{contextCreateMenu ? (
 				<CreateCardOptionsPopover
+					autoFocusFirst
 					onClose={() => setContextCreateMenu(null)}
 					onCreateCard={handleCreateCard}
-					showAgents={false}
+					showAgents={contextCreateMenu.showAgents}
 					side={contextCreateMenu.side}
 					sourceCardId={contextCreateMenu.sourceCardId}
 					className="nodrag absolute"
