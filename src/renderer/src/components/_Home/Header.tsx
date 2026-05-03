@@ -5,6 +5,10 @@ export default function Header() {
 		<header className="relative flex h-11 items-center justify-between border-b border-white/5 bg-neutral-900 px-3 text-neutral-50">
 			<Link
 				to="/"
+				onClick={(event) => {
+					event.preventDefault()
+					window.location.reload()
+				}}
 				className="text-sm font-medium uppercase tracking-wide text-neutral-50 hover:text-neutral-300"
 			>
 				NULLOTH
