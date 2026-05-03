@@ -1,9 +1,10 @@
 import { ipcMain } from "electron"
 import { AgentEngine } from "../agent/agentEngine"
-import { GitService, MINI_MODEL } from "./gitService"
+import { GitService, MINI_MODEL, TOUR_MODEL } from "./gitService"
 import type {
 	GitCheckoutInput,
 	GitCommitAllInput,
+	GitDiffTour,
 	GitCommitMessage,
 	GitCreateBranchInput,
 	GitPushInput
@@ -32,12 +33,24 @@ export function registerGitIpc(git: GitService, agentEngine: AgentEngine): void 
 			return git.parseCommitMessage(raw)
 		}
 	)
+	ipcMain.handle("git:generate-diff-tour", async (_event, cwd: string): Promise<GitDiffTour> => {
+		const prompt = await git.buildDiffTourPrompt(cwd)
+		const raw = await agentEngine.runOneShot({
+			cwd,
+			prompt,
+			model: TOUR_MODEL,
+			runtimeMode: "approval-required",
+			timeoutMs: 120_000
+		})
+		return git.parseDiffTour(raw)
+	})
 }
 
 export type {
 	GitCheckoutInput,
 	GitCommitAllInput,
 	GitCommitResult,
+	GitDiffTour,
 	GitCommitMessage,
 	GitCreateBranchInput,
 	GitPushInput,

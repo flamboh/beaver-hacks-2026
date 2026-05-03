@@ -25,6 +25,7 @@ import type {
 	GitCommitMessage,
 	GitCommitResult,
 	GitCreateBranchInput,
+	GitDiffTour,
 	GitPushInput,
 	GitPushResult,
 	GitStatusSnapshot,
@@ -60,6 +61,8 @@ const api = {
 			ipcRenderer.invoke("git:create-branch", input),
 		generateCommitMessage: (cwd: string): Promise<GitCommitMessage> =>
 			ipcRenderer.invoke("git:generate-commit-message", cwd),
+		generateDiffTour: (cwd: string): Promise<GitDiffTour> =>
+			ipcRenderer.invoke("git:generate-diff-tour", cwd),
 		commitAll: (input: GitCommitAllInput): Promise<GitCommitResult> =>
 			ipcRenderer.invoke("git:commit-all", input),
 		push: (input: GitPushInput): Promise<GitPushResult> => ipcRenderer.invoke("git:push", input)
