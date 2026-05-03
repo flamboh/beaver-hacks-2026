@@ -2,6 +2,10 @@ import { Chat } from "@renderer/components/chat"
 import { useQuery } from "@tanstack/react-query"
 import { useAgentSnapshot } from "@renderer/agentStore"
 import type { AgentRow } from "@renderer/types/models"
+import { Code2, Globe, Terminal } from "lucide-react"
+import { useState } from "react"
+import BrowserCard from "./BrowserCard"
+import TerminalCard from "./TerminalCard"
 
 function parseScopePath(p: string): string {
 	if (!p) return ""
@@ -16,6 +20,14 @@ const EFFORT_STYLES: Record<string, string> = {
 	medium: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
 	high: "bg-red-500/15 text-red-400 border-red-500/30"
 }
+
+type ControlSurface = "source" | "terminal" | "browser"
+
+const SURFACES: { value: ControlSurface; label: string; icon: typeof Code2 }[] = [
+	{ value: "source", label: "Source", icon: Code2 },
+	{ value: "terminal", label: "Terminal", icon: Terminal },
+	{ value: "browser", label: "Browser", icon: Globe }
+]
 
 interface Props {
 	agent: AgentRow
@@ -36,6 +48,7 @@ export default function AgentCard({ agent, workspaceId, workspacePath }: Props) 
 		queryFn: () => window.api.tasks.list(agent.id),
 		enabled: !!agent.id
 	})
+	const [surface, setSurface] = useState<ControlSurface>("source")
 
 	const scopeDisplay = parseScopePath(agent.scope_path)
 
@@ -84,7 +97,7 @@ export default function AgentCard({ agent, workspaceId, workspacePath }: Props) 
 
 				{/* right panel */}
 				<div className="flex flex-col flex-1 overflow-hidden">
-					<div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 shrink-0">
+					<div className="flex items-center gap-3 border-b border-white/5 px-4 py-3 shrink-0">
 						<div className="flex items-center gap-1">
 							{PRIORITY_LEVELS.map((level) => (
 								<span
@@ -100,19 +113,46 @@ export default function AgentCard({ agent, workspaceId, workspacePath }: Props) 
 							))}
 						</div>
 						{scopeDisplay && (
-							<span className="text-xs text-neutral-600">
+							<span className="min-w-0 truncate text-xs text-neutral-600">
 								Scope: <span className="text-blue-400/80 font-mono">{scopeDisplay}</span>
 							</span>
 						)}
+						<div className="ml-auto flex items-center gap-1">
+							{SURFACES.map((item) => {
+								const Icon = item.icon
+								const active = surface === item.value
+								return (
+									<button
+										key={item.value}
+										type="button"
+										onClick={() => setSurface(item.value)}
+										className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition-colors ${
+											active
+												? "border-white/20 bg-white/10 text-neutral-100"
+												: "border-white/8 text-neutral-500 hover:border-white/15 hover:text-neutral-300"
+										}`}
+									>
+										<Icon size={11} />
+										{item.label}
+									</button>
+								)
+							})}
+						</div>
 					</div>
 
 					<div className="min-h-0 flex-1">
-						<Chat
-							thread={thread}
-							isRunning={isRunning}
-							cwd={workspacePath}
-							workspaceId={workspaceId}
-						/>
+						{surface === "source" ? (
+							<Chat
+								thread={thread}
+								isRunning={isRunning}
+								cwd={workspacePath}
+								workspaceId={workspaceId}
+							/>
+						) : surface === "terminal" ? (
+							<TerminalCard cwd={workspacePath} />
+						) : (
+							<BrowserCard />
+						)}
 					</div>
 				</div>
 			</div>

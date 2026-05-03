@@ -42,6 +42,7 @@ import type {
 	GitWorkingTreeDiffSnapshot
 } from "../main/git/ipc"
 import type { SaveScopeFileInput, SaveScopeFileResult } from "../main/scopeFiles/ipc"
+import type { TerminalRunInput, TerminalRunResult } from "../main/terminal/ipc"
 
 interface BeaverApi {
 	agent: {
@@ -105,6 +106,9 @@ interface BeaverApi {
 	tasks: {
 		list: (agentId: string) => Promise<TaskRow[]>
 		create: (input: CreateTaskInput) => Promise<TaskRow>
+	}
+	terminal: {
+		run: (input: TerminalRunInput) => Promise<TerminalRunResult>
 	}
 }
 

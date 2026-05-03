@@ -12,10 +12,13 @@ import { registerDialogIpc } from "./dialog/ipc"
 import { GitService } from "./git/gitService"
 import { registerGitIpc } from "./git/ipc"
 import { registerScopeFileIpc } from "./scopeFiles/ipc"
+import { registerTerminalIpc } from "./terminal/ipc"
+import { TerminalService } from "./terminal/terminalService"
 
 const agentEngine = new AgentEngine({ cwd: process.cwd() })
 const gitService = new GitService()
 const devServer = new DevServerService()
+const terminalService = new TerminalService()
 let database: DatabaseService | null = null
 
 function createWindow(): void {
@@ -28,6 +31,7 @@ function createWindow(): void {
 		...(process.platform === "linux" ? { icon } : {}),
 		webPreferences: {
 			preload: join(__dirname, "../preload/index.js"),
+			webviewTag: true,
 			sandbox: false
 		}
 	})
@@ -73,6 +77,7 @@ app.whenReady().then(async () => {
 	registerDialogIpc()
 	registerScopeFileIpc()
 	registerGitIpc(gitService, agentEngine, database)
+	registerTerminalIpc(terminalService)
 
 	createWindow()
 

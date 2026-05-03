@@ -43,6 +43,7 @@ import type {
 	GitWorkingTreeDiffSnapshot
 } from "../main/git/ipc"
 import type { SaveScopeFileInput, SaveScopeFileResult } from "../main/scopeFiles/ipc"
+import type { TerminalRunInput, TerminalRunResult } from "../main/terminal/ipc"
 
 // Custom APIs for renderer
 const api = {
@@ -138,6 +139,10 @@ const api = {
 	tasks: {
 		list: (agentId: string): Promise<TaskRow[]> => ipcRenderer.invoke("task:list", agentId),
 		create: (input: CreateTaskInput): Promise<TaskRow> => ipcRenderer.invoke("task:create", input)
+	},
+	terminal: {
+		run: (input: TerminalRunInput): Promise<TerminalRunResult> =>
+			ipcRenderer.invoke("terminal:run", input)
 	}
 }
 
