@@ -17,6 +17,8 @@ export type AgentRow = {
 	model: string
 	scope_path: string
 	effort: string
+	layout_x: number
+	layout_y: number
 }
 
 export type TaskRow = {
