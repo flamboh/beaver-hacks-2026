@@ -9,7 +9,7 @@ import {
 } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "motion/react"
-import { ArrowUp } from "lucide-react"
+import { ArrowUp, X } from "lucide-react"
 import {
 	getSemgrepStatus,
 	listAgentModels,
@@ -450,7 +450,7 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function Chat(
 									onClick={isRunning ? handleCancel : undefined}
 									disabled={isRunning ? !canCancel : !canSend}
 									aria-label={isRunning ? "Cancel message" : "Send message"}
-									title={isRunning ? "Cancel" : "Send message"}
+									title={isRunning ? "Cancel message" : "Send message"}
 									whileHover={isRunning ? { scale: 1.02 } : canSend ? { scale: 1.06 } : undefined}
 									whileTap={isRunning || canSend ? { scale: 0.92 } : undefined}
 									animate={{
@@ -466,9 +466,13 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function Chat(
 												: "rgb(113 113 122)"
 									}}
 									transition={{ type: "spring", stiffness: 500, damping: 32, mass: 0.6 }}
-									className="flex h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center rounded-full px-2 text-xs font-medium shadow-[0_4px_14px_-4px_rgba(59,130,246,0.55)] outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed disabled:shadow-none"
+									className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-xs font-medium shadow-[0_4px_14px_-4px_rgba(59,130,246,0.55)] outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed disabled:shadow-none"
 								>
-									{isRunning ? "Cancel" : <ArrowUp size={15} strokeWidth={2.75} />}
+									{isRunning ? (
+										<X size={16} strokeWidth={2.75} />
+									) : (
+										<ArrowUp size={15} strokeWidth={2.75} />
+									)}
 								</motion.button>
 							</div>
 						</div>
