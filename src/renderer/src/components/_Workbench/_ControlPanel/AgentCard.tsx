@@ -1,7 +1,7 @@
 import { Chat } from "@renderer/components/chat"
-import { useQuery } from "@tanstack/react-query"
 import { useAgentSnapshot } from "@renderer/agentStore"
 import type { AgentRow } from "@renderer/types/models"
+import TaskList from "./TaskList"
 
 function parseScopePath(p: string): string {
 	if (!p) return ""
@@ -31,12 +31,6 @@ export default function AgentCard({ agent, workspaceId, workspacePath }: Props) 
 		session !== null &&
 		(session.status === "starting" || session.status === "running" || session.activeTurnId !== null)
 
-	const { data: tasks = [] } = useQuery({
-		queryKey: ["tasks", agent.id],
-		queryFn: () => window.api.tasks.list(agent.id),
-		enabled: !!agent.id
-	})
-
 	const scopeDisplay = parseScopePath(agent.scope_path)
 
 	return (
@@ -56,23 +50,7 @@ export default function AgentCard({ agent, workspaceId, workspacePath }: Props) 
 			<div className="flex flex-1 overflow-hidden">
 				{/* left panel */}
 				<div className="flex flex-col w-[35%] shrink-0 border-r border-white/5 px-4 py-4 gap-5">
-					<div className="flex flex-col gap-1.5 flex-1">
-						<span className="text-[10px] uppercase tracking-widest text-neutral-600 font-medium">
-							Task List
-						</span>
-						{tasks.length === 0 ? (
-							<p className="text-xs text-neutral-700">No tasks yet</p>
-						) : (
-							<ol className="flex flex-col gap-1.5">
-								{tasks.map((task, i) => (
-									<li key={task.id} className="flex items-start gap-2 text-sm text-neutral-400">
-										<span className="text-neutral-700 tabular-nums shrink-0 mt-px">{i + 1}.</span>
-										<span className="leading-snug">{task.description}</span>
-									</li>
-								))}
-							</ol>
-						)}
-					</div>
+					<TaskList />
 
 					<div className="flex flex-col gap-1">
 						<span className="text-[10px] uppercase tracking-widest text-neutral-600 font-medium">
