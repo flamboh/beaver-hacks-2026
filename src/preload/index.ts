@@ -4,6 +4,7 @@ import type {
 	AgentProvider,
 	AgentModelOption,
 	AgentSnapshot,
+	SemgrepStatus,
 	FindSkillsInput,
 	InstallSkillInput,
 	SpawnThreadInput,
@@ -50,6 +51,8 @@ import type {
 	GitDiffTour,
 	GitPushInput,
 	GitPushResult,
+	GitReviewFileInput,
+	GitReviewFilesInput,
 	GitRunStackedActionInput,
 	GitRunStackedActionResult,
 	GitStackedActionProgressEvent,
@@ -73,6 +76,7 @@ const api = {
 		getSnapshot: (): Promise<AgentSnapshot> => ipcRenderer.invoke("agent:get-snapshot"),
 		listModels: (provider: AgentProvider): Promise<AgentModelOption[]> =>
 			ipcRenderer.invoke("agent:list-models", provider),
+		getSemgrepStatus: (): Promise<SemgrepStatus> => ipcRenderer.invoke("agent:get-semgrep-status"),
 		startTurn: (input: StartTurnInput): Promise<AgentSnapshot> =>
 			ipcRenderer.invoke("agent:start-turn", input),
 		findSkills: (input: FindSkillsInput): Promise<AgentSnapshot> =>
@@ -104,6 +108,14 @@ const api = {
 			ipcRenderer.invoke("git:checkout", input),
 		createBranch: (input: GitCreateBranchInput): Promise<GitStatusSnapshot> =>
 			ipcRenderer.invoke("git:create-branch", input),
+		acceptFile: (input: GitReviewFileInput): Promise<GitStatusSnapshot> =>
+			ipcRenderer.invoke("git:accept-file", input),
+		acceptFiles: (input: GitReviewFilesInput): Promise<GitStatusSnapshot> =>
+			ipcRenderer.invoke("git:accept-files", input),
+		denyFile: (input: GitReviewFileInput): Promise<GitStatusSnapshot> =>
+			ipcRenderer.invoke("git:deny-file", input),
+		denyFiles: (input: GitReviewFilesInput): Promise<GitStatusSnapshot> =>
+			ipcRenderer.invoke("git:deny-files", input),
 		generateCommitMessage: (workspaceId: string): Promise<GitCommitMessage> =>
 			ipcRenderer.invoke("git:generate-commit-message", workspaceId),
 		generateDiffTour: (workspaceId: string): Promise<GitDiffTour> =>

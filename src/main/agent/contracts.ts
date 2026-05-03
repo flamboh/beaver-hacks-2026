@@ -110,7 +110,15 @@ export interface StartTurnInput {
 	model?: string
 	effort?: string
 	speedTier?: string | null
+	planningMode?: boolean
+	securityMode?: boolean
 	runtimeMode?: AgentRuntimeMode
+}
+
+export interface SemgrepStatus {
+	available: boolean
+	command: string
+	detail: string | null
 }
 
 export interface FindSkillsInput {

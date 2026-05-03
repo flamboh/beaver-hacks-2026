@@ -3,6 +3,7 @@ import type {
 	AgentModelOption,
 	AgentProvider,
 	AgentSnapshot,
+	SemgrepStatus,
 	FindSkillsInput,
 	InstallSkillInput,
 	SpawnThreadInput,
@@ -49,6 +50,8 @@ import type {
 	GitDiffTour,
 	GitPushInput,
 	GitPushResult,
+	GitReviewFileInput,
+	GitReviewFilesInput,
 	GitRunStackedActionInput,
 	GitRunStackedActionResult,
 	GitStackedActionProgressEvent,
@@ -70,6 +73,7 @@ interface BeaverApi {
 	agent: {
 		getSnapshot: () => Promise<AgentSnapshot>
 		listModels: (provider: AgentProvider) => Promise<AgentModelOption[]>
+		getSemgrepStatus: () => Promise<SemgrepStatus>
 		startTurn: (input: StartTurnInput) => Promise<AgentSnapshot>
 		findSkills: (input: FindSkillsInput) => Promise<AgentSnapshot>
 		installSkill: (input: InstallSkillInput) => Promise<AgentSnapshot>
@@ -85,6 +89,10 @@ interface BeaverApi {
 		getWorkingTreeDiff: (workspaceId: string) => Promise<GitWorkingTreeDiffSnapshot>
 		checkout: (input: GitCheckoutInput) => Promise<GitStatusSnapshot>
 		createBranch: (input: GitCreateBranchInput) => Promise<GitStatusSnapshot>
+		acceptFile: (input: GitReviewFileInput) => Promise<GitStatusSnapshot>
+		acceptFiles: (input: GitReviewFilesInput) => Promise<GitStatusSnapshot>
+		denyFile: (input: GitReviewFileInput) => Promise<GitStatusSnapshot>
+		denyFiles: (input: GitReviewFilesInput) => Promise<GitStatusSnapshot>
 		generateCommitMessage: (workspaceId: string) => Promise<GitCommitMessage>
 		generateDiffTour: (workspaceId: string) => Promise<GitDiffTour>
 		commitAll: (input: GitCommitAllInput) => Promise<GitCommitResult>

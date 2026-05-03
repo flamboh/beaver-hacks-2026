@@ -3,7 +3,7 @@ import { useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "motion/react"
 import { ArrowUp } from "lucide-react"
-import { listAgentModels, sendAgentMessage } from "../agentStore"
+import { getSemgrepStatus, listAgentModels, sendAgentMessage } from "../agentStore"
 import type { AgentSnapshot } from "../../../main/agent/ipc"
 import type { ComposerMentionSuggestion } from "../../../main/composer/ipc"
 import { AgentRunSettings } from "./AgentRunSettings"
@@ -94,6 +94,8 @@ export function Chat({
 }: ChatProps): JSX.Element {
 	const [draft, setDraft] = useState("")
 	const [isSending, setIsSending] = useState(false)
+	const [planningMode, setPlanningMode] = useState(false)
+	const [securityMode, setSecurityMode] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [cursor, setCursor] = useState(0)
 	const [suggestionIndex, setSuggestionIndex] = useState(0)
@@ -109,6 +111,11 @@ export function Chat({
 		queryFn: () => listAgentModels(provider ?? "codex"),
 		enabled: Boolean(provider),
 		staleTime: 5 * 60 * 1000
+	})
+	const { data: semgrepStatus } = useQuery({
+		queryKey: ["agent-semgrep-status"],
+		queryFn: getSemgrepStatus,
+		staleTime: 60 * 1000
 	})
 	const { data: fileSuggestions = [] } = useQuery({
 		queryKey: ["composer-files", cwd, activeToken?.kind === "file" ? activeToken.query : ""],
@@ -146,11 +153,23 @@ export function Chat({
 	)
 		? speedTier
 		: null
+	const semgrepUnavailable =
+		securityMode && semgrepStatus !== undefined && semgrepStatus.available === false
+	const autoScrollKey = thread?.updatedAt ?? "idle"
+
+	function scrollAnchorRef(node: HTMLDivElement | null): void {
+		if (!node) return
+		node.scrollIntoView({ block: "end" })
+	}
 
 	function handleSubmit(event: FormEvent<HTMLFormElement>): void {
 		event.preventDefault()
 		const prompt = draft.trim()
 		if (!prompt || isSending || isRunning) return
+		if (semgrepUnavailable) {
+			setError("Security mode requires Semgrep CLI. Install Semgrep and retry.")
+			return
+		}
 
 		setDraft("")
 		setError(null)
@@ -165,7 +184,9 @@ export function Chat({
 					...(thread || !provider ? {} : { provider }),
 					...(selectedModel ? { model: selectedModel } : {}),
 					...(selectedEffort ? { effort: selectedEffort } : {}),
-					...(selectedSpeedTier ? { speedTier: selectedSpeedTier } : {})
+					...(selectedSpeedTier ? { speedTier: selectedSpeedTier } : {}),
+					...(planningMode ? { planningMode: true } : {}),
+					...(securityMode ? { securityMode: true } : {})
 				})
 			)
 			.then(() => onMessageSent?.(prompt).catch(() => undefined))
@@ -262,6 +283,7 @@ export function Chat({
 							<p className="mt-2 text-sm text-zinc-500">Send a message to start the loop.</p>
 						</motion.div>
 					)}
+					<div key={`scroll-anchor:${autoScrollKey}`} ref={scrollAnchorRef} />
 				</div>
 			</section>
 
@@ -327,9 +349,13 @@ export function Chat({
 									runtimeModel={runtimeModel}
 									effort={effort}
 									speedTier={speedTier}
+									planningMode={planningMode}
+									securityMode={securityMode}
 									onModelChange={onModelChange}
 									onEffortChange={onEffortChange}
 									onSpeedTierChange={onSpeedTierChange}
+									onPlanningModeChange={setPlanningMode}
+									onSecurityModeChange={setSecurityMode}
 								/>
 								<motion.button
 									type="submit"
@@ -350,6 +376,13 @@ export function Chat({
 							</div>
 						</div>
 					</div>
+					{semgrepUnavailable ? (
+						<p className="mt-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
+							Security mode requires Semgrep CLI (`{semgrepStatus?.command ?? "semgrep"}` not
+							found). Install it with `brew install semgrep` or `python3 -m pip install semgrep`,
+							then retry.
+						</p>
+					) : null}
 					<AnimatePresence>
 						{error ? (
 							<motion.p

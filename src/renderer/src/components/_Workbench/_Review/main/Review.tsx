@@ -224,6 +224,8 @@ export default function Review({
 				<ReviewFilesWorkspace
 					key={buildPatchCacheKey(diffQuery.data?.patch ?? "", "review-workspace")}
 					files={renderablePatch.files}
+					workspaceId={workspaceId}
+					onMessage={setMessage}
 				/>
 			) : (
 				<div className="min-h-0 flex-1 overflow-auto pt-4">
