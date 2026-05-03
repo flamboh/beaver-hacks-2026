@@ -25,9 +25,12 @@ const STATUS_ORDER: Record<AgentStatus, number> = {
 }
 
 const EFFORT_STYLES: Record<string, string> = {
+	none: "border-white/10 bg-white/8 text-neutral-200",
+	minimal: "border-white/10 bg-white/8 text-neutral-200",
 	low: "border-white/10 bg-white/8 text-neutral-200",
 	medium: "border-white/10 bg-white/8 text-neutral-200",
-	high: "border-white/10 bg-white/8 text-neutral-200"
+	high: "border-white/10 bg-white/8 text-neutral-200",
+	xhigh: "border-white/10 bg-white/8 text-neutral-200"
 }
 
 const STATUS_STYLES: Record<AgentStatus, string> = {
@@ -47,7 +50,7 @@ const STATUS_BORDER_STYLES: Record<AgentStatus, string> = {
 function agentImage(agent: AgentCardRow) {
 	const isClaude = agent.model.includes("claude")
 	return {
-		label: isClaude ? "Claude Code" : "Codex",
+		label: isClaude ? "Claude" : "OpenAI",
 		provider: (isClaude ? "claudeCode" : "codex") as AgentProvider
 	}
 }

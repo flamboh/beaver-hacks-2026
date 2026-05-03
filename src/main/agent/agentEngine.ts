@@ -14,6 +14,7 @@ import { installProjectSkill } from "../skills/skillInstaller"
 import { listInstalledSkillKeys, matchesInstalledSkill } from "../skills/installedSkills"
 import type {
 	AgentActivity,
+	AgentModelOption,
 	AgentMessage,
 	AgentPlan,
 	AgentProvider,
@@ -31,6 +32,10 @@ import type {
 
 const AGENT_NAME_MODEL = "gpt-5.4-mini"
 
+interface AgentPlanSink {
+	syncPlan(agentId: string, turnId: string | null, plan: AgentPlan): Promise<void>
+}
+
 function nowIso(): string {
 	return new Date().toISOString()
 }
@@ -45,6 +50,12 @@ function emptyPlan(): AgentPlan {
 
 function providerForThread(thread: AgentThread): AgentProvider {
 	return thread.provider
+}
+
+function agentIdForThread(threadId: string): string | null {
+	if (threadId.startsWith("agent:")) return threadId
+	if (!threadId.startsWith("thread:agent:")) return null
+	return threadId.slice("thread:".length)
 }
 
 function newMessage(input: {
@@ -69,6 +80,7 @@ export class AgentEngine {
 	private readonly events = new EventEmitter()
 	private readonly codexProvider: CodexAdapter
 	private readonly providers: Record<AgentProvider, ProviderAdapter>
+	private planSink: AgentPlanSink | null = null
 	private threads = new Map<string, AgentThread>()
 	private activeThreadId: string | null = null
 
@@ -81,6 +93,14 @@ export class AgentEngine {
 		for (const provider of Object.values(this.providers)) {
 			provider.onEvent((event) => this.ingestProviderEvent(event))
 		}
+	}
+
+	setPlanSink(sink: AgentPlanSink): void {
+		this.planSink = sink
+	}
+
+	async listModels(provider: AgentProvider): Promise<AgentModelOption[]> {
+		return this.providers[provider].listModels?.() ?? []
 	}
 
 	getSnapshot(): AgentSnapshot {
@@ -118,7 +138,9 @@ export class AgentEngine {
 			await provider.sendTurn({
 				threadId: thread.id,
 				prompt: input.prompt,
-				...(input.model ? { model: input.model } : {})
+				...(input.model ? { model: input.model } : {}),
+				...(input.effort ? { effort: input.effort } : {}),
+				...(input.speedTier ? { speedTier: input.speedTier } : {})
 			})
 		} catch (error) {
 			this.setThreadSession(thread.id, {
@@ -269,7 +291,7 @@ export class AgentEngine {
 					model: event.payload.model ?? thread.session?.model ?? thread.model,
 					activeTurnId: thread.session?.activeTurnId ?? null,
 					lastError:
-						event.payload.status === "error" ? (event.payload.reason ?? "Codex error") : null,
+						event.payload.status === "error" ? (event.payload.reason ?? "Agent error") : null,
 					updatedAt: event.createdAt
 				})
 				break
@@ -328,6 +350,7 @@ export class AgentEngine {
 
 			case "plan.updated":
 				thread.plan = event.payload.plan
+				this.syncPlanTasks(thread, event)
 				break
 
 			case "runtime.error":
@@ -398,5 +421,26 @@ export class AgentEngine {
 
 	private emitSnapshot(): void {
 		this.events.emit("snapshot", this.getSnapshot())
+	}
+
+	private syncPlanTasks(
+		thread: AgentThread,
+		event: Extract<ProviderRuntimeEvent, { type: "plan.updated" }>
+	): void {
+		const agentId = agentIdForThread(thread.id)
+		if (!this.planSink || !agentId) return
+		void this.planSink
+			.syncPlan(agentId, event.turnId, event.payload.plan)
+			.catch((error: unknown) => {
+				thread.activities.push({
+					id: `activity:${randomUUID()}`,
+					kind: "task.sync.error",
+					summary: error instanceof Error ? error.message : String(error),
+					payload: {},
+					turnId: event.turnId,
+					createdAt: nowIso()
+				})
+				this.emitSnapshot()
+			})
 	}
 }

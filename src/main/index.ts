@@ -6,6 +6,7 @@ import { AgentEngine } from "./agent/agentEngine"
 import { registerAgentIpc } from "./agent/ipc"
 import { DatabaseService } from "./db/database"
 import { registerDatabaseIpc } from "./db/ipc"
+import { TaskService } from "./db/tasks"
 import { DevServerService } from "./devServer/devServerService"
 import { registerDevServerIpc } from "./devServer/ipc"
 import { registerDialogIpc } from "./dialog/ipc"
@@ -91,6 +92,7 @@ app.whenReady().then(async () => {
 
 	database = new DatabaseService(join(app.getPath("userData"), "beaver.sqlite"))
 	await database.initialize()
+	agentEngine.setPlanSink(new TaskService(database.db))
 
 	registerAgentIpc(agentEngine)
 	registerDatabaseIpc(database)

@@ -1,5 +1,5 @@
 import type { CodexWireMessage } from "./codexJsonRpc"
-import type { ProviderRuntimeEvent } from "./contracts"
+import type { AgentPlan, AgentPlanItemStatus, ProviderRuntimeEvent } from "./contracts"
 
 function readPath(payload: unknown, path: string[]): unknown {
 	let cursor = payload as Record<string, unknown> | undefined | null
@@ -11,6 +11,10 @@ function readPath(payload: unknown, path: string[]): unknown {
 
 function readText(value: unknown): string | undefined {
 	return value === undefined || value === null ? undefined : String(value)
+}
+
+function readArray(value: unknown): unknown[] {
+	return Array.isArray(value) ? value : []
 }
 
 function itemType(params: unknown): string {
@@ -40,6 +44,53 @@ function itemSummary(params: unknown): { kind: string; summary: string } | null 
 		return { kind: "tool.call", summary: itemTitle(params) ?? "Called tool" }
 	}
 	return null
+}
+
+function planStatus(value: unknown): AgentPlanItemStatus {
+	const status = readText(value)
+	if (
+		status === "pending" ||
+		status === "in_progress" ||
+		status === "completed" ||
+		status === "cancelled"
+	) {
+		return status
+	}
+	if (status === "inProgress") return "in_progress"
+	if (status === "in-progress") return "in_progress"
+	if (status === "done") return "completed"
+	return "pending"
+}
+
+function planFromParams(params: unknown, createdAt: string): AgentPlan | null {
+	const plan = readPath(params, ["plan"])
+	const rawItems =
+		readArray(plan).length > 0 ? readArray(plan) : readArray(readPath(plan, ["items"]))
+	if (rawItems.length === 0) return null
+
+	const items = rawItems.map((item, index) => {
+		const title =
+			readText(
+				readPath(item, ["step"]) ??
+					readPath(item, ["title"]) ??
+					readPath(item, ["description"]) ??
+					readPath(item, ["text"]) ??
+					readPath(item, ["task"])
+			)?.trim() || `Plan item ${index + 1}`
+		return {
+			id: readText(readPath(item, ["id"])) ?? `plan-item:${index}`,
+			title,
+			status: planStatus(readPath(item, ["status"])),
+			detail: readText(readPath(item, ["detail"]) ?? readPath(item, ["notes"])) ?? null,
+			updatedAt: readText(readPath(item, ["updatedAt"])) ?? createdAt
+		}
+	})
+
+	return {
+		items,
+		source: "codex",
+		updatedAt: createdAt
+	}
 }
 
 export function providerThreadIdForNotification(message: CodexWireMessage): string | undefined {
@@ -114,7 +165,17 @@ export function codexNotificationEvents(input: {
 	}
 
 	if (method === "turn/plan/updated") {
-		return [activity(input, turnId, "plan.updated", "Updated plan", params)]
+		const plan = planFromParams(params, input.createdAt)
+		if (!plan) return [activity(input, turnId, "plan.updated", "Updated plan", params)]
+		return [
+			{
+				type: "plan.updated",
+				threadId: input.appThreadId,
+				turnId,
+				createdAt: input.createdAt,
+				payload: { plan }
+			}
+		]
 	}
 
 	if (method === "item/plan/delta") {

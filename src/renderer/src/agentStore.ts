@@ -1,5 +1,5 @@
 import { useMemo, useSyncExternalStore } from "react"
-import type { AgentSnapshot } from "../../main/agent/ipc"
+import type { AgentModelOption, AgentProvider, AgentSnapshot } from "../../main/agent/ipc"
 import type {
 	GitCheckoutInput,
 	GitCommitAllInput,
@@ -63,17 +63,25 @@ export function useAgentSnapshot(): AgentSnapshot {
 	return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
+export function listAgentModels(provider: AgentProvider): Promise<AgentModelOption[]> {
+	return window.api.agent.listModels(provider)
+}
+
 export async function sendAgentMessage(input: {
 	prompt: string
 	cwd: string
 	threadId?: string
 	provider?: AgentSnapshot["threads"][number]["provider"]
 	model?: string
+	effort?: string
+	speedTier?: string | null
 }): Promise<AgentSnapshot> {
 	const nextSnapshot = await window.api.agent.startTurn({
 		...(input.threadId ? { threadId: input.threadId } : {}),
 		...(input.provider ? { provider: input.provider } : {}),
 		...(input.model ? { model: input.model } : {}),
+		...(input.effort ? { effort: input.effort } : {}),
+		...(input.speedTier ? { speedTier: input.speedTier } : {}),
 		cwd: input.cwd,
 		prompt: input.prompt,
 		runtimeMode: "full-access"

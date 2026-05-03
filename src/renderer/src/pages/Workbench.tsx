@@ -6,18 +6,20 @@ import Agents from "@renderer/components/_Workbench/_Agents/main/Agents"
 import Settings from "@renderer/components/_Workbench/_Settings/main/Settings"
 import { useAgentSnapshot } from "@renderer/agentStore"
 import { useSessionData } from "@renderer/hooks/useSessionData"
-import { WorkbenchTab } from "@renderer/types/models"
-import { useQuery } from "@tanstack/react-query"
+import type { ProjectRow, WorkbenchTab } from "@renderer/types/models"
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
+import type { WorkspaceRow } from "../../../main/db/ipc"
 
 const WORKBENCH_TABS: WorkbenchTab[] = ["control-panel", "review", "agents", "settings"]
 
 export default function Workbench() {
 	const { projectId, tab } = useParams()
 	const navigate = useNavigate()
+	const queryClient = useQueryClient()
 	const snapshot = useAgentSnapshot()
-	const { project: sessionProject } = useSessionData()
+	const { project: sessionProject, setProject } = useSessionData()
 	const initialPage = WORKBENCH_TABS.includes(tab as WorkbenchTab)
 		? (tab as WorkbenchTab)
 		: "control-panel"
@@ -27,7 +29,21 @@ export default function Workbench() {
 		queryKey: ["project", projectId],
 		queryFn: () => window.api.projects.get({ id: projectId ?? "" })
 	})
+	const projectsQuery = useQuery({
+		queryKey: ["projects"],
+		queryFn: () => window.api.projects.list()
+	})
 	const project = projectQuery.data ?? (sessionProject?.id === projectId ? sessionProject : null)
+	const projects = projectsQuery.data ?? []
+	const projectWorkspacesQueries = useQueries({
+		queries: projects.map((project) => ({
+			queryKey: ["workspaces", project.id],
+			queryFn: () => window.api.workspaces.list({ projectId: project.id })
+		}))
+	})
+	const workspacesByProjectId = new Map<string, WorkspaceRow[]>(
+		projects.map((project, index) => [project.id, projectWorkspacesQueries[index]?.data ?? []])
+	)
 	const workspacesQuery = useQuery({
 		queryKey: ["workspaces", projectId],
 		queryFn: () => window.api.workspaces.list({ projectId: projectId ?? "" }),
@@ -46,6 +62,32 @@ export default function Workbench() {
 
 	const setProjectPage = (nextTab: WorkbenchTab) => {
 		if (projectId) navigate(`/project/${encodeURIComponent(projectId)}/workbench/${nextTab}`)
+	}
+
+	const selectProject = (nextProject: ProjectRow) => {
+		setProject({
+			id: nextProject.id,
+			name: nextProject.name,
+			path: nextProject.path
+		})
+		void window.api.projects.touch({ id: nextProject.id })
+		navigate(`/project/${encodeURIComponent(nextProject.id)}/workbench/${currentPage}`)
+	}
+
+	const selectWorkspace = (nextProject: ProjectRow, workspace: WorkspaceRow) => {
+		setProject({
+			id: nextProject.id,
+			name: nextProject.name,
+			path: nextProject.path
+		})
+		void window.api.projects.touch({ id: nextProject.id })
+		void window.api.workspaces
+			.activate({ id: workspace.id })
+			.then(async () => {
+				await queryClient.invalidateQueries({ queryKey: ["workspaces", nextProject.id] })
+				navigate(`/project/${encodeURIComponent(nextProject.id)}/workbench/${currentPage}`)
+			})
+			.catch(() => undefined)
 	}
 
 	const setWorkspace = (workspaceId: string) => {
@@ -90,7 +132,9 @@ export default function Workbench() {
 			<TopBar
 				activeAgentCount={activeAgentCount}
 				activeWorkspace={activeWorkspace}
+				currentPage={currentPage}
 				onWorkspacesChanged={() => workspacesQuery.refetch()}
+				onTabChange={setProjectPage}
 				onToggleSidebar={() => setSidebarOpen((open) => !open)}
 				onWorkspaceChange={setWorkspace}
 				projectId={project?.id ?? null}
@@ -98,10 +142,13 @@ export default function Workbench() {
 			/>
 			<div className="flex flex-1 overflow-hidden">
 				<SideBar
-					currentPage={currentPage}
-					projectName={project?.name ?? "Loading project"}
-					setCurrentPage={setProjectPage}
+					activeProjectId={project?.id ?? null}
+					activeWorkspaceId={activeWorkspace?.id ?? null}
+					onProjectSelect={selectProject}
+					onWorkspaceSelect={selectWorkspace}
 					open={sidebarOpen}
+					projects={projects}
+					workspacesByProjectId={workspacesByProjectId}
 				/>
 				<main className={`flex-1 overflow-hidden ${isCanvas ? "" : "overflow-auto p-6"}`}>
 					{(projectQuery.isLoading || workspacesQuery.isLoading) &&
