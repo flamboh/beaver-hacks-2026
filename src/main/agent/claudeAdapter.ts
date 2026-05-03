@@ -10,6 +10,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk"
 import { ClaudePromptQueue } from "./claudePromptQueue"
 import type {
+	AgentModelOption,
 	AgentPlan,
 	AgentPlanItemStatus,
 	AgentRuntimeMode,
@@ -36,6 +37,32 @@ interface ClaudeThreadState {
 }
 
 const DEFAULT_MODEL = "claude-sonnet-4-6"
+const CLAUDE_MODELS: AgentModelOption[] = [
+	{
+		id: "claude-opus-4-7",
+		label: "Claude Opus 4.7",
+		provider: "claude",
+		isDefault: false,
+		reasoningEfforts: [],
+		speedTiers: []
+	},
+	{
+		id: DEFAULT_MODEL,
+		label: "Claude Sonnet 4.6",
+		provider: "claude",
+		isDefault: true,
+		reasoningEfforts: [],
+		speedTiers: []
+	},
+	{
+		id: "claude-haiku-4-5",
+		label: "Claude Haiku 4.5",
+		provider: "claude",
+		isDefault: false,
+		reasoningEfforts: [],
+		speedTiers: []
+	}
+]
 
 function nowIso(): string {
 	return new Date().toISOString()
@@ -274,6 +301,10 @@ export class ClaudeAdapter implements ProviderAdapter {
 			activeTurnId: null,
 			updatedAt: nowIso()
 		})
+	}
+
+	async listModels(): Promise<AgentModelOption[]> {
+		return CLAUDE_MODELS
 	}
 
 	onEvent(listener: (event: ProviderRuntimeEvent) => void): () => void {

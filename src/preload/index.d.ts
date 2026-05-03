@@ -1,5 +1,7 @@
 import { ElectronAPI } from "@electron-toolkit/preload"
 import type {
+	AgentModelOption,
+	AgentProvider,
 	AgentSnapshot,
 	FindSkillsInput,
 	InstallSkillInput,
@@ -49,6 +51,7 @@ import type { TerminalRunInput, TerminalRunResult } from "../main/terminal/ipc"
 interface BeaverApi {
 	agent: {
 		getSnapshot: () => Promise<AgentSnapshot>
+		listModels: (provider: AgentProvider) => Promise<AgentModelOption[]>
 		startTurn: (input: StartTurnInput) => Promise<AgentSnapshot>
 		findSkills: (input: FindSkillsInput) => Promise<AgentSnapshot>
 		installSkill: (input: InstallSkillInput) => Promise<AgentSnapshot>

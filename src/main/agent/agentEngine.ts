@@ -14,6 +14,7 @@ import { installProjectSkill } from "../skills/skillInstaller"
 import { listInstalledSkillKeys, matchesInstalledSkill } from "../skills/installedSkills"
 import type {
 	AgentActivity,
+	AgentModelOption,
 	AgentMessage,
 	AgentPlan,
 	AgentProvider,
@@ -98,6 +99,10 @@ export class AgentEngine {
 		this.planSink = sink
 	}
 
+	async listModels(provider: AgentProvider): Promise<AgentModelOption[]> {
+		return this.providers[provider].listModels?.() ?? []
+	}
+
 	getSnapshot(): AgentSnapshot {
 		return {
 			threads: Array.from(this.threads.values()),
@@ -133,7 +138,9 @@ export class AgentEngine {
 			await provider.sendTurn({
 				threadId: thread.id,
 				prompt: input.prompt,
-				...(input.model ? { model: input.model } : {})
+				...(input.model ? { model: input.model } : {}),
+				...(input.effort ? { effort: input.effort } : {}),
+				...(input.speedTier ? { speedTier: input.speedTier } : {})
 			})
 		} catch (error) {
 			this.setThreadSession(thread.id, {
@@ -284,7 +291,7 @@ export class AgentEngine {
 					model: event.payload.model ?? thread.session?.model ?? thread.model,
 					activeTurnId: thread.session?.activeTurnId ?? null,
 					lastError:
-						event.payload.status === "error" ? (event.payload.reason ?? "Codex error") : null,
+						event.payload.status === "error" ? (event.payload.reason ?? "Agent error") : null,
 					updatedAt: event.createdAt
 				})
 				break

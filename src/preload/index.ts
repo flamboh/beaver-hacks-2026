@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron"
 import { electronAPI } from "@electron-toolkit/preload"
 import type {
+	AgentProvider,
+	AgentModelOption,
 	AgentSnapshot,
 	FindSkillsInput,
 	InstallSkillInput,
@@ -51,6 +53,8 @@ import type { TerminalRunInput, TerminalRunResult } from "../main/terminal/ipc"
 const api = {
 	agent: {
 		getSnapshot: (): Promise<AgentSnapshot> => ipcRenderer.invoke("agent:get-snapshot"),
+		listModels: (provider: AgentProvider): Promise<AgentModelOption[]> =>
+			ipcRenderer.invoke("agent:list-models", provider),
 		startTurn: (input: StartTurnInput): Promise<AgentSnapshot> =>
 			ipcRenderer.invoke("agent:start-turn", input),
 		findSkills: (input: FindSkillsInput): Promise<AgentSnapshot> =>

@@ -1,7 +1,14 @@
 import { EventEmitter } from "node:events"
 import { generatedId, CodexJsonRpc, type CodexWireMessage } from "./codexJsonRpc"
+import {
+	codexModelOption,
+	DEFAULT_CODEX_MODEL,
+	fallbackCodexModels,
+	type CodexModelListResponse
+} from "./codexModels"
 import { codexNotificationEvents, providerThreadIdForNotification } from "./codexNotifications"
 import type {
+	AgentModelOption,
 	AgentRuntimeMode,
 	AgentSession,
 	ProviderAdapter,
@@ -36,7 +43,6 @@ interface CodexTurnStartResponse {
 	model?: string
 }
 
-const DEFAULT_MODEL = "gpt-5.5"
 const DEFAULT_ONE_SHOT_TIMEOUT_MS = 45_000
 
 function nowIso(): string {
@@ -126,13 +132,13 @@ export class CodexAdapter implements ProviderAdapter {
 			type: "session.state.changed",
 			threadId: input.threadId,
 			createdAt: nowIso(),
-			payload: { status: "starting", reason: "Starting Codex app-server." }
+			payload: { status: "starting", reason: "Starting agent session." }
 		})
 
 		await this.ensureInitialized()
 
 		const config = runtimeModeToThreadConfig(input.runtimeMode)
-		const requestedModel = input.model ?? DEFAULT_MODEL
+		const requestedModel = input.model ?? DEFAULT_CODEX_MODEL
 		const opened = (await this.rpc.request("thread/start", {
 			cwd: input.cwd,
 			approvalPolicy: config.approvalPolicy,
@@ -164,7 +170,7 @@ export class CodexAdapter implements ProviderAdapter {
 			type: "session.state.changed",
 			threadId: input.threadId,
 			createdAt: session.updatedAt,
-			payload: { status: "ready", reason: "Codex session ready.", model }
+			payload: { status: "ready", reason: "Agent session ready.", model }
 		})
 
 		return session
@@ -172,16 +178,18 @@ export class CodexAdapter implements ProviderAdapter {
 
 	async sendTurn(input: ProviderSendTurnInput): Promise<ProviderTurnStartResult> {
 		const thread = this.threads.get(input.threadId)
-		if (!thread) throw new Error(`Codex session not started for thread ${input.threadId}`)
+		if (!thread) throw new Error(`Agent session not started for thread ${input.threadId}`)
 
 		const config = runtimeModeToThreadConfig(thread.runtimeMode)
-		const requestedModel = thread.model ?? input.model ?? DEFAULT_MODEL
+		const requestedModel = input.model ?? thread.model ?? DEFAULT_CODEX_MODEL
 		const response = (await this.rpc.request("turn/start", {
 			threadId: thread.providerThreadId,
 			input: [{ type: "text", text: input.prompt }],
 			approvalPolicy: config.approvalPolicy,
 			sandboxPolicy: config.sandboxPolicy,
-			model: requestedModel
+			model: requestedModel,
+			...(input.effort ? { effort: input.effort } : {}),
+			...(input.speedTier ? { serviceTier: input.speedTier } : {})
 		})) as CodexTurnStartResponse
 
 		const turnId = String(response.turn.id)
@@ -216,6 +224,24 @@ export class CodexAdapter implements ProviderAdapter {
 		})
 	}
 
+	async listModels(): Promise<AgentModelOption[]> {
+		await this.ensureInitialized()
+		const models: AgentModelOption[] = []
+		let cursor: string | null | undefined = null
+		do {
+			const response = (await this.rpc.request("model/list", {
+				...(cursor ? { cursor } : {}),
+				includeHidden: false
+			})) as CodexModelListResponse
+			for (const model of response.data ?? []) {
+				const option = codexModelOption(model)
+				if (option) models.push(option)
+			}
+			cursor = response.nextCursor
+		} while (cursor)
+		return models.length > 0 ? models : fallbackCodexModels()
+	}
+
 	async runOneShot(input: {
 		cwd: string
 		prompt: string
@@ -248,7 +274,7 @@ export class CodexAdapter implements ProviderAdapter {
 					clearTimeout(timeout)
 					void this.stopSession(threadId)
 					if (event.payload.status === "failed") {
-						reject(new Error(event.payload.error ?? "Codex one-shot turn failed"))
+						reject(new Error(event.payload.error ?? "Agent turn failed"))
 						return
 					}
 					resolve(output)
@@ -258,7 +284,7 @@ export class CodexAdapter implements ProviderAdapter {
 			const timeout = setTimeout(() => {
 				cleanup()
 				void this.stopSession(threadId)
-				reject(new Error("Codex one-shot turn timed out"))
+				reject(new Error("Agent turn timed out"))
 			}, input.timeoutMs ?? DEFAULT_ONE_SHOT_TIMEOUT_MS)
 
 			void this.startSession({
