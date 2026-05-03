@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useState } from "react"
-import { AlignLeft, FolderOpen, X } from "lucide-react"
+import { AlignLeft, ChevronDown, FolderOpen, X } from "lucide-react"
 
 const MODEL_OPTIONS: { group: string; models: { value: string; label: string }[] }[] = [
 	{
@@ -24,9 +24,9 @@ const MODEL_OPTIONS: { group: string; models: { value: string; label: string }[]
 const EFFORT_OPTIONS = ["low", "medium", "high"] as const
 
 const EFFORT_STYLES: Record<(typeof EFFORT_OPTIONS)[number], string> = {
-	low: "border-emerald-500/30 bg-emerald-500/15 text-emerald-400",
-	medium: "border-yellow-500/30 bg-yellow-500/15 text-yellow-400",
-	high: "border-red-500/30 bg-red-500/15 text-red-400"
+	low: "border-white/10 bg-white/8 text-neutral-200",
+	medium: "border-white/10 bg-white/8 text-neutral-200",
+	high: "border-white/10 bg-white/8 text-neutral-200"
 }
 
 const DEFAULT_FORM = {
@@ -97,22 +97,28 @@ export default function NewAgentModal({ onCancel, onCreate }: NewAgentModalProps
 						</Field>
 
 						<Field label="Model">
-							<select
-								value={form.model}
-								onChange={(event) => set("model", event.target.value)}
-								disabled={isSubmitting}
-								className="w-full appearance-none rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 text-sm text-white transition-colors duration-300 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								{MODEL_OPTIONS.map((group) => (
-									<optgroup key={group.group} label={group.group}>
-										{group.models.map((model) => (
-											<option key={model.value} value={model.value}>
-												{model.label}
-											</option>
-										))}
-									</optgroup>
-								))}
-							</select>
+							<div className="relative">
+								<select
+									value={form.model}
+									onChange={(event) => set("model", event.target.value)}
+									disabled={isSubmitting}
+									className="cursor-pointer w-full appearance-none rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 pr-9 text-sm text-white transition-colors duration-300 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+								>
+									{MODEL_OPTIONS.map((group) => (
+										<optgroup key={group.group} label={group.group}>
+											{group.models.map((model) => (
+												<option key={model.value} value={model.value}>
+													{model.label}
+												</option>
+											))}
+										</optgroup>
+									))}
+								</select>
+								<ChevronDown
+									size={14}
+									className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500"
+								/>
+							</div>
 						</Field>
 
 						<Field label="Effort Level">
@@ -135,7 +141,7 @@ export default function NewAgentModal({ onCancel, onCreate }: NewAgentModalProps
 							</div>
 						</Field>
 
-						<Field label="Instructions">
+						<Field label="Scope">
 							<div className="mb-2 grid grid-cols-2 overflow-hidden rounded-md border border-white/5">
 								<button
 									type="button"
@@ -175,7 +181,7 @@ export default function NewAgentModal({ onCancel, onCreate }: NewAgentModalProps
 							) : (
 								<input
 									type="text"
-									placeholder="./docs/agent-scope.md"
+									placeholder="./scopes/agent-scope.md"
 									value={form.scopePath}
 									onChange={(event) => set("scopePath", event.target.value)}
 									disabled={isSubmitting}
