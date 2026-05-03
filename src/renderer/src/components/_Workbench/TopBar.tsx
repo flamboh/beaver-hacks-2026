@@ -52,7 +52,7 @@ export default function TopBar({
 				<div className="flex items-center gap-2 text-sm font-medium">
 					<button
 						type="button"
-						onClick={() => navigate("/")}
+						onClick={() => navigate("/landing")}
 						className="group flex cursor-pointer items-center gap-2 tracking-wide text-white transition-colors duration-150 hover:text-neutral-300"
 					>
 						<img

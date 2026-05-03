@@ -4,11 +4,13 @@ import {
 	FolderPlus,
 	GitBranch,
 	GitBranchPlus,
-	Trash2,
-	PanelLeft
+	PanelLeft,
+	Trash2
 } from "lucide-react"
+import { useAgentSnapshot } from "@renderer/agentStore"
 import type { ProjectRow } from "@renderer/types/models"
 import { useRef, useState, type PointerEvent } from "react"
+import type { AgentSnapshot } from "src/main/agent/contracts"
 import type { WorkspaceRow } from "src/main/db/contracts"
 
 interface Props {
@@ -46,6 +48,41 @@ function sortProjects(projects: ProjectRow[]) {
 	})
 }
 
+type AgentThread = AgentSnapshot["threads"][number]
+
+function agentIsWorking(thread: AgentThread): boolean {
+	const session = thread.session
+	return (
+		session !== null &&
+		(session.status === "starting" || session.status === "running" || session.activeTurnId !== null)
+	)
+}
+
+function WorkspaceAgentStatuses({ threads }: { threads: AgentThread[] }) {
+	if (threads.length === 0) return null
+
+	return (
+		<span
+			className="ml-2 flex max-w-20 shrink-0 items-center gap-1 overflow-hidden"
+			aria-hidden="true"
+		>
+			{threads.map((thread) => {
+				const working = agentIsWorking(thread)
+				return (
+					<span
+						key={thread.id}
+						className={`size-2 rounded-full ${
+							working
+								? "bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.35)]"
+								: "bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.30)]"
+						}`}
+					/>
+				)
+			})}
+		</span>
+	)
+}
+
 export default function SideBar({
 	activeProjectId,
 	activeWorkspaceId,
@@ -59,6 +96,7 @@ export default function SideBar({
 	projects,
 	workspacesByProjectId
 }: Props) {
+	const snapshot = useAgentSnapshot()
 	const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
 	const [resizing, setResizing] = useState(false)
 	const resizeStart = useRef({ width: DEFAULT_SIDEBAR_WIDTH, x: 0 })
@@ -81,6 +119,13 @@ export default function SideBar({
 
 	const stopResize = () => {
 		setResizing(false)
+	}
+
+	const threadsByWorkspacePath = new Map<string, AgentThread[]>()
+	for (const thread of snapshot.threads) {
+		const threads = threadsByWorkspacePath.get(thread.cwd) ?? []
+		threads.push(thread)
+		threadsByWorkspacePath.set(thread.cwd, threads)
 	}
 
 	return (
@@ -192,6 +237,9 @@ export default function SideBar({
 															aria-hidden="true"
 														/>
 														<span className="min-w-0 truncate text-[0.9rem]">{workspace.name}</span>
+														<WorkspaceAgentStatuses
+															threads={threadsByWorkspacePath.get(workspace.path) ?? []}
+														/>
 													</button>
 													<button
 														type="button"
