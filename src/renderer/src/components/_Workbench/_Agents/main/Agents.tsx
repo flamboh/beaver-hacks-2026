@@ -35,15 +35,15 @@ const EFFORT_STYLES: Record<string, string> = {
 
 const STATUS_STYLES: Record<AgentStatus, string> = {
 	failure: "bg-red-500",
-	pending: "bg-orange-400",
-	working: "bg-blue-500",
+	pending: "bg-blue-400",
+	working: "bg-orange-400",
 	idle: "bg-neutral-500"
 }
 
 const STATUS_BORDER_STYLES: Record<AgentStatus, string> = {
 	failure: "border-red-500/80",
-	pending: "border-orange-400/80",
-	working: "border-blue-500/80",
+	pending: "border-blue-400/80",
+	working: "border-orange-400/80",
 	idle: "border-neutral-400/70"
 }
 

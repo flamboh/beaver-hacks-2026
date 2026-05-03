@@ -50,9 +50,12 @@ function sortProjects(projects: ProjectRow[]) {
 
 type AgentThread = AgentSnapshot["threads"][number]
 
-function agentNeedsAttention(thread: AgentThread): boolean {
+function agentIsWorking(thread: AgentThread): boolean {
 	const session = thread.session
-	return session === null || (session.status !== "starting" && session.status !== "running")
+	return (
+		session !== null &&
+		(session.status === "starting" || session.status === "running" || session.activeTurnId !== null)
+	)
 }
 
 function WorkspaceAgentStatuses({ threads }: { threads: AgentThread[] }) {
@@ -64,14 +67,14 @@ function WorkspaceAgentStatuses({ threads }: { threads: AgentThread[] }) {
 			aria-hidden="true"
 		>
 			{threads.map((thread) => {
-				const needsAttention = agentNeedsAttention(thread)
+				const working = agentIsWorking(thread)
 				return (
 					<span
 						key={thread.id}
 						className={`size-2 rounded-full ${
-							needsAttention
+							working
 								? "bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.35)]"
-								: "bg-neutral-500"
+								: "bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.30)]"
 						}`}
 					/>
 				)
