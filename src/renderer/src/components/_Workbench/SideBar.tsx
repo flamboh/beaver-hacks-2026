@@ -5,11 +5,13 @@ import {
 	FolderPlus,
 	GitBranch,
 	GitBranchPlus,
-	Trash2,
-	PanelLeft
+	PanelLeft,
+	Trash2
 } from "lucide-react"
+import { useAgentSnapshot } from "@renderer/agentStore"
 import type { ProjectRow, WorkspaceSortMode } from "@renderer/types/models"
 import { useRef, useState, type PointerEvent } from "react"
+import type { AgentSnapshot } from "src/main/agent/contracts"
 import type { WorkspaceRow } from "src/main/db/contracts"
 
 interface Props {
@@ -38,6 +40,41 @@ const COLLAPSED_SIDEBAR_WIDTH = 0
 const MIN_SIDEBAR_WIDTH = 220
 const MAX_SIDEBAR_WIDTH = 420
 
+type AgentThread = AgentSnapshot["threads"][number]
+
+function agentIsWorking(thread: AgentThread): boolean {
+	const session = thread.session
+	return (
+		session !== null &&
+		(session.status === "starting" || session.status === "running" || session.activeTurnId !== null)
+	)
+}
+
+function WorkspaceAgentStatuses({ threads }: { threads: AgentThread[] }) {
+	if (threads.length === 0) return null
+
+	return (
+		<span
+			className="ml-2 flex max-w-20 shrink-0 items-center gap-1 overflow-hidden"
+			aria-hidden="true"
+		>
+			{threads.map((thread) => {
+				const working = agentIsWorking(thread)
+				return (
+					<span
+						key={thread.id}
+						className={`size-2 rounded-full ${
+							working
+								? "bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.35)]"
+								: "bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.30)]"
+						}`}
+					/>
+				)
+			})}
+		</span>
+	)
+}
+
 export default function SideBar({
 	activeProjectId,
 	activeWorkspaceId,
@@ -58,6 +95,7 @@ export default function SideBar({
 	workspacesByProjectId,
 	onWorkspaceSortModeChange
 }: Props) {
+	const snapshot = useAgentSnapshot()
 	const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
 	const [resizing, setResizing] = useState(false)
 	const [dragProjectId, setDragProjectId] = useState<string | null>(null)
@@ -71,6 +109,12 @@ export default function SideBar({
 		if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
 		return a.createdAt.localeCompare(b.createdAt)
 	})
+	const threadsByWorkspacePath = new Map<string, AgentThread[]>()
+	for (const thread of snapshot.threads) {
+		const threads = threadsByWorkspacePath.get(thread.cwd) ?? []
+		threads.push(thread)
+		threadsByWorkspacePath.set(thread.cwd, threads)
+	}
 
 	const selectProject = (project: ProjectRow) => {
 		onProjectSelect(project)
@@ -157,6 +201,7 @@ export default function SideBar({
 				>
 					<GitBranch size={20} className="mr-2 shrink-0 text-neutral-600" aria-hidden="true" />
 					<span className="min-w-0 truncate text-[0.9rem]">{workspace.name}</span>
+					<WorkspaceAgentStatuses threads={threadsByWorkspacePath.get(workspace.path) ?? []} />
 				</button>
 				<button
 					type="button"

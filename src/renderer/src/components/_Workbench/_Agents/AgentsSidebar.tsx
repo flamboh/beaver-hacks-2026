@@ -7,8 +7,8 @@ type AgentsSidebarProps = {
 }
 
 const STATUS_ROWS: { label: string; status: AgentStatus; dot: string }[] = [
-	{ label: "Working", status: "working", dot: "bg-blue-400" },
-	{ label: "Pending", status: "pending", dot: "bg-orange-400" },
+	{ label: "Working", status: "working", dot: "bg-orange-400" },
+	{ label: "Pending", status: "pending", dot: "bg-blue-400" },
 	{ label: "Idle", status: "idle", dot: "bg-neutral-500" },
 	{ label: "Failed", status: "failure", dot: "bg-red-500" }
 ]

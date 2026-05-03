@@ -3,8 +3,8 @@ import { Globe, Terminal } from "lucide-react"
 import { cardPos, cardSize, type CanvasLayout } from "./controlPanelLayout"
 import type { ControlPanelCard } from "./useControlPanelAgents"
 
-const MAP_W = 160
-const MAP_H = 90
+const MAP_W = 260
+const MAP_H = 150
 const MAP_PAD = 8
 const MARKER_SIZE = 16
 

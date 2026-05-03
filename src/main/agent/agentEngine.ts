@@ -97,8 +97,7 @@ function promptForTurn(input: {
 			"The user can ask you to revise the task list or implement it in a later turn.",
 			"Task list rules:",
 			"- Include clear actionable tasks.",
-			"- Mark exactly one task as in_progress.",
-			"- Leave remaining tasks as pending unless already completed.",
+			"- Mark all tasks as pending unless a task is already completed.",
 			`If you cannot call ${planningTool}, reply with a single short sentence and stop.`
 		)
 	}
@@ -934,6 +933,13 @@ export class AgentEngine {
 		const key = turnPolicyKey(thread.id, activeTurnId)
 		if (!this.planningOnlyTurns.delete(key)) return
 		this.planningStoppedTurns.add(key)
+		const settledPlan: AgentPlan = {
+			...thread.plan,
+			items: thread.plan.items.map((item) =>
+				item.status === "in_progress" ? { ...item, status: "pending" } : item
+			),
+			updatedAt: createdAt
+		}
 
 		thread.activities.push({
 			id: `activity:${randomUUID()}`,
@@ -942,6 +948,14 @@ export class AgentEngine {
 			payload: {},
 			turnId: activeTurnId,
 			createdAt
+		})
+		thread.plan = settledPlan
+		this.updatePlanTaskProgress(thread, {
+			type: "plan.updated",
+			threadId: thread.id,
+			turnId: activeTurnId,
+			createdAt,
+			payload: { plan: settledPlan }
 		})
 		for (const message of thread.messages) {
 			if (message.role === "assistant" && message.turnId === activeTurnId) {
