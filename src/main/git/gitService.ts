@@ -39,6 +39,14 @@ interface GitCwdCommitInput extends GitCwdInput {
 	body?: string
 }
 
+interface GitCwdPathInput extends GitCwdInput {
+	path: string
+}
+
+interface GitCwdPathsInput extends GitCwdInput {
+	paths: string[]
+}
+
 function nowIso(): string {
 	return new Date().toISOString()
 }
@@ -203,6 +211,11 @@ function normalizeBranchName(branch: string): string {
 		.replace(/^[-/]+|[-/]+$/g, "")
 }
 
+function normalizePaths(paths: readonly string[]): string[] {
+	const normalized = paths.map((path) => path.trim()).filter(Boolean)
+	return [...new Set(normalized)]
+}
+
 async function buildUntrackedPatch(cwd: string): Promise<string> {
 	const result = await runGit(cwd, ["ls-files", "--others", "--exclude-standard"])
 	const patches = await Promise.all(
@@ -286,6 +299,46 @@ export class GitService {
 		if (!branch) throw new Error("Branch required.")
 		await runGit(input.cwd, ["checkout", "-b", branch])
 		return this.status(input.cwd)
+	}
+
+	async acceptFiles(input: GitCwdPathsInput): Promise<GitStatusSnapshot> {
+		const paths = normalizePaths(input.paths)
+		if (paths.length === 0) throw new Error("At least one path required.")
+		await runGit(input.cwd, ["add", "--", ...paths])
+		return this.status(input.cwd)
+	}
+
+	async acceptFile(input: GitCwdPathInput): Promise<GitStatusSnapshot> {
+		const path = input.path.trim()
+		if (!path) throw new Error("Path required.")
+		return this.acceptFiles({ cwd: input.cwd, paths: [path] })
+	}
+
+	async denyFiles(input: GitCwdPathsInput): Promise<GitStatusSnapshot> {
+		const paths = normalizePaths(input.paths)
+		if (paths.length === 0) throw new Error("At least one path required.")
+
+		for (const path of paths) {
+			const status = await runGit(input.cwd, ["status", "--porcelain=v1", "--", path])
+			const lines = status.stdout.split(/\r?\n/g).filter(Boolean)
+			const hasTrackedChanges = lines.some((line) => !line.startsWith("?? "))
+			const hasUntrackedChanges = lines.some((line) => line.startsWith("?? "))
+
+			if (hasTrackedChanges) {
+				await runGit(input.cwd, ["restore", "--source=HEAD", "--staged", "--worktree", "--", path])
+			}
+			if (hasUntrackedChanges) {
+				await runGit(input.cwd, ["clean", "-fd", "--", path])
+			}
+		}
+
+		return this.status(input.cwd)
+	}
+
+	async denyFile(input: GitCwdPathInput): Promise<GitStatusSnapshot> {
+		const path = input.path.trim()
+		if (!path) throw new Error("Path required.")
+		return this.denyFiles({ cwd: input.cwd, paths: [path] })
 	}
 
 	async commitAll(input: GitCwdCommitInput): Promise<GitCommitResult> {

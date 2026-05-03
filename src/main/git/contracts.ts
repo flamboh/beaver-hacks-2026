@@ -54,6 +54,16 @@ export interface GitCreateBranchInput {
 	branch: string
 }
 
+export interface GitReviewFileInput {
+	workspaceId: string
+	path: string
+}
+
+export interface GitReviewFilesInput {
+	workspaceId: string
+	paths: string[]
+}
+
 export interface GitCommitAllInput {
 	workspaceId: string
 	subject: string

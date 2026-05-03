@@ -8,7 +8,9 @@ import type {
 	GitDiffTour,
 	GitCommitMessage,
 	GitCreateBranchInput,
-	GitPushInput
+	GitPushInput,
+	GitReviewFileInput,
+	GitReviewFilesInput
 } from "./contracts"
 
 async function resolveWorkspaceCwd(
@@ -44,6 +46,26 @@ export function registerGitIpc(
 	ipcMain.handle("git:create-branch", async (_event, input: GitCreateBranchInput) => {
 		const workspace = await resolveWorkspaceCwd(database, input.workspaceId)
 		const status = await git.createBranch({ cwd: workspace.cwd, branch: input.branch })
+		return { ...status, workspaceId: workspace.workspaceId, workspacePath: workspace.workspacePath }
+	})
+	ipcMain.handle("git:accept-file", async (_event, input: GitReviewFileInput) => {
+		const workspace = await resolveWorkspaceCwd(database, input.workspaceId)
+		const status = await git.acceptFile({ cwd: workspace.cwd, path: input.path })
+		return { ...status, workspaceId: workspace.workspaceId, workspacePath: workspace.workspacePath }
+	})
+	ipcMain.handle("git:accept-files", async (_event, input: GitReviewFilesInput) => {
+		const workspace = await resolveWorkspaceCwd(database, input.workspaceId)
+		const status = await git.acceptFiles({ cwd: workspace.cwd, paths: input.paths })
+		return { ...status, workspaceId: workspace.workspaceId, workspacePath: workspace.workspacePath }
+	})
+	ipcMain.handle("git:deny-file", async (_event, input: GitReviewFileInput) => {
+		const workspace = await resolveWorkspaceCwd(database, input.workspaceId)
+		const status = await git.denyFile({ cwd: workspace.cwd, path: input.path })
+		return { ...status, workspaceId: workspace.workspaceId, workspacePath: workspace.workspacePath }
+	})
+	ipcMain.handle("git:deny-files", async (_event, input: GitReviewFilesInput) => {
+		const workspace = await resolveWorkspaceCwd(database, input.workspaceId)
+		const status = await git.denyFiles({ cwd: workspace.cwd, paths: input.paths })
 		return { ...status, workspaceId: workspace.workspaceId, workspacePath: workspace.workspacePath }
 	})
 	ipcMain.handle("git:commit-all", async (_event, input: GitCommitAllInput) => {
@@ -110,6 +132,8 @@ export type {
 	GitCommitMessage,
 	GitCreateBranchInput,
 	GitPushInput,
+	GitReviewFileInput,
+	GitReviewFilesInput,
 	GitPushResult,
 	GitStatusSnapshot,
 	GitWorkingTreeDiffSnapshot
