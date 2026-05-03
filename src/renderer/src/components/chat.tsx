@@ -1,9 +1,14 @@
-import type { CSSProperties, FormEvent, JSX, KeyboardEvent } from "react"
-import { useRef, useState } from "react"
+import type { CSSProperties, FormEvent, JSX, KeyboardEvent, RefObject, UIEvent } from "react"
+import { useCallback, useRef, useState, useSyncExternalStore } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "motion/react"
 import { ArrowUp } from "lucide-react"
-import { listAgentModels, sendAgentMessage } from "../agentStore"
+import {
+	getSemgrepStatus,
+	listAgentModels,
+	sendAgentMessage,
+	stopAgentMessage
+} from "../agentStore"
 import type { AgentSnapshot } from "../../../main/agent/ipc"
 import type { ComposerMentionSuggestion } from "../../../main/composer/ipc"
 import { AgentRunSettings } from "./AgentRunSettings"
@@ -59,6 +64,25 @@ const FALLBACK_MODELS: Record<AgentProvider, ModelOption[]> = {
 	]
 }
 
+function scrollToBottom(element: HTMLElement | null): void {
+	if (element) element.scrollTop = element.scrollHeight
+}
+
+function useAutoFollowTranscript(scrollRef: RefObject<HTMLElement | null>, version: string): void {
+	const subscribe = useCallback(
+		(listener: () => void) => {
+			const frame = requestAnimationFrame(() => {
+				listener()
+				requestAnimationFrame(() => scrollToBottom(scrollRef.current))
+			})
+			return () => cancelAnimationFrame(frame)
+		},
+		[scrollRef]
+	)
+	const getSnapshot = useCallback(() => version, [version])
+	useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
 interface ChatProps {
 	thread: AgentThread | null
 	threadId: string
@@ -94,12 +118,23 @@ export function Chat({
 }: ChatProps): JSX.Element {
 	const [draft, setDraft] = useState("")
 	const [isSending, setIsSending] = useState(false)
+	const [isCancelling, setIsCancelling] = useState(false)
+	const [planningMode, setPlanningMode] = useState(false)
+	const [securityMode, setSecurityMode] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [cursor, setCursor] = useState(0)
 	const [suggestionIndex, setSuggestionIndex] = useState(0)
+	const [isPinnedToBottom, setIsPinnedToBottom] = useState(true)
+	const transcriptViewportRef = useRef<HTMLDivElement | null>(null)
 	const inputRef = useRef<HTMLTextAreaElement | null>(null)
+	const transcriptScrollRef = useRef<HTMLElement | null>(null)
 	const canSend = draft.trim().length > 0 && !isSending && !isRunning
+	const canCancel = isRunning && !isCancelling
 	const transcript = thread ? buildTranscript(thread) : []
+	const transcriptVersion = thread
+		? `${thread.updatedAt}:${thread.messages.length}:${thread.activities.length}`
+		: ""
+	useAutoFollowTranscript(transcriptScrollRef, transcriptVersion)
 	const lastBlock = transcript.at(-1)
 	const isAwaitingAssistant =
 		(isSending || isRunning) && (!lastBlock || lastBlock.kind === "user" || !lastBlock.streaming)
@@ -109,6 +144,11 @@ export function Chat({
 		queryFn: () => listAgentModels(provider ?? "codex"),
 		enabled: Boolean(provider),
 		staleTime: 5 * 60 * 1000
+	})
+	const { data: semgrepStatus } = useQuery({
+		queryKey: ["agent-semgrep-status"],
+		queryFn: getSemgrepStatus,
+		staleTime: 60 * 1000
 	})
 	const { data: fileSuggestions = [] } = useQuery({
 		queryKey: ["composer-files", cwd, activeToken?.kind === "file" ? activeToken.query : ""],
@@ -146,11 +186,32 @@ export function Chat({
 	)
 		? speedTier
 		: null
+	const semgrepUnavailable =
+		securityMode && semgrepStatus !== undefined && semgrepStatus.available === false
+	const autoScrollKey = thread?.updatedAt ?? "idle"
+
+	function scrollAnchorRef(node: HTMLDivElement | null): void {
+		if (!node) return
+		if (!isPinnedToBottom) return
+		const viewport = transcriptViewportRef.current
+		if (!viewport) return
+		viewport.scrollTop = viewport.scrollHeight
+	}
+
+	function handleTranscriptScroll(event: UIEvent<HTMLDivElement>): void {
+		const target = event.currentTarget
+		const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight
+		setIsPinnedToBottom(distanceFromBottom < 24)
+	}
 
 	function handleSubmit(event: FormEvent<HTMLFormElement>): void {
 		event.preventDefault()
 		const prompt = draft.trim()
 		if (!prompt || isSending || isRunning) return
+		if (semgrepUnavailable) {
+			setError("Security mode requires Semgrep CLI. Install Semgrep and retry.")
+			return
+		}
 
 		setDraft("")
 		setError(null)
@@ -165,7 +226,9 @@ export function Chat({
 					...(thread || !provider ? {} : { provider }),
 					...(selectedModel ? { model: selectedModel } : {}),
 					...(selectedEffort ? { effort: selectedEffort } : {}),
-					...(selectedSpeedTier ? { speedTier: selectedSpeedTier } : {})
+					...(selectedSpeedTier ? { speedTier: selectedSpeedTier } : {}),
+					...(planningMode ? { planningMode: true } : {}),
+					...(securityMode ? { securityMode: true } : {})
 				})
 			)
 			.then(() => onMessageSent?.(prompt).catch(() => undefined))
@@ -174,6 +237,18 @@ export function Chat({
 				setDraft(prompt)
 			})
 			.finally(() => setIsSending(false))
+	}
+
+	function handleCancel(): void {
+		if (!canCancel) return
+
+		setError(null)
+		setIsCancelling(true)
+		void stopAgentMessage(thread?.id ?? threadId)
+			.catch((cause: unknown) => {
+				setError(cause instanceof Error ? cause.message : String(cause))
+			})
+			.finally(() => setIsCancelling(false))
 	}
 
 	function syncCursor(element: HTMLTextAreaElement): void {
@@ -225,8 +300,11 @@ export function Chat({
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<section
+				ref={transcriptScrollRef}
 				data-selectable-text
+				data-scroll-boundary-stop="true"
 				className="nowheel nodrag min-h-0 flex-1 select-text overflow-y-auto px-4 py-5"
+				onScroll={handleTranscriptScroll}
 			>
 				<div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
 					{thread ? (
@@ -242,11 +320,16 @@ export function Chat({
 										animate={{ opacity: 1, y: 0 }}
 										exit={{ opacity: 0, y: -2 }}
 										transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-										className="mr-auto flex max-w-[86%] items-center rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5"
+										className="mr-auto flex max-w-[86%] flex-col gap-1.5 rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5"
 										aria-live="polite"
 										aria-label="Agent is thinking"
 									>
 										<StreamingDots />
+										{thread?.reasoningPreview ? (
+											<p className="line-clamp-3 whitespace-pre-wrap text-[11px] leading-snug text-zinc-500">
+												{thread.reasoningPreview}
+											</p>
+										) : null}
 									</motion.article>
 								) : null}
 							</AnimatePresence>
@@ -262,6 +345,7 @@ export function Chat({
 							<p className="mt-2 text-sm text-zinc-500">Send a message to start the loop.</p>
 						</motion.div>
 					)}
+					<div key={`scroll-anchor:${autoScrollKey}`} ref={scrollAnchorRef} />
 				</div>
 			</section>
 
@@ -327,29 +411,49 @@ export function Chat({
 									runtimeModel={runtimeModel}
 									effort={effort}
 									speedTier={speedTier}
+									planningMode={planningMode}
+									securityMode={securityMode}
 									onModelChange={onModelChange}
 									onEffortChange={onEffortChange}
 									onSpeedTierChange={onSpeedTierChange}
+									onPlanningModeChange={setPlanningMode}
+									onSecurityModeChange={setSecurityMode}
 								/>
 								<motion.button
-									type="submit"
-									disabled={!canSend}
-									aria-label="Send message"
-									title="Send message"
-									whileHover={canSend ? { scale: 1.06 } : undefined}
-									whileTap={canSend ? { scale: 0.96 } : undefined}
+									type={isRunning ? "button" : "submit"}
+									onClick={isRunning ? handleCancel : undefined}
+									disabled={isRunning ? !canCancel : !canSend}
+									aria-label={isRunning ? "Cancel message" : "Send message"}
+									title={isRunning ? "Cancel" : "Send message"}
+									whileHover={isRunning ? { scale: 1.02 } : canSend ? { scale: 1.06 } : undefined}
+									whileTap={isRunning || canSend ? { scale: 0.92 } : undefined}
 									animate={{
-										backgroundColor: canSend ? "rgb(59 130 246)" : "rgba(255,255,255,0.08)",
-										color: canSend ? "rgb(255 255 255)" : "rgb(113 113 122)"
+										backgroundColor: isRunning
+											? "rgb(244 244 245)"
+											: canSend
+												? "rgb(59 130 246)"
+												: "rgba(255,255,255,0.08)",
+										color: isRunning
+											? "rgb(9 9 11)"
+											: canSend
+												? "rgb(255 255 255)"
+												: "rgb(113 113 122)"
 									}}
 									transition={{ type: "spring", stiffness: 500, damping: 32, mass: 0.6 }}
-									className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full shadow-[0_4px_14px_-4px_rgba(59,130,246,0.55)] outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed disabled:shadow-none"
+									className="flex h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center rounded-full px-2 text-xs font-medium shadow-[0_4px_14px_-4px_rgba(59,130,246,0.55)] outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed disabled:shadow-none"
 								>
-									<ArrowUp size={15} strokeWidth={2.75} />
+									{isRunning ? "Cancel" : <ArrowUp size={15} strokeWidth={2.75} />}
 								</motion.button>
 							</div>
 						</div>
 					</div>
+					{semgrepUnavailable ? (
+						<p className="mt-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
+							Security mode requires Semgrep CLI (`{semgrepStatus?.command ?? "semgrep"}` not
+							found). Install it with `brew install semgrep` or `python3 -m pip install semgrep`,
+							then retry.
+						</p>
+					) : null}
 					<AnimatePresence initial={false}>
 						{error ? (
 							<motion.p

@@ -266,6 +266,8 @@ export function canStartPan(target: EventTarget | null, forcePan: boolean): bool
 	return !element?.closest(blocked)
 }
 
+const scrollBoundaryStops = new WeakMap<HTMLElement, { axis: "x" | "y"; direction: -1 | 1 }>()
+
 export function canElementScroll(element: HTMLElement, deltaX: number, deltaY: number): boolean {
 	const canScrollX =
 		(deltaX < 0 && element.scrollLeft > 0) ||
@@ -273,6 +275,25 @@ export function canElementScroll(element: HTMLElement, deltaX: number, deltaY: n
 	const canScrollY =
 		(deltaY < 0 && element.scrollTop > 0) ||
 		(deltaY > 0 && element.scrollTop + element.clientHeight < element.scrollHeight)
+	const primaryAxis = Math.abs(deltaX) > Math.abs(deltaY) ? "x" : "y"
+	const canPrimaryScroll = primaryAxis === "x" ? canScrollX : canScrollY
+	const canSecondaryScroll = primaryAxis === "x" ? canScrollY : canScrollX
+	if (canPrimaryScroll || canSecondaryScroll) {
+		scrollBoundaryStops.delete(element)
+		return true
+	}
+
+	if (element.dataset.scrollBoundaryStop === "true") {
+		const direction = (primaryAxis === "x" ? deltaX : deltaY) > 0 ? 1 : -1
+		const current = scrollBoundaryStops.get(element)
+		if (current?.axis === primaryAxis && current.direction === direction) {
+			scrollBoundaryStops.delete(element)
+			return false
+		}
+		scrollBoundaryStops.set(element, { axis: primaryAxis, direction })
+		return true
+	}
+
 	if (Math.abs(deltaX) > Math.abs(deltaY)) return canScrollX || canScrollY
 	return canScrollY || canScrollX
 }

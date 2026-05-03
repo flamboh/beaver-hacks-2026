@@ -214,7 +214,16 @@ export class CodexAdapter implements ProviderAdapter {
 		const thread = this.threads.get(threadId)
 		if (!thread) return
 
+		const activeTurnId = thread.session.activeTurnId
 		this.threads.delete(threadId)
+		if (activeTurnId) {
+			await this.rpc
+				.request("turn/interrupt", {
+					threadId: thread.providerThreadId,
+					turnId: activeTurnId
+				})
+				.catch(() => undefined)
+		}
 		this.setSession(threadId, {
 			...thread.session,
 			status: "stopped",

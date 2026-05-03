@@ -44,6 +44,7 @@ export function useControlPanelKeyboard({
 			}
 			if (e.key === "Tab") {
 				e.preventDefault()
+				if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
 				snapToCard(focusedIdx + (e.shiftKey ? -1 : 1))
 				return
 			}

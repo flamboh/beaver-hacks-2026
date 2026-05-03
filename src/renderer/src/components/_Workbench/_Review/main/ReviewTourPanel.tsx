@@ -1,7 +1,7 @@
-import { AlertCircle, LoaderCircle, Map, RefreshCw } from "lucide-react"
-import type { PointerEvent, ReactNode } from "react"
-import { useRef } from "react"
+import { AlertCircle, LoaderCircle, Map as MapIcon, RefreshCw } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
+import type { PointerEvent, ReactNode, RefObject } from "react"
+import { useCallback, useRef, useState, useSyncExternalStore } from "react"
 
 interface ReviewTourPanelProps {
 	canGenerate: boolean
@@ -16,6 +16,9 @@ interface ReviewTourPanelProps {
 
 const MIN_HEIGHT = 52
 const MAX_HEIGHT = 440
+const STREAM_WORDS_PER_TICK = 8
+const STREAM_TICK_MS = 45
+const streamStarts = new Map<string, number>()
 
 function clampHeight(height: number): number {
 	return Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, height))
@@ -33,6 +36,66 @@ function renderBoldSpans(text: string): ReactNode[] {
 	)
 }
 
+function visibleStreamLength(text: string): number {
+	if (!text) return 0
+	const startedAt = streamStarts.get(text)
+	if (!startedAt) return 0
+	const visibleWords =
+		Math.floor((performance.now() - startedAt) / STREAM_TICK_MS) * STREAM_WORDS_PER_TICK
+	if (visibleWords <= 0) return 0
+
+	let words = 0
+	for (let index = 0; index < text.length; index += 1) {
+		const current = text[index]
+		const previous = text[index - 1]
+		if (current && /\S/.test(current) && (!previous || /\s/.test(previous))) {
+			words += 1
+			if (words > visibleWords) return index
+		}
+	}
+
+	return text.length
+}
+
+function scrollToBottom(ref: RefObject<HTMLDivElement | null>): void {
+	const element = ref.current
+	if (element) element.scrollTop = element.scrollHeight
+}
+
+function useStreamingText(
+	text: string,
+	scrollRef: RefObject<HTMLDivElement | null>
+): { streaming: boolean; text: string } {
+	const subscribe = useCallback(
+		(listener: () => void) => {
+			if (!text) return () => undefined
+
+			streamStarts.set(text, performance.now())
+			let frame = 0
+			const tick = () => {
+				listener()
+				requestAnimationFrame(() => scrollToBottom(scrollRef))
+				if (visibleStreamLength(text) < text.length) {
+					frame = requestAnimationFrame(tick)
+				}
+			}
+			frame = requestAnimationFrame(tick)
+			return () => {
+				cancelAnimationFrame(frame)
+				streamStarts.delete(text)
+			}
+		},
+		[scrollRef, text]
+	)
+	const getSnapshot = useCallback(() => visibleStreamLength(text), [text])
+	const visibleLength = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+
+	return {
+		streaming: visibleLength < text.length,
+		text: text.slice(0, visibleLength)
+	}
+}
+
 export function ReviewTourPanel({
 	canGenerate,
 	error,
@@ -44,12 +107,16 @@ export function ReviewTourPanel({
 	tour
 }: ReviewTourPanelProps) {
 	const resizeStart = useRef({ height: MIN_HEIGHT, y: 0 })
-	const hasBody = Boolean(tour || error)
+	const tourBodyRef = useRef<HTMLDivElement>(null)
+	const [resizing, setResizing] = useState(false)
 	const hasTour = Boolean(tour)
+	const hasBody = Boolean(tour || error)
 	const hasStarted = hasBody || generating
+	const streamedTour = useStreamingText(tour, tourBodyRef)
 
 	const startResize = (event: PointerEvent<HTMLDivElement>) => {
 		resizeStart.current = { height, y: event.clientY }
+		setResizing(true)
 		event.currentTarget.setPointerCapture(event.pointerId)
 	}
 
@@ -59,21 +126,30 @@ export function ReviewTourPanel({
 		onHeightChange(clampHeight(resizeStart.current.height + delta))
 	}
 
+	const stopResize = () => {
+		setResizing(false)
+	}
+
 	return (
-		<section
-			className="mt-4 shrink-0 overflow-hidden rounded-lg border border-white/8 bg-neutral-950 transition-[height,border-color,background-color] duration-200 ease-out"
-			style={{ height: clampHeight(height) }}
+		<motion.section
+			animate={{ height: clampHeight(height) }}
+			className="mt-4 shrink-0 overflow-hidden rounded-lg border border-white/8 bg-neutral-950"
+			initial={false}
+			transition={resizing ? { duration: 0 } : { duration: 0.48, ease: [0.16, 1, 0.3, 1] }}
 		>
 			<div
 				role="separator"
 				aria-orientation="horizontal"
 				onPointerDown={startResize}
 				onPointerMove={resize}
+				onPointerUp={stopResize}
+				onPointerCancel={stopResize}
+				onLostPointerCapture={stopResize}
 				className="flex h-2 cursor-ns-resize items-center justify-center border-b border-white/5 bg-white/[0.02]"
 			>
 				<div className="h-px w-10 rounded-full bg-white/15" />
 			</div>
-			<AnimatePresence initial={false} mode="wait">
+			<AnimatePresence initial={false}>
 				{!hasStarted ? (
 					<motion.div
 						key="empty"
@@ -81,16 +157,16 @@ export function ReviewTourPanel({
 						animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
 						exit={{ opacity: 0, y: -4, filter: "blur(3px)" }}
 						transition={{ type: "spring", duration: 0.28, bounce: 0 }}
-						className="flex h-[calc(100%-0.5rem)] items-center justify-center px-3"
+						className="flex h-[calc(100%-0.5rem)] items-center justify-center p-3"
 					>
 						<button
 							type="button"
 							onClick={onGenerate}
 							disabled={!canGenerate}
 							aria-label="Tour"
-							className="polished-button flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-neutral-200 hover:border-white/20 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-neutral-600"
+							className="polished-button flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-3 text-xs font-medium text-neutral-200 hover:border-white/20 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-neutral-600"
 						>
-							<Map size={13} />
+							<MapIcon size={13} />
 							Tour
 						</button>
 					</motion.div>
@@ -103,34 +179,27 @@ export function ReviewTourPanel({
 						transition={{ type: "spring", duration: 0.28, bounce: 0 }}
 						className="h-[calc(100%-0.5rem)]"
 					>
-						<div className="flex h-10 items-center justify-between border-b border-white/8 px-3">
-							{hasBody || generating || stale ? (
-								<div className="flex items-center gap-2">
-									<p className="text-sm font-medium text-neutral-300">Tour</p>
-									{stale ? (
-										<span className="rounded border border-white/8 bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-medium uppercase text-neutral-600">
-											stale
-										</span>
-									) : null}
+						<div className="relative flex h-10 items-center justify-end border-b border-white/8 px-3">
+							{generating ? (
+								<div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 text-[11px] text-neutral-500">
+									<LoaderCircle className="size-3 animate-spin" />
+									Generating
 								</div>
-							) : (
-								<div />
-							)}
+							) : null}
 							<div className="flex items-center gap-2">
-								{generating ? (
-									<div className="flex items-center gap-1.5 text-[11px] text-neutral-500">
-										<LoaderCircle className="size-3 animate-spin" />
-										Generating
-									</div>
+								{stale ? (
+									<span className="rounded border border-white/8 bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 uppercase">
+										stale
+									</span>
 								) : null}
 								<button
 									type="button"
 									onClick={onGenerate}
 									disabled={generating || !canGenerate}
 									aria-label={generating ? "Generating tour" : hasTour ? "Refresh tour" : "Tour"}
-									className="polished-button flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-neutral-200 hover:border-white/20 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-neutral-600"
+									className="polished-button flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-3 text-xs font-medium text-neutral-200 hover:border-white/20 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-neutral-600"
 								>
-									{hasTour ? <RefreshCw size={13} /> : <Map size={13} />}
+									{hasTour ? <RefreshCw size={13} /> : <MapIcon size={13} />}
 									{hasTour ? "Refresh" : "Tour"}
 								</button>
 							</div>
@@ -141,13 +210,19 @@ export function ReviewTourPanel({
 								<p>{error}</p>
 							</div>
 						) : hasBody ? (
-							<div className="h-[calc(100%-2.5rem)] overflow-auto whitespace-pre-wrap px-3 py-3 font-mono text-sm leading-6 text-neutral-300">
-								{renderBoldSpans(tour)}
+							<div
+								ref={tourBodyRef}
+								className="h-[calc(100%-2.5rem)] overflow-auto whitespace-pre-wrap px-3 py-3 font-mono text-sm leading-6 text-neutral-300"
+							>
+								{renderBoldSpans(streamedTour.text)}
+								{streamedTour.streaming ? (
+									<span className="ml-0.5 inline-block h-4 w-1 translate-y-0.5 animate-pulse bg-neutral-400" />
+								) : null}
 							</div>
 						) : null}
 					</motion.div>
 				)}
 			</AnimatePresence>
-		</section>
+		</motion.section>
 	)
 }

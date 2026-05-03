@@ -4,10 +4,14 @@ import type {
 	AgentProvider,
 	AgentModelOption,
 	AgentSnapshot,
+	FindMcpsInput,
+	SemgrepStatus,
 	FindSkillsInput,
 	InstallSkillInput,
 	SpawnThreadInput,
-	StartTurnInput
+	StopTurnInput,
+	StartTurnInput,
+	UninstallSkillInput
 } from "../main/agent/ipc"
 import type {
 	ComposerFileSuggestion,
@@ -50,6 +54,8 @@ import type {
 	GitDiffTour,
 	GitPushInput,
 	GitPushResult,
+	GitReviewFileInput,
+	GitReviewFilesInput,
 	GitRunStackedActionInput,
 	GitRunStackedActionResult,
 	GitStackedActionProgressEvent,
@@ -73,12 +79,19 @@ const api = {
 		getSnapshot: (): Promise<AgentSnapshot> => ipcRenderer.invoke("agent:get-snapshot"),
 		listModels: (provider: AgentProvider): Promise<AgentModelOption[]> =>
 			ipcRenderer.invoke("agent:list-models", provider),
+		getSemgrepStatus: (): Promise<SemgrepStatus> => ipcRenderer.invoke("agent:get-semgrep-status"),
 		startTurn: (input: StartTurnInput): Promise<AgentSnapshot> =>
 			ipcRenderer.invoke("agent:start-turn", input),
+		stopTurn: (input: StopTurnInput): Promise<AgentSnapshot> =>
+			ipcRenderer.invoke("agent:stop-turn", input),
 		findSkills: (input: FindSkillsInput): Promise<AgentSnapshot> =>
 			ipcRenderer.invoke("agent:find-skills", input),
+		findMcps: (input: FindMcpsInput): Promise<AgentSnapshot> =>
+			ipcRenderer.invoke("agent:find-mcps", input),
 		installSkill: (input: InstallSkillInput): Promise<AgentSnapshot> =>
 			ipcRenderer.invoke("agent:install-skill", input),
+		uninstallSkill: (input: UninstallSkillInput): Promise<AgentSnapshot> =>
+			ipcRenderer.invoke("agent:uninstall-skill", input),
 		spawnThread: (input: SpawnThreadInput): Promise<AgentSnapshot> =>
 			ipcRenderer.invoke("agent:spawn-thread", input),
 		onSnapshot: (listener: (snapshot: AgentSnapshot) => void): (() => void) => {
@@ -104,6 +117,14 @@ const api = {
 			ipcRenderer.invoke("git:checkout", input),
 		createBranch: (input: GitCreateBranchInput): Promise<GitStatusSnapshot> =>
 			ipcRenderer.invoke("git:create-branch", input),
+		acceptFile: (input: GitReviewFileInput): Promise<GitStatusSnapshot> =>
+			ipcRenderer.invoke("git:accept-file", input),
+		acceptFiles: (input: GitReviewFilesInput): Promise<GitStatusSnapshot> =>
+			ipcRenderer.invoke("git:accept-files", input),
+		denyFile: (input: GitReviewFileInput): Promise<GitStatusSnapshot> =>
+			ipcRenderer.invoke("git:deny-file", input),
+		denyFiles: (input: GitReviewFilesInput): Promise<GitStatusSnapshot> =>
+			ipcRenderer.invoke("git:deny-files", input),
 		generateCommitMessage: (workspaceId: string): Promise<GitCommitMessage> =>
 			ipcRenderer.invoke("git:generate-commit-message", workspaceId),
 		generateDiffTour: (workspaceId: string): Promise<GitDiffTour> =>

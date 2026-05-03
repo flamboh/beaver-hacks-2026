@@ -95,12 +95,6 @@ export default function AgentCard({
 	}
 
 	async function handleFirstMessage(prompt: string): Promise<void> {
-		await window.api.tasks.create({
-			agent_id: agent.id,
-			turn_id: null,
-			status: "working",
-			description: prompt
-		})
 		if (agent.name === "New Agent") {
 			const seedName = agentNameForPrompt(prompt)
 			await window.api.agents.update({
@@ -116,7 +110,6 @@ export default function AgentCard({
 			})
 			await queryClient.invalidateQueries({ queryKey: ["agents"] })
 		}
-		await queryClient.invalidateQueries({ queryKey: ["tasks", agent.id] })
 	}
 
 	async function handleMessageSent(prompt: string): Promise<void> {

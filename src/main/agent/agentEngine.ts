@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { ClaudeAdapter } from "./claudeAdapter"
 import { CodexAdapter } from "./codexAdapter"
 import { assistantMessageId } from "./runtimeIds"
+import { checkSemgrepAvailability, runSemgrepScan, semgrepSummaryForPrompt } from "./semgrep"
 import {
 	buildAgentNamePrompt,
 	parseAgentName,
@@ -11,13 +12,19 @@ import {
 } from "./agentNaming"
 import { recommendProjectSkills } from "../skills/skillRecommender"
 import { installProjectSkill } from "../skills/skillInstaller"
-import { listInstalledSkillKeys, matchesInstalledSkill } from "../skills/installedSkills"
+import {
+	listInstalledSkillKeys,
+	matchesInstalledSkill,
+	removeInstalledSkill
+} from "../skills/installedSkills"
+import { recommendProjectMcps } from "../mcp/mcpRecommender"
 import type {
 	AgentActivity,
 	AgentModelOption,
 	AgentMessage,
 	AgentPlan,
 	AgentProvider,
+	SemgrepStatus,
 	ProviderAdapter,
 	AgentRuntimeMode,
 	AgentSession,
@@ -25,15 +32,19 @@ import type {
 	AgentThread,
 	ProviderRuntimeEvent,
 	FindSkillsInput,
+	FindMcpsInput,
 	InstallSkillInput,
 	SpawnThreadInput,
-	StartTurnInput
+	StopTurnInput,
+	StartTurnInput,
+	UninstallSkillInput
 } from "./contracts"
 
 const AGENT_NAME_MODEL = "gpt-5.4-mini"
 
 interface AgentPlanSink {
 	syncPlan(agentId: string, turnId: string | null, plan: AgentPlan): Promise<void>
+	updatePlanProgress(agentId: string, plan: AgentPlan): Promise<void>
 }
 
 function nowIso(): string {
@@ -56,6 +67,106 @@ function agentIdForThread(threadId: string): string | null {
 	if (threadId.startsWith("agent:")) return threadId
 	if (!threadId.startsWith("thread:agent:")) return null
 	return threadId.slice("thread:".length)
+}
+
+function planningToolForProvider(provider: AgentProvider): "update_plan" | "TodoWrite" {
+	return provider === "claude" ? "TodoWrite" : "update_plan"
+}
+
+function promptForTurn(input: {
+	provider: AgentProvider
+	prompt: string
+	planningMode: boolean
+	securityMode: boolean
+	semgrepSummary: string | null
+	existingPlan: AgentPlan
+}): string {
+	if (!input.planningMode && !input.securityMode && input.existingPlan.items.length === 0) {
+		return input.prompt
+	}
+
+	const lines: string[] = []
+	if (input.planningMode) {
+		const planningTool = planningToolForProvider(input.provider)
+		lines.push(
+			"Planning mode is enabled for this turn.",
+			"This is the only mode where you may create or revise tasks.",
+			`Your only action is a single ${planningTool} call. Skip preamble, skip reasoning, skip explanation.`,
+			"Do not read files, do not run commands, do not modify anything, do not call any other tool.",
+			`After ${planningTool} returns, stop immediately. Produce no further text and no further tool calls.`,
+			"The user can ask you to revise the task list or implement it in a later turn.",
+			"Task list rules:",
+			"- Include clear actionable tasks.",
+			"- Mark exactly one task as in_progress.",
+			"- Leave remaining tasks as pending unless already completed.",
+			`If you cannot call ${planningTool}, reply with a single short sentence and stop.`
+		)
+	}
+
+	if (!input.planningMode && input.existingPlan.items.length > 0) {
+		lines.push(
+			"Planning mode is disabled for this turn.",
+			"Do not create new tasks. Work the relevant unfinished tasks from the existing task list.",
+			"If you update task status, update only existing tasks and mark completed tasks as completed.",
+			"Existing task list:",
+			...input.existingPlan.items.map((item) => `- ${item.status}: ${item.title}`)
+		)
+	}
+
+	if (input.securityMode) {
+		lines.push(
+			"Security mode is enabled for this turn.",
+			"Semgrep has already been run and must be accounted for without exception.",
+			"Review findings first. If planning mode is enabled, include remediation tasks only and do not implement in this turn.",
+			"Semgrep summary:",
+			input.semgrepSummary ?? "Semgrep summary unavailable."
+		)
+	}
+
+	lines.push("", "User request:", input.prompt)
+	return lines.join("\n")
+}
+
+function runtimeModeForTurn(input: StartTurnInput): AgentRuntimeMode {
+	if (input.planningMode) return "approval-required"
+	return input.runtimeMode ?? "full-access"
+}
+
+function turnPolicyKey(threadId: string, turnId: string): string {
+	return `${threadId}:${turnId}`
+}
+
+function mergePlanProgress(existing: AgentPlan, incoming: AgentPlan): AgentPlan {
+	if (existing.items.length === 0) return existing
+	const incomingById = new Map(incoming.items.map((item) => [item.id, item]))
+	const incomingByTitle = new Map(incoming.items.map((item) => [item.title, item]))
+	return {
+		...existing,
+		updatedAt: incoming.updatedAt,
+		items: existing.items.map((item) => {
+			const update = incomingById.get(item.id) ?? incomingByTitle.get(item.title)
+			if (!update) return item
+			return {
+				...item,
+				status: update.status,
+				detail: update.detail
+			}
+		})
+	}
+}
+
+const REASONING_PREVIEW_CHARS = 240
+
+function readDeltaText(detail: unknown): string {
+	if (!detail || typeof detail !== "object") return ""
+	const value = (detail as Record<string, unknown>).delta
+	return typeof value === "string" ? value : ""
+}
+
+function appendReasoning(previous: string | null, delta: string): string {
+	const next = (previous ?? "") + delta
+	if (next.length <= REASONING_PREVIEW_CHARS) return next
+	return next.slice(next.length - REASONING_PREVIEW_CHARS)
 }
 
 function newMessage(input: {
@@ -82,6 +193,9 @@ export class AgentEngine {
 	private readonly providers: Record<AgentProvider, ProviderAdapter>
 	private planSink: AgentPlanSink | null = null
 	private threads = new Map<string, AgentThread>()
+	private planningOnlyTurns = new Set<string>()
+	private planningTurnRequests = new Set<string>()
+	private planningStoppedTurns = new Set<string>()
 	private activeThreadId: string | null = null
 
 	constructor(options: { cwd: string }) {
@@ -101,6 +215,10 @@ export class AgentEngine {
 
 	async listModels(provider: AgentProvider): Promise<AgentModelOption[]> {
 		return this.providers[provider].listModels?.() ?? []
+	}
+
+	async getSemgrepStatus(): Promise<SemgrepStatus> {
+		return checkSemgrepAvailability()
 	}
 
 	getSnapshot(): AgentSnapshot {
@@ -126,23 +244,70 @@ export class AgentEngine {
 
 		try {
 			const provider = this.providers[providerForThread(thread)]
+			const turnRuntimeMode = runtimeModeForTurn(input)
+			if (thread.runtimeMode !== turnRuntimeMode) {
+				await provider.stopSession(thread.id)
+				thread.session = null
+				thread.runtimeMode = turnRuntimeMode
+			}
+			let semgrepSummary: string | null = null
+			if (input.securityMode) {
+				thread.activities.push({
+					id: `activity:${randomUUID()}`,
+					kind: "security.scan.started",
+					summary: "Running Semgrep security scan.",
+					payload: { service: "semgrep", tool: "semgrep.scan" },
+					turnId: null,
+					createdAt: nowIso()
+				})
+				this.emitSnapshot()
+				const semgrep = await runSemgrepScan(thread.cwd)
+				semgrepSummary = semgrepSummaryForPrompt(semgrep)
+				thread.activities.push({
+					id: `activity:${randomUUID()}`,
+					kind: "security.scan.completed",
+					summary:
+						semgrep.findingCount > 0
+							? `Semgrep found ${semgrep.findingCount} issue${semgrep.findingCount === 1 ? "" : "s"}.`
+							: "Semgrep found no issues.",
+					payload: { service: "semgrep", tool: "semgrep.scan", ...semgrep },
+					turnId: null,
+					createdAt: nowIso()
+				})
+				this.emitSnapshot()
+			}
+			const turnPrompt = promptForTurn({
+				provider: providerForThread(thread),
+				prompt: input.prompt,
+				planningMode: input.planningMode ?? false,
+				securityMode: input.securityMode ?? false,
+				semgrepSummary,
+				existingPlan: thread.plan
+			})
 			const session = await provider.startSession({
 				threadId: thread.id,
 				cwd: thread.cwd,
 				provider: providerForThread(thread),
 				...(input.model ? { model: input.model } : {}),
-				runtimeMode: input.runtimeMode ?? thread.runtimeMode
+				runtimeMode: thread.runtimeMode
 			})
 			this.setThreadSession(thread.id, session)
 
-			await provider.sendTurn({
+			if (input.planningMode) this.planningTurnRequests.add(thread.id)
+			const turn = await provider.sendTurn({
 				threadId: thread.id,
-				prompt: input.prompt,
+				prompt: turnPrompt,
 				...(input.model ? { model: input.model } : {}),
 				...(input.effort ? { effort: input.effort } : {}),
 				...(input.speedTier ? { speedTier: input.speedTier } : {})
 			})
+			if (input.planningMode) {
+				this.planningTurnRequests.delete(thread.id)
+				const key = turnPolicyKey(thread.id, turn.turnId)
+				if (!this.planningStoppedTurns.has(key)) this.planningOnlyTurns.add(key)
+			}
 		} catch (error) {
+			this.planningTurnRequests.delete(thread.id)
 			this.setThreadSession(thread.id, {
 				status: "error",
 				provider: providerForThread(thread),
@@ -153,6 +318,38 @@ export class AgentEngine {
 			})
 		}
 
+		this.emitSnapshot()
+		return this.getSnapshot()
+	}
+
+	async stopTurn(input: StopTurnInput): Promise<AgentSnapshot> {
+		const thread = this.threads.get(input.threadId)
+		if (!thread) return this.getSnapshot()
+
+		const activeTurnId = thread.session?.activeTurnId ?? null
+		await this.providers[providerForThread(thread)].stopSession(thread.id)
+		for (const message of thread.messages) {
+			if (message.role === "assistant" && (!activeTurnId || message.turnId === activeTurnId)) {
+				message.streaming = false
+				message.updatedAt = nowIso()
+			}
+		}
+		thread.activities.push({
+			id: `activity:${randomUUID()}`,
+			kind: "turn.cancelled",
+			summary: "Agent turn cancelled.",
+			payload: {},
+			turnId: activeTurnId,
+			createdAt: nowIso()
+		})
+		this.setThreadSession(thread.id, {
+			status: "stopped",
+			provider: providerForThread(thread),
+			model: thread.session?.model ?? thread.model,
+			activeTurnId: null,
+			lastError: null,
+			updatedAt: nowIso()
+		})
 		this.emitSnapshot()
 		return this.getSnapshot()
 	}
@@ -173,6 +370,33 @@ export class AgentEngine {
 			thread.activities.push({
 				id: `activity:${randomUUID()}`,
 				kind: "skills.error",
+				summary: error instanceof Error ? error.message : String(error),
+				payload: {},
+				turnId: null,
+				createdAt: nowIso()
+			})
+		}
+
+		this.emitSnapshot()
+		return this.getSnapshot()
+	}
+
+	async findMcps(input: FindMcpsInput): Promise<AgentSnapshot> {
+		const thread = this.ensureThread({
+			threadId: input.threadId,
+			cwd: input.cwd,
+			prompt: input.prompt ?? "Find relevant MCP servers for this project.",
+			runtimeMode: input.runtimeMode
+		})
+		this.activeThreadId = thread.id
+		this.emitSnapshot()
+
+		try {
+			await this.updateMcpSuggestions(thread, input.prompt ?? thread.title)
+		} catch (error) {
+			thread.activities.push({
+				id: `activity:${randomUUID()}`,
+				kind: "mcps.error",
 				summary: error instanceof Error ? error.message : String(error),
 				payload: {},
 				turnId: null,
@@ -210,6 +434,31 @@ export class AgentEngine {
 		return this.getSnapshot()
 	}
 
+	async uninstallSkill(input: UninstallSkillInput): Promise<AgentSnapshot> {
+		const thread = this.threads.get(input.threadId)
+		const cwd = thread?.cwd ?? input.cwd
+
+		await removeInstalledSkill(cwd, input.skillPath)
+		if (thread) {
+			const installedKeys = await listInstalledSkillKeys(cwd)
+			thread.suggestedSkills = thread.suggestedSkills.map((suggestion) => ({
+				...suggestion,
+				installed: matchesInstalledSkill(installedKeys, suggestion)
+			}))
+			thread.activities.push({
+				id: `activity:${randomUUID()}`,
+				kind: "skills.uninstalled",
+				summary: "Uninstalled skill from this project.",
+				payload: { skillPath: input.skillPath },
+				turnId: null,
+				createdAt: nowIso()
+			})
+			thread.updatedAt = nowIso()
+		}
+		this.emitSnapshot()
+		return this.getSnapshot()
+	}
+
 	spawnThread(input: SpawnThreadInput): AgentSnapshot {
 		if (!this.threads.has(input.threadId)) {
 			const createdAt = nowIso()
@@ -223,7 +472,9 @@ export class AgentEngine {
 				messages: [],
 				activities: [],
 				plan: emptyPlan(),
+				reasoningPreview: null,
 				suggestedSkills: [],
+				suggestedMcps: [],
 				session: null,
 				createdAt,
 				updatedAt: createdAt
@@ -270,7 +521,9 @@ export class AgentEngine {
 			messages: [],
 			activities: [],
 			plan: emptyPlan(),
+			reasoningPreview: null,
 			suggestedSkills: [],
+			suggestedMcps: [],
 			session: null,
 			createdAt,
 			updatedAt: createdAt
@@ -282,6 +535,16 @@ export class AgentEngine {
 	private ingestProviderEvent(event: ProviderRuntimeEvent): void {
 		const thread = this.threads.get(event.threadId)
 		if (!thread) return
+
+		if (
+			event.type !== "session.state.changed" &&
+			event.type !== "turn.completed" &&
+			"turnId" in event &&
+			event.turnId &&
+			this.planningStoppedTurns.has(turnPolicyKey(event.threadId, event.turnId))
+		) {
+			return
+		}
 
 		switch (event.type) {
 			case "session.state.changed":
@@ -297,6 +560,11 @@ export class AgentEngine {
 				break
 
 			case "turn.started":
+				if (this.planningTurnRequests.has(event.threadId)) {
+					this.planningOnlyTurns.add(turnPolicyKey(event.threadId, event.turnId))
+					this.planningTurnRequests.delete(event.threadId)
+				}
+				thread.reasoningPreview = null
 				this.setThreadSession(event.threadId, {
 					status: "running",
 					provider: providerForThread(thread),
@@ -328,6 +596,11 @@ export class AgentEngine {
 			}
 
 			case "turn.completed":
+				if (event.turnId) {
+					this.planningOnlyTurns.delete(turnPolicyKey(event.threadId, event.turnId))
+					this.planningStoppedTurns.delete(turnPolicyKey(event.threadId, event.turnId))
+				}
+				thread.reasoningPreview = null
 				for (const message of thread.messages) {
 					if (message.role === "assistant" && message.turnId === event.turnId) {
 						message.streaming = false
@@ -345,12 +618,23 @@ export class AgentEngine {
 				break
 
 			case "activity":
+				if (event.payload.kind === "reasoning.delta") {
+					const delta = readDeltaText(event.payload.detail)
+					if (delta) thread.reasoningPreview = appendReasoning(thread.reasoningPreview, delta)
+					break
+				}
 				thread.activities.push(this.toActivity(event))
 				break
 
 			case "plan.updated":
-				thread.plan = event.payload.plan
-				this.syncPlanTasks(thread, event)
+				if (this.isPlanningTurn(thread.id, event.turnId)) {
+					thread.plan = event.payload.plan
+					this.syncPlanTasks(thread, event)
+				} else {
+					thread.plan = mergePlanProgress(thread.plan, event.payload.plan)
+					this.updatePlanTaskProgress(thread, event)
+				}
+				this.stopPlanningModeTurn(thread, event.turnId, event.createdAt)
 				break
 
 			case "runtime.error":
@@ -410,8 +694,34 @@ export class AgentEngine {
 			summary: recommendation.marketplaceError
 				? recommendation.marketplaceError
 				: recommendation.suggestions.length > 0
-					? `Suggested ${recommendation.suggestions.length} skills from ${recommendation.profile.source} project profile.`
-					: `No skills suggested from ${recommendation.profile.source} project profile.`,
+					? `Suggested ${recommendation.suggestions.length} skills relevant to your project.`
+					: "No skills suggested for your project.",
+			payload: recommendation,
+			turnId: null,
+			createdAt: nowIso()
+		})
+		this.emitSnapshot()
+	}
+
+	private async updateMcpSuggestions(thread: AgentThread, prompt: string): Promise<void> {
+		const recommendation = await recommendProjectMcps(thread.cwd, prompt, {
+			runCodexPrompt: (input) =>
+				this.codexProvider.runOneShot({
+					cwd: thread.cwd,
+					prompt: input.prompt,
+					model: input.model,
+					runtimeMode: thread.runtimeMode
+				})
+		})
+		thread.suggestedMcps = recommendation.suggestions
+		thread.activities.push({
+			id: `activity:${randomUUID()}`,
+			kind: "mcps.suggested",
+			summary: recommendation.searchError
+				? recommendation.searchError
+				: recommendation.suggestions.length > 0
+					? `Suggested ${recommendation.suggestions.length} MCP servers from GitHub.`
+					: "No MCP servers suggested from GitHub.",
 			payload: recommendation,
 			turnId: null,
 			createdAt: nowIso()
@@ -442,5 +752,81 @@ export class AgentEngine {
 				})
 				this.emitSnapshot()
 			})
+	}
+
+	private updatePlanTaskProgress(
+		thread: AgentThread,
+		event: Extract<ProviderRuntimeEvent, { type: "plan.updated" }>
+	): void {
+		const agentId = agentIdForThread(thread.id)
+		if (!this.planSink || !agentId) return
+		void this.planSink.updatePlanProgress(agentId, event.payload.plan).catch((error: unknown) => {
+			thread.activities.push({
+				id: `activity:${randomUUID()}`,
+				kind: "task.update.error",
+				summary: error instanceof Error ? error.message : String(error),
+				payload: {},
+				turnId: event.turnId,
+				createdAt: nowIso()
+			})
+			this.emitSnapshot()
+		})
+	}
+
+	private isPlanningTurn(threadId: string, turnId: string | null): boolean {
+		if (!turnId) return this.planningTurnRequests.has(threadId)
+		const key = turnPolicyKey(threadId, turnId)
+		return (
+			this.planningOnlyTurns.has(key) ||
+			this.planningStoppedTurns.has(key) ||
+			this.planningTurnRequests.has(threadId)
+		)
+	}
+
+	private stopPlanningModeTurn(
+		thread: AgentThread,
+		turnId: string | null,
+		createdAt: string
+	): void {
+		const activeTurnId = turnId ?? thread.session?.activeTurnId
+		if (!activeTurnId) return
+		const key = turnPolicyKey(thread.id, activeTurnId)
+		if (!this.planningOnlyTurns.delete(key)) return
+		this.planningStoppedTurns.add(key)
+
+		thread.activities.push({
+			id: `activity:${randomUUID()}`,
+			kind: "planning.mode.completed",
+			summary: "Planning mode captured tasks and stopped before implementation.",
+			payload: {},
+			turnId: activeTurnId,
+			createdAt
+		})
+		for (const message of thread.messages) {
+			if (message.role === "assistant" && message.turnId === activeTurnId) {
+				message.streaming = false
+				message.updatedAt = createdAt
+			}
+		}
+		this.setThreadSession(thread.id, {
+			status: "ready",
+			provider: providerForThread(thread),
+			model: thread.session?.model ?? thread.model,
+			activeTurnId: null,
+			lastError: null,
+			updatedAt: createdAt
+		})
+		const provider = this.providers[providerForThread(thread)]
+		void provider.stopSession(thread.id).catch((error: unknown) => {
+			thread.activities.push({
+				id: `activity:${randomUUID()}`,
+				kind: "runtime.error",
+				summary: error instanceof Error ? error.message : String(error),
+				payload: {},
+				turnId: activeTurnId,
+				createdAt: nowIso()
+			})
+			this.emitSnapshot()
+		})
 	}
 }

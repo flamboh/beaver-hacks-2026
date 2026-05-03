@@ -1,5 +1,10 @@
 import { useMemo, useSyncExternalStore } from "react"
-import type { AgentModelOption, AgentProvider, AgentSnapshot } from "../../main/agent/ipc"
+import type {
+	AgentModelOption,
+	AgentProvider,
+	AgentSnapshot,
+	SemgrepStatus
+} from "../../main/agent/ipc"
 import type {
 	GitCheckoutInput,
 	GitCommitAllInput,
@@ -7,6 +12,7 @@ import type {
 	GitCreateBranchInput,
 	GitDiffTour,
 	GitPushInput,
+	GitReviewFilesInput,
 	GitRunStackedActionInput,
 	GitRunStackedActionResult,
 	GitStackedActionProgressEvent,
@@ -70,6 +76,10 @@ export function listAgentModels(provider: AgentProvider): Promise<AgentModelOpti
 	return window.api.agent.listModels(provider)
 }
 
+export function getSemgrepStatus(): Promise<SemgrepStatus> {
+	return window.api.agent.getSemgrepStatus()
+}
+
 export async function sendAgentMessage(input: {
 	prompt: string
 	cwd: string
@@ -78,6 +88,8 @@ export async function sendAgentMessage(input: {
 	model?: string
 	effort?: string
 	speedTier?: string | null
+	planningMode?: boolean
+	securityMode?: boolean
 }): Promise<AgentSnapshot> {
 	const nextSnapshot = await window.api.agent.startTurn({
 		...(input.threadId ? { threadId: input.threadId } : {}),
@@ -85,10 +97,18 @@ export async function sendAgentMessage(input: {
 		...(input.model ? { model: input.model } : {}),
 		...(input.effort ? { effort: input.effort } : {}),
 		...(input.speedTier ? { speedTier: input.speedTier } : {}),
+		...(input.planningMode ? { planningMode: true } : {}),
+		...(input.securityMode ? { securityMode: true } : {}),
 		cwd: input.cwd,
 		prompt: input.prompt,
 		runtimeMode: "full-access"
 	})
+	setSnapshot(nextSnapshot)
+	return nextSnapshot
+}
+
+export async function stopAgentMessage(threadId: string): Promise<AgentSnapshot> {
+	const nextSnapshot = await window.api.agent.stopTurn({ threadId })
 	setSnapshot(nextSnapshot)
 	return nextSnapshot
 }
@@ -117,11 +137,34 @@ export async function findProjectSkills(input: {
 	setSnapshot(nextSnapshot)
 }
 
+export async function findProjectMcps(input: {
+	threadId?: string
+	cwd?: string
+	prompt?: string
+}): Promise<void> {
+	const nextSnapshot = await window.api.agent.findMcps({
+		...(input.threadId ? { threadId: input.threadId } : {}),
+		...(input.cwd ? { cwd: input.cwd } : {}),
+		...(input.prompt ? { prompt: input.prompt } : {}),
+		runtimeMode: "full-access"
+	})
+	setSnapshot(nextSnapshot)
+}
+
 export async function installProjectSkill(input: {
 	threadId: string
 	skillId: string
 }): Promise<void> {
 	const nextSnapshot = await window.api.agent.installSkill(input)
+	setSnapshot(nextSnapshot)
+}
+
+export async function uninstallProjectSkill(input: {
+	threadId: string
+	cwd: string
+	skillPath: string
+}): Promise<void> {
+	const nextSnapshot = await window.api.agent.uninstallSkill(input)
 	setSnapshot(nextSnapshot)
 }
 
@@ -179,6 +222,18 @@ export async function checkoutGitBranch(input: GitCheckoutInput): Promise<void> 
 
 export async function createGitBranch(input: GitCreateBranchInput): Promise<void> {
 	const nextSnapshot = await window.api.git.createBranch(input)
+	gitSnapshots.set(input.workspaceId, nextSnapshot)
+	emitGit()
+}
+
+export async function acceptGitFileChanges(input: GitReviewFilesInput): Promise<void> {
+	const nextSnapshot = await window.api.git.acceptFiles(input)
+	gitSnapshots.set(input.workspaceId, nextSnapshot)
+	emitGit()
+}
+
+export async function denyGitFileChanges(input: GitReviewFilesInput): Promise<void> {
+	const nextSnapshot = await window.api.git.denyFiles(input)
 	gitSnapshots.set(input.workspaceId, nextSnapshot)
 	emitGit()
 }

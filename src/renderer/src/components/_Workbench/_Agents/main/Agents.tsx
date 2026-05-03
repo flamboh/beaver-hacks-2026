@@ -173,7 +173,7 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 					</div>
 					<button
 						onClick={() => setIsNewAgentModalOpen(true)}
-						className="polished-button flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/8 px-3 py-1.5 text-sm text-white hover:bg-white/12"
+						className="polished-button mr-2 flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/8 px-3 py-1.5 text-sm text-white hover:bg-white/12"
 					>
 						<Plus size={14} />
 						New Agent

@@ -55,6 +55,9 @@ interface ReviewProps {
 	workspacePath: string
 }
 
+const INITIAL_EMPTY_TOUR_PANEL_HEIGHT = 100
+const EXPANDED_TOUR_PANEL_HEIGHT = 440
+
 export default function Review({
 	enterDevAction,
 	projectName,
@@ -65,7 +68,9 @@ export default function Review({
 	const savedTour = useReviewTour(workspaceId)
 	const [launching, setLaunching] = useState(false)
 	const [stopping, setStopping] = useState(false)
-	const [tourPanelHeight, setTourPanelHeight] = useState(() => (savedTour.tour ? 280 : 52))
+	const [tourPanelHeight, setTourPanelHeight] = useState(() =>
+		savedTour.tour ? 280 : INITIAL_EMPTY_TOUR_PANEL_HEIGHT
+	)
 	const [message, setMessage] = useState("Review workspace ready")
 	const devServerQuery = useQuery({
 		queryKey: ["dev-server", "project-status", workspacePath, projectName],
@@ -149,7 +154,7 @@ export default function Review({
 				tour: result.tour,
 				updatedAt: result.updatedAt
 			})
-			setTourPanelHeight(280)
+			setTourPanelHeight(EXPANDED_TOUR_PANEL_HEIGHT)
 			setMessage("Tour ready")
 		} catch (error) {
 			saveReviewTour(workspaceId, {
@@ -224,6 +229,8 @@ export default function Review({
 				<ReviewFilesWorkspace
 					key={buildPatchCacheKey(diffQuery.data?.patch ?? "", "review-workspace")}
 					files={renderablePatch.files}
+					workspaceId={workspaceId}
+					onMessage={setMessage}
 				/>
 			) : (
 				<div className="min-h-0 flex-1 overflow-auto pt-4">

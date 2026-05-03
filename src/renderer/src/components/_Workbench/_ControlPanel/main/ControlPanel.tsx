@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect, useMemo } from "react"
+import { useRef, useState, useCallback, useMemo } from "react"
 import { RefreshCw } from "lucide-react"
 import type { CreateSide } from "../AgentCardSideCreateButton"
 import NavigationMap from "../NavigationMap"
@@ -28,6 +28,7 @@ import {
 	nextCardWidthStep
 } from "../controlPanelLayout"
 import type { ControlPanelCard, StartCardInput, WorkspaceLane } from "../useControlPanelAgents"
+import { useActiveWorkspaceCentering } from "./useActiveWorkspaceCentering"
 
 interface ControlPanelProps {
 	activeWorkspaceId: string
@@ -51,14 +52,12 @@ export default function ControlPanel({
 	const edgePanFrame = useRef<number | null>(null)
 	const wheelPanFrame = useRef<number | null>(null)
 	const wheelTargetOffset = useRef({ x: PADDING, y: PADDING })
-	const lastCenteredWorkspace = useRef<string | null>(null)
 	const initialLaneSelected = useRef(false)
 	const isPanning = useRef(false)
 	const spacePan = useRef(false)
 	const draggedDuringPan = useRef(false)
 	const lastPos = useRef({ x: 0, y: 0 })
 	const edgePointer = useRef({ x: 0, y: 0 })
-	const wheelFnRef = useRef<(e: WheelEvent) => void>(() => {})
 
 	const [offset, setOffset] = useState({ x: PADDING, y: PADDING })
 	const [zoom, setZoom] = useState(1)
@@ -84,8 +83,8 @@ export default function ControlPanel({
 			cards.map((card) => ({
 				...card,
 				layout_x: cardLayouts[card.id]?.layout_x ?? card.layout_x,
-				width: cardSizes[card.id]?.w,
-				height: railCardHeight
+				width: cardSizes[card.id]?.w ?? card.width,
+				height: cardSizes[card.id]?.h ?? card.height ?? railCardHeight
 			})),
 		[cards, cardLayouts, cardSizes, railCardHeight]
 	)
@@ -140,48 +139,6 @@ export default function ControlPanel({
 		[commitOffset]
 	)
 
-	const stableWheelCapture = useCallback((e: WheelEvent) => {
-		const targetNode = e.target
-		const target =
-			targetNode instanceof Element
-				? targetNode
-				: targetNode instanceof Node
-					? targetNode.parentElement
-					: null
-		if (target?.closest(".terminal-wheel-zone")) return
-		const scrollable = target?.closest(".nowheel")
-		if (scrollable instanceof HTMLElement && canElementScroll(scrollable, e.deltaX, e.deltaY)) {
-			return
-		}
-		e.preventDefault()
-		wheelFnRef.current(e)
-	}, [])
-
-	const setViewportRef = useCallback(
-		(el: HTMLDivElement | null) => {
-			if (viewportRef.current) {
-				viewportRef.current.removeEventListener("wheel", stableWheelCapture, true)
-			}
-			resizeObserver.current?.disconnect()
-			viewportRef.current = el
-			if (!el) return
-			if (!initialLaneSelected.current) {
-				initialLaneSelected.current = true
-				const topLane = workspaces[0]
-				if (topLane && topLane.id !== activeWorkspaceId) {
-					onWorkspaceActivate(topLane.id)
-				}
-			}
-			const ro = new ResizeObserver(([entry]) =>
-				setVpSize({ w: entry.contentRect.width, h: entry.contentRect.height })
-			)
-			ro.observe(el)
-			resizeObserver.current = ro
-			el.addEventListener("wheel", stableWheelCapture, { capture: true, passive: false })
-		},
-		[activeWorkspaceId, onWorkspaceActivate, stableWheelCapture, workspaces]
-	)
-
 	const activateCardWorkspace = useCallback(
 		(card: ControlPanelCard) => {
 			if (card.workspace_id === activeWorkspaceId) return
@@ -234,39 +191,19 @@ export default function ControlPanel({
 		[sizedCards, canvas, centerCard, commitOffset, onWorkspaceActivate, vpSize, workspaces, zoom]
 	)
 
-	useEffect(() => {
-		if (!hasCanvas || vpSize.w === 0 || vpSize.h === 0) return
-		if (lastCenteredWorkspace.current === activeWorkspaceId) return
-		const idx = sizedCards.findIndex((card) => card.workspace_id === activeWorkspaceId)
-		const workspaceIndex = workspaces.findIndex((workspace) => workspace.id === activeWorkspaceId)
-		if (idx < 0 && workspaceIndex < 0) return
-		lastCenteredWorkspace.current = activeWorkspaceId
-		const frame = requestAnimationFrame(() => {
-			if (idx >= 0) {
-				centerCard(idx)
-				return
-			}
-			setSmoothPan(true)
-			commitOffset(
-				laneAlignedPointOffset(PADDING + CARD_W / 2, workspaceIndex, canvas, vpSize, zoom),
-				zoom,
-				false
-			)
-			if (smoothPanTimer.current) clearTimeout(smoothPanTimer.current)
-			smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 320)
-		})
-		return () => cancelAnimationFrame(frame)
-	}, [
+	useActiveWorkspaceCentering({
 		activeWorkspaceId,
 		canvas,
 		centerCard,
 		commitOffset,
 		hasCanvas,
+		setSmoothPan,
 		sizedCards,
-		vpSize,
+		smoothPanTimer,
+		viewport: vpSize,
 		workspaces,
 		zoom
-	])
+	})
 
 	const moveFocus = useCallback(
 		(direction: "left" | "right" | "up" | "down") => {
@@ -477,6 +414,72 @@ export default function ControlPanel({
 		[sizedCards, canvas, flashMap, viewportCenter, vpSize, zoom]
 	)
 
+	const stableWheelCapture = useCallback(
+		(e: WheelEvent) => {
+			const targetNode = e.target
+			const target =
+				targetNode instanceof Element
+					? targetNode
+					: targetNode instanceof Node
+						? targetNode.parentElement
+						: null
+			if (target?.closest(".terminal-wheel-zone")) return
+			const scrollable = target?.closest(".nowheel")
+			if (scrollable instanceof HTMLElement && canElementScroll(scrollable, e.deltaX, e.deltaY)) {
+				return
+			}
+			e.preventDefault()
+
+			const vp = viewportRef.current
+			if (!vp) return
+			if (e.metaKey || e.ctrlKey) {
+				const rect = vp.getBoundingClientRect()
+				const nextZoom = clampZoom(zoom * (e.deltaY > 0 ? 0.92 : 1.08))
+				const anchor = {
+					x: (e.clientX - rect.left - offset.x) / zoom,
+					y: (e.clientY - rect.top - offset.y) / zoom
+				}
+				setView(
+					{
+						x: e.clientX - rect.left - anchor.x * nextZoom,
+						y: e.clientY - rect.top - anchor.y * nextZoom
+					},
+					nextZoom
+				)
+				return
+			}
+			const dx = e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX
+			const dy = e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX) ? 0 : e.deltaY
+			smoothWheelPanBy(-dx, -dy)
+		},
+		[offset.x, offset.y, setView, smoothWheelPanBy, zoom]
+	)
+
+	const setViewportRef = useCallback(
+		(el: HTMLDivElement | null) => {
+			if (viewportRef.current) {
+				viewportRef.current.removeEventListener("wheel", stableWheelCapture, true)
+			}
+			resizeObserver.current?.disconnect()
+			viewportRef.current = el
+			if (!el) return
+			if (!initialLaneSelected.current) {
+				initialLaneSelected.current = true
+				const topLane = workspaces[0]
+				if (topLane && topLane.id !== activeWorkspaceId) {
+					onWorkspaceActivate(topLane.id)
+				}
+			}
+			const ro = new ResizeObserver(([entry]) =>
+				setVpSize({ w: entry.contentRect.width, h: entry.contentRect.height })
+			)
+			ro.observe(el)
+			resizeObserver.current = ro
+			el.addEventListener("wheel", stableWheelCapture, { capture: true, passive: false })
+		},
+		[activeWorkspaceId, onWorkspaceActivate, stableWheelCapture, workspaces]
+	)
+
 	const stopEdgePan = useCallback(() => {
 		if (edgePanFrame.current) cancelAnimationFrame(edgePanFrame.current)
 		edgePanFrame.current = null
@@ -538,32 +541,6 @@ export default function ControlPanel({
 		isPanning.current = false
 		stopEdgePan()
 	}, [stopEdgePan])
-
-	useEffect(() => {
-		wheelFnRef.current = (e: WheelEvent) => {
-			const vp = viewportRef.current
-			if (!vp) return
-			if (e.metaKey || e.ctrlKey) {
-				const rect = vp.getBoundingClientRect()
-				const nextZoom = clampZoom(zoom * (e.deltaY > 0 ? 0.92 : 1.08))
-				const anchor = {
-					x: (e.clientX - rect.left - offset.x) / zoom,
-					y: (e.clientY - rect.top - offset.y) / zoom
-				}
-				setView(
-					{
-						x: e.clientX - rect.left - anchor.x * nextZoom,
-						y: e.clientY - rect.top - anchor.y * nextZoom
-					},
-					nextZoom
-				)
-				return
-			}
-			const dx = e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX
-			const dy = e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX) ? 0 : e.deltaY
-			smoothWheelPanBy(-dx, -dy)
-		}
-	}, [offset.x, offset.y, setView, smoothWheelPanBy, zoom])
 
 	const fitAll = useCallback(() => {
 		const nextZoom = fitZoom(vpSize, canvas)

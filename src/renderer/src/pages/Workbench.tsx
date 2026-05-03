@@ -318,7 +318,7 @@ export default function Workbench() {
 					workspacesByProjectId={workspacesByProjectId}
 				/>
 				<main className="relative flex-1 overflow-hidden">
-					<AnimatePresence initial={false} mode="wait">
+					<AnimatePresence initial={false}>
 						<motion.div
 							key={currentPage}
 							initial={{ opacity: 0, y: 10, filter: "blur(4px)" }}

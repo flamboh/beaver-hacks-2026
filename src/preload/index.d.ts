@@ -3,10 +3,14 @@ import type {
 	AgentModelOption,
 	AgentProvider,
 	AgentSnapshot,
+	FindMcpsInput,
+	SemgrepStatus,
 	FindSkillsInput,
 	InstallSkillInput,
 	SpawnThreadInput,
-	StartTurnInput
+	StopTurnInput,
+	StartTurnInput,
+	UninstallSkillInput
 } from "../main/agent/ipc"
 import type {
 	ComposerFileSuggestion,
@@ -49,6 +53,8 @@ import type {
 	GitDiffTour,
 	GitPushInput,
 	GitPushResult,
+	GitReviewFileInput,
+	GitReviewFilesInput,
 	GitRunStackedActionInput,
 	GitRunStackedActionResult,
 	GitStackedActionProgressEvent,
@@ -70,9 +76,13 @@ interface BeaverApi {
 	agent: {
 		getSnapshot: () => Promise<AgentSnapshot>
 		listModels: (provider: AgentProvider) => Promise<AgentModelOption[]>
+		getSemgrepStatus: () => Promise<SemgrepStatus>
 		startTurn: (input: StartTurnInput) => Promise<AgentSnapshot>
+		stopTurn: (input: StopTurnInput) => Promise<AgentSnapshot>
 		findSkills: (input: FindSkillsInput) => Promise<AgentSnapshot>
+		findMcps: (input: FindMcpsInput) => Promise<AgentSnapshot>
 		installSkill: (input: InstallSkillInput) => Promise<AgentSnapshot>
+		uninstallSkill: (input: UninstallSkillInput) => Promise<AgentSnapshot>
 		spawnThread: (input: SpawnThreadInput) => Promise<AgentSnapshot>
 		onSnapshot: (listener: (snapshot: AgentSnapshot) => void) => () => void
 	}
@@ -85,6 +95,10 @@ interface BeaverApi {
 		getWorkingTreeDiff: (workspaceId: string) => Promise<GitWorkingTreeDiffSnapshot>
 		checkout: (input: GitCheckoutInput) => Promise<GitStatusSnapshot>
 		createBranch: (input: GitCreateBranchInput) => Promise<GitStatusSnapshot>
+		acceptFile: (input: GitReviewFileInput) => Promise<GitStatusSnapshot>
+		acceptFiles: (input: GitReviewFilesInput) => Promise<GitStatusSnapshot>
+		denyFile: (input: GitReviewFileInput) => Promise<GitStatusSnapshot>
+		denyFiles: (input: GitReviewFilesInput) => Promise<GitStatusSnapshot>
 		generateCommitMessage: (workspaceId: string) => Promise<GitCommitMessage>
 		generateDiffTour: (workspaceId: string) => Promise<GitDiffTour>
 		commitAll: (input: GitCommitAllInput) => Promise<GitCommitResult>

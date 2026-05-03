@@ -47,7 +47,7 @@ export class WorkspaceService {
 			`,
 			[input.projectId]
 		)
-		return rows.map(toWorkspaceRow)
+		return rows.map(toWorkspaceRow).filter((workspace) => existsSync(workspace.path))
 	}
 
 	async get(input: WorkspaceIdInput): Promise<WorkspaceRow> {
@@ -77,7 +77,13 @@ export class WorkspaceService {
 			if (!workspace) throw new Error("Workspace not found.")
 			return workspace
 		}
-		return toWorkspaceRow(row)
+		const workspace = toWorkspaceRow(row)
+		if (!existsSync(workspace.path)) {
+			const [nextWorkspace] = await this.list(input)
+			if (!nextWorkspace) throw new Error("Workspace not found.")
+			return nextWorkspace
+		}
+		return workspace
 	}
 
 	async create(input: CreateWorkspaceInput): Promise<WorkspaceRow> {

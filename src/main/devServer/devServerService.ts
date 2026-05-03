@@ -264,9 +264,11 @@ export class DevServerService {
 	}
 
 	private async inferDevCommand(cwd: string): Promise<string[]> {
-		const manifest = JSON.parse(
-			await readFile(join(cwd, "package.json"), "utf8")
-		) as PackageManifest
+		const manifestPath = join(cwd, "package.json")
+		if (!existsSync(manifestPath)) {
+			throw new Error(`Project package.json not found at ${manifestPath}.`)
+		}
+		const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as PackageManifest
 		if (!manifest.scripts?.dev) throw new Error("Project package.json has no dev script.")
 		const manager = this.packageManager(cwd, manifest)
 		if (this.needsExplicitPort(manifest)) {

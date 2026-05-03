@@ -1,6 +1,5 @@
-import { readdir, readFile } from "node:fs/promises"
+import { readdir, readFile, rm } from "node:fs/promises"
 import { execFile } from "node:child_process"
-import { homedir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
 
@@ -16,10 +15,6 @@ const PROJECT_SKILL_DIRS = [
 	path.join(".codex", "skills"),
 	path.join(".claude", "skills"),
 	"skills"
-]
-const USER_SKILL_DIRS = [
-	path.join(homedir(), ".agents", "skills"),
-	path.join(homedir(), ".codex", "skills")
 ]
 
 function normalize(value: string): string {
@@ -63,7 +58,12 @@ async function listRoot(root: string, depth = 0): Promise<InstalledSkill[]> {
 }
 
 function skillRoots(cwd: string): string[] {
-	return PROJECT_SKILL_DIRS.map((root) => path.join(cwd, root)).concat(USER_SKILL_DIRS)
+	return PROJECT_SKILL_DIRS.map((root) => path.join(cwd, root))
+}
+
+function isInsideRoot(root: string, value: string): boolean {
+	const relative = path.relative(root, value)
+	return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative)
 }
 
 function parseSkillsList(output: string): string[] {
@@ -93,6 +93,16 @@ export async function listInstalledSkills(cwd: string): Promise<InstalledSkill[]
 		byName.set(normalize(skill.name), skill)
 	}
 	return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export async function removeInstalledSkill(cwd: string, skillPath: string): Promise<void> {
+	const normalizedPath = path.resolve(skillPath)
+	const root = skillRoots(cwd)
+		.map((skillRoot) => path.resolve(skillRoot))
+		.find((skillRoot) => isInsideRoot(skillRoot, normalizedPath))
+	if (!root) throw new Error("Skill path is outside this project.")
+
+	await rm(normalizedPath, { recursive: true, force: true })
 }
 
 export async function listInstalledSkillKeys(cwd: string): Promise<Set<string>> {
