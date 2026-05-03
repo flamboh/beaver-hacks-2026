@@ -58,8 +58,6 @@ export default function AgentCard({ agent, thread, workspacePath }: AgentCardPro
 		<div
 			className="flex flex-col overflow-hidden rounded-xl border border-white/8 bg-neutral-900 text-white shadow-2xl shadow-black/40"
 			style={{ width: 1040, height: 680 }}
-			onMouseDown={(event) => event.stopPropagation()}
-			onMouseMove={(event) => event.stopPropagation()}
 			onWheel={(event) => event.stopPropagation()}
 		>
 			<div className="flex h-11 shrink-0 items-center justify-between border-b border-white/5 bg-neutral-800/60 px-5">
@@ -91,7 +89,7 @@ export default function AgentCard({ agent, thread, workspacePath }: AgentCardPro
 						<span className="text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
 							Tasks
 						</span>
-						<div className="nowheel min-h-0 flex-1 overflow-y-auto pr-1">
+						<div className="nowheel nodrag min-h-0 flex-1 overflow-y-auto pr-1">
 							{planSteps.length > 0 ? (
 								<ol className="flex flex-col gap-1.5">
 									{planSteps.map((task, i) => (
