@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { useQueries, useQueryClient } from "@tanstack/react-query"
+import { spawnAgentThread } from "@renderer/agentStore"
 import type { AgentRow } from "@renderer/types/models"
 import type { CreateSide } from "./AgentCard"
 import type { ToolCardRow, WorkspaceRow } from "src/main/db/contracts"
@@ -225,7 +226,7 @@ export function useControlPanelAgents(
 				return { workspaceId, ...layout }
 			}
 			const model = MODEL_BY_PROVIDER[input.provider]
-			await window.api.agents.create({
+			const createdAgent = await window.api.agents.create({
 				name: "New Agent",
 				project_id: lane.workspace.projectId,
 				workspace_id: workspaceId,
@@ -235,6 +236,16 @@ export function useControlPanelAgents(
 				effort: DEFAULT_EFFORT,
 				layout_x: layout.layout_x,
 				layout_y: 0
+			})
+			await window.api.agents.update({ id: createdAgent.id, thread_id: createdAgent.id })
+			await spawnAgentThread({
+				threadId: createdAgent.id,
+				cwd: lane.workspace.path,
+				name: createdAgent.name,
+				provider: input.provider,
+				model,
+				runtimeMode: "full-access",
+				preflight: true
 			})
 			await refetchCards()
 			return { workspaceId, ...layout }

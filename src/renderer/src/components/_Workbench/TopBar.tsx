@@ -1,6 +1,7 @@
 import { AlertTriangle } from "lucide-react"
 import logoURLSVG from "@renderer/assets/logo.svg"
 import { AnimatePresence, LayoutGroup, motion } from "motion/react"
+import type { KeyboardEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import type { WorkbenchTab } from "@renderer/types/models"
 
@@ -12,6 +13,16 @@ const navItems: { label: string; tab: WorkbenchTab }[] = [
 	{ label: "Settings", tab: "settings" }
 ]
 
+function nextTab(currentPage: WorkbenchTab, direction: "left" | "right"): WorkbenchTab {
+	const index = navItems.findIndex((item) => item.tab === currentPage)
+	if (index === -1) return currentPage
+	const nextIndex =
+		direction === "right"
+			? (index + 1) % navItems.length
+			: (index + navItems.length - 1) % navItems.length
+	return navItems[nextIndex]?.tab ?? currentPage
+}
+
 interface Props {
 	activeAgentCount: number
 	currentPage: WorkbenchTab
@@ -20,6 +31,12 @@ interface Props {
 
 export default function TopBar({ activeAgentCount, currentPage, onTabChange }: Props) {
 	const navigate = useNavigate()
+
+	const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tab: WorkbenchTab) => {
+		if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+		event.preventDefault()
+		onTabChange(nextTab(tab, event.key === "ArrowRight" ? "right" : "left"))
+	}
 
 	return (
 		<div className="relative flex h-11 w-full shrink-0 items-center gap-2.5 border-b border-white/5 bg-neutral-900 px-3">
@@ -35,7 +52,7 @@ export default function TopBar({ activeAgentCount, currentPage, onTabChange }: P
 							alt="logo"
 							className="size-8 transition-opacity duration-150 group-hover:opacity-70"
 						/>
-						<h1 className="text-sm font-bold">NULLOTH</h1>
+						<h1 className="font-raleway text-sm font-inter font-bold">NULLOTH</h1>
 					</button>
 				</div>
 			</div>
@@ -48,6 +65,7 @@ export default function TopBar({ activeAgentCount, currentPage, onTabChange }: P
 								key={tab}
 								type="button"
 								onClick={() => onTabChange(tab)}
+								onKeyDown={(event) => handleTabKeyDown(event, tab)}
 								className={`polished-button relative cursor-pointer rounded-md px-2.5 py-1 text-xs ${
 									active ? "text-white" : "text-neutral-500 hover:bg-white/5 hover:text-neutral-200"
 								}`}

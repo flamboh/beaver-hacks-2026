@@ -156,6 +156,24 @@ function mergePlanProgress(existing: AgentPlan, incoming: AgentPlan): AgentPlan 
 }
 
 const REASONING_PREVIEW_CHARS = 240
+const CLAUDE_PREFLIGHT_PROMPT = "Reply with exactly OK."
+
+function usageLimitReason(text: string | null | undefined): string | null {
+	const value = text?.trim()
+	if (!value) return null
+	const normalized = value.toLowerCase()
+	if (
+		normalized.includes("you've hit your limit") ||
+		normalized.includes("you have hit your limit") ||
+		normalized.includes("usage limit") ||
+		normalized.includes("insufficient_quota") ||
+		normalized.includes("out of credits") ||
+		(normalized.includes("limit") && normalized.includes("reset"))
+	) {
+		return value
+	}
+	return null
+}
 
 function readDeltaText(detail: unknown): string {
 	if (!detail || typeof detail !== "object") return ""
@@ -196,6 +214,9 @@ export class AgentEngine {
 	private planningOnlyTurns = new Set<string>()
 	private planningTurnRequests = new Set<string>()
 	private planningStoppedTurns = new Set<string>()
+	private preflightTurnRequests = new Set<string>()
+	private preflightTurns = new Set<string>()
+	private preflightTurnText = new Map<string, string>()
 	private activeThreadId: string | null = null
 
 	constructor(options: { cwd: string }) {
@@ -459,29 +480,9 @@ export class AgentEngine {
 		return this.getSnapshot()
 	}
 
-	spawnThread(input: SpawnThreadInput): AgentSnapshot {
-		if (!this.threads.has(input.threadId)) {
-			const createdAt = nowIso()
-			const thread: AgentThread = {
-				id: input.threadId,
-				title: input.name ?? "Agent",
-				cwd: input.cwd,
-				provider: "codex",
-				model: input.model ?? null,
-				runtimeMode: "full-access",
-				messages: [],
-				activities: [],
-				plan: emptyPlan(),
-				reasoningPreview: null,
-				suggestedSkills: [],
-				suggestedMcps: [],
-				session: null,
-				createdAt,
-				updatedAt: createdAt
-			}
-			this.threads.set(thread.id, thread)
-			this.emitSnapshot()
-		}
+	async spawnThread(input: SpawnThreadInput): Promise<AgentSnapshot> {
+		const thread = this.ensureSpawnedThread(input)
+		if (input.preflight) await this.preflightThread(thread)
 		return this.getSnapshot()
 	}
 
@@ -532,9 +533,85 @@ export class AgentEngine {
 		return thread
 	}
 
+	private ensureSpawnedThread(input: SpawnThreadInput): AgentThread {
+		const existing = this.threads.get(input.threadId)
+		if (existing) return existing
+
+		const createdAt = nowIso()
+		const thread: AgentThread = {
+			id: input.threadId,
+			title: input.name ?? "Agent",
+			cwd: input.cwd,
+			provider: input.provider ?? "codex",
+			model: input.model ?? null,
+			runtimeMode: input.runtimeMode ?? "full-access",
+			messages: [],
+			activities: [],
+			plan: emptyPlan(),
+			reasoningPreview: null,
+			suggestedSkills: [],
+			suggestedMcps: [],
+			session: null,
+			createdAt,
+			updatedAt: createdAt
+		}
+		this.threads.set(thread.id, thread)
+		this.emitSnapshot()
+		return thread
+	}
+
+	private async preflightThread(thread: AgentThread): Promise<void> {
+		if (providerForThread(thread) !== "claude" || thread.session?.status === "running") return
+
+		try {
+			const provider = this.providers[providerForThread(thread)]
+			const session = await provider.startSession({
+				threadId: thread.id,
+				cwd: thread.cwd,
+				provider: providerForThread(thread),
+				...(thread.model ? { model: thread.model } : {}),
+				runtimeMode: thread.runtimeMode
+			})
+			this.setThreadSession(thread.id, session)
+			this.preflightTurnRequests.add(thread.id)
+			const turn = await provider.sendTurn({
+				threadId: thread.id,
+				prompt: CLAUDE_PREFLIGHT_PROMPT,
+				...(thread.model ? { model: thread.model } : {})
+			})
+			this.preflightTurnRequests.delete(thread.id)
+			const key = turnPolicyKey(thread.id, turn.turnId)
+			this.preflightTurns.add(key)
+			this.preflightTurnText.set(key, this.preflightTurnText.get(key) ?? "")
+		} catch (error) {
+			this.preflightTurnRequests.delete(thread.id)
+			const message = error instanceof Error ? error.message : String(error)
+			this.setThreadSession(thread.id, {
+				status: "error",
+				provider: providerForThread(thread),
+				model: thread.session?.model ?? thread.model,
+				activeTurnId: null,
+				lastError: message,
+				updatedAt: nowIso()
+			})
+			thread.activities.push({
+				id: `activity:${randomUUID()}`,
+				kind: "runtime.error",
+				summary: message,
+				payload: {},
+				turnId: null,
+				createdAt: nowIso()
+			})
+			this.emitSnapshot()
+		}
+	}
+
 	private ingestProviderEvent(event: ProviderRuntimeEvent): void {
 		const thread = this.threads.get(event.threadId)
 		if (!thread) return
+		const eventKey =
+			"turnId" in event && event.turnId ? turnPolicyKey(event.threadId, event.turnId) : null
+		const isPreflightTurn = eventKey ? this.preflightTurns.has(eventKey) : false
 
 		if (
 			event.type !== "session.state.changed" &&
@@ -560,6 +637,12 @@ export class AgentEngine {
 				break
 
 			case "turn.started":
+				if (this.preflightTurnRequests.has(event.threadId)) {
+					const key = turnPolicyKey(event.threadId, event.turnId)
+					this.preflightTurns.add(key)
+					this.preflightTurnText.set(key, "")
+					this.preflightTurnRequests.delete(event.threadId)
+				}
 				if (this.planningTurnRequests.has(event.threadId)) {
 					this.planningOnlyTurns.add(turnPolicyKey(event.threadId, event.turnId))
 					this.planningTurnRequests.delete(event.threadId)
@@ -576,6 +659,13 @@ export class AgentEngine {
 				break
 
 			case "assistant.delta": {
+				if (isPreflightTurn && eventKey) {
+					this.preflightTurnText.set(
+						eventKey,
+						`${this.preflightTurnText.get(eventKey) ?? ""}${event.payload.delta}`
+					)
+					break
+				}
 				const messageId = assistantMessageId(event.turnId, event.itemId)
 				const existing = thread.messages.find((message) => message.id === messageId)
 				if (existing) {
@@ -596,6 +686,10 @@ export class AgentEngine {
 			}
 
 			case "turn.completed":
+				if (isPreflightTurn && eventKey) {
+					this.finishPreflightTurn(thread, event, eventKey)
+					break
+				}
 				if (event.turnId) {
 					this.planningOnlyTurns.delete(turnPolicyKey(event.threadId, event.turnId))
 					this.planningStoppedTurns.delete(turnPolicyKey(event.threadId, event.turnId))
@@ -618,6 +712,7 @@ export class AgentEngine {
 				break
 
 			case "activity":
+				if (isPreflightTurn) break
 				if (event.payload.kind === "reasoning.delta") {
 					const delta = readDeltaText(event.payload.detail)
 					if (delta) thread.reasoningPreview = appendReasoning(thread.reasoningPreview, delta)
@@ -638,12 +733,58 @@ export class AgentEngine {
 				break
 
 			case "runtime.error":
+				if (isPreflightTurn && eventKey) {
+					this.preflightTurnText.set(eventKey, event.payload.message)
+					break
+				}
 				thread.activities.push(this.toActivity(event))
 				break
 		}
 
 		thread.updatedAt = event.createdAt
 		this.emitSnapshot()
+	}
+
+	private finishPreflightTurn(
+		thread: AgentThread,
+		event: Extract<ProviderRuntimeEvent, { type: "turn.completed" }>,
+		eventKey: string
+	): void {
+		const limitReason = usageLimitReason(this.preflightTurnText.get(eventKey)) ?? null
+		const failedReason = event.payload.error ?? limitReason
+		this.preflightTurns.delete(eventKey)
+		this.preflightTurnText.delete(eventKey)
+		thread.reasoningPreview = null
+
+		if (limitReason || event.payload.status !== "completed") {
+			const message = limitReason ?? failedReason ?? "Agent preflight failed."
+			thread.activities.push({
+				id: `activity:${randomUUID()}`,
+				kind: "runtime.error",
+				summary: message,
+				payload: {},
+				turnId: event.turnId,
+				createdAt: event.createdAt
+			})
+			this.setThreadSession(thread.id, {
+				status: "error",
+				provider: providerForThread(thread),
+				model: thread.session?.model ?? thread.model,
+				activeTurnId: null,
+				lastError: message,
+				updatedAt: event.createdAt
+			})
+			return
+		}
+
+		this.setThreadSession(thread.id, {
+			status: "ready",
+			provider: providerForThread(thread),
+			model: thread.session?.model ?? thread.model,
+			activeTurnId: null,
+			lastError: null,
+			updatedAt: event.createdAt
+		})
 	}
 
 	private toActivity(

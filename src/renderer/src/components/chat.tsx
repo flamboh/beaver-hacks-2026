@@ -2,7 +2,7 @@ import type { CSSProperties, FormEvent, JSX, KeyboardEvent, RefObject, UIEvent }
 import { useCallback, useRef, useState, useSyncExternalStore } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "motion/react"
-import { ArrowUp } from "lucide-react"
+import { ArrowUp, Annoyed } from "lucide-react"
 import {
 	getSemgrepStatus,
 	listAgentModels,
@@ -62,6 +62,26 @@ const FALLBACK_MODELS: Record<AgentProvider, ModelOption[]> = {
 			speedTiers: []
 		}
 	]
+}
+
+function usageLimitMessage(message: string | null | undefined): string | null {
+	if (!message) return null
+	const normalized = message.toLowerCase()
+	const hasUsageSignal =
+		normalized.includes("credit") ||
+		normalized.includes("quota") ||
+		normalized.includes("billing") ||
+		normalized.includes("hit your limit") ||
+		normalized.includes("you've hit your limit") ||
+		normalized.includes("you have hit your limit") ||
+		normalized.includes("usage limit") ||
+		normalized.includes("insufficient_quota") ||
+		normalized.includes("rate limit") ||
+		(normalized.includes("limit") && normalized.includes("reset")) ||
+		normalized.includes("too many requests") ||
+		normalized.includes("429")
+	if (!hasUsageSignal) return null
+	return message
 }
 
 function scrollToBottom(element: HTMLElement | null): void {
@@ -128,7 +148,6 @@ export function Chat({
 	const transcriptViewportRef = useRef<HTMLDivElement | null>(null)
 	const inputRef = useRef<HTMLTextAreaElement | null>(null)
 	const transcriptScrollRef = useRef<HTMLElement | null>(null)
-	const canSend = draft.trim().length > 0 && !isSending && !isRunning
 	const canCancel = isRunning && !isCancelling
 	const transcript = thread ? buildTranscript(thread) : []
 	const transcriptVersion = thread
@@ -189,6 +208,15 @@ export function Chat({
 	const semgrepUnavailable =
 		securityMode && semgrepStatus !== undefined && semgrepStatus.available === false
 	const autoScrollKey = thread?.updatedAt ?? "idle"
+	const latestRuntimeError =
+		thread?.activities.filter((activity) => activity.kind === "runtime.error").at(-1)?.summary ??
+		null
+	const usageLimitError =
+		usageLimitMessage(thread?.session?.lastError) ??
+		usageLimitMessage(latestRuntimeError) ??
+		usageLimitMessage(error)
+	const isUsageLimited = Boolean(usageLimitError)
+	const canSend = draft.trim().length > 0 && !isSending && !isRunning && !isUsageLimited
 
 	function scrollAnchorRef(node: HTMLDivElement | null): void {
 		if (!node) return
@@ -207,7 +235,7 @@ export function Chat({
 	function handleSubmit(event: FormEvent<HTMLFormElement>): void {
 		event.preventDefault()
 		const prompt = draft.trim()
-		if (!prompt || isSending || isRunning) return
+		if (!prompt || isSending || isRunning || isUsageLimited) return
 		if (semgrepUnavailable) {
 			setError("Security mode requires Semgrep CLI. Install Semgrep and retry.")
 			return
@@ -307,7 +335,12 @@ export function Chat({
 				onScroll={handleTranscriptScroll}
 			>
 				<div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-					{thread ? (
+					{usageLimitError ? (
+						<UsageLimitNotice
+							message={usageLimitError}
+							provider={providerForNotice(thread, provider)}
+						/>
+					) : thread ? (
 						<>
 							{transcript.map((block) => (
 								<TranscriptBlockView key={block.id} block={block} />
@@ -341,7 +374,7 @@ export function Chat({
 							transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
 							className="mt-24 text-center"
 						>
-							<h2 className="text-lg font-medium text-zinc-100">Ask Agent</h2>
+							<h2 className="font-outfit text-lg">Ask Agent</h2>
 							<p className="mt-2 text-sm text-zinc-500">Send a message to start the loop.</p>
 						</motion.div>
 					)}
@@ -349,7 +382,11 @@ export function Chat({
 				</div>
 			</section>
 
-			<footer className="nodrag shrink-0 cursor-default p-4">
+			<footer
+				className={`nodrag shrink-0 p-4 ${
+					isUsageLimited ? "cursor-not-allowed" : "cursor-default"
+				}`}
+			>
 				<form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
 					<div className="relative">
 						<AnimatePresence initial={false}>
@@ -386,10 +423,17 @@ export function Chat({
 							) : null}
 						</AnimatePresence>
 
-						<div className="flex flex-col rounded-2xl border border-white/10 bg-white/[0.04] transition-[border-color,box-shadow,background-color] duration-150 ease-out focus-within:border-blue-400/40 focus-within:bg-white/[0.05] focus-within:shadow-[0_0_0_1px_rgba(96,165,250,0.18)]">
+						<div
+							className={`flex flex-col rounded-2xl border border-white/10 bg-white/[0.04] transition-[border-color,box-shadow,background-color] duration-150 ease-out ${
+								isUsageLimited
+									? "cursor-not-allowed opacity-60"
+									: "focus-within:border-blue-400/40 focus-within:bg-white/[0.05] focus-within:shadow-[0_0_0_1px_rgba(96,165,250,0.18)]"
+							}`}
+						>
 							<textarea
 								ref={inputRef}
 								value={draft}
+								disabled={isUsageLimited}
 								onChange={(event) => {
 									setDraft(event.currentTarget.value)
 									syncCursor(event.currentTarget)
@@ -402,23 +446,25 @@ export function Chat({
 								rows={1}
 								placeholder="Message agent..."
 								style={{ fieldSizing: "content" } as CSSProperties}
-								className="block max-h-[220px] min-h-[44px] w-full resize-none rounded-2xl bg-transparent px-4 pt-3 pb-1 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600"
+								className="block max-h-[220px] min-h-[44px] w-full cursor-text resize-none rounded-2xl bg-transparent px-4 pt-3 pb-1 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600 disabled:cursor-not-allowed disabled:text-zinc-500"
 							/>
 							<div className="flex items-center justify-between gap-2 px-2 pb-2">
-								<AgentRunSettings
-									modelOptions={visibleModelOptions}
-									selectedModel={selectedModel}
-									runtimeModel={runtimeModel}
-									effort={effort}
-									speedTier={speedTier}
-									planningMode={planningMode}
-									securityMode={securityMode}
-									onModelChange={onModelChange}
-									onEffortChange={onEffortChange}
-									onSpeedTierChange={onSpeedTierChange}
-									onPlanningModeChange={setPlanningMode}
-									onSecurityModeChange={setSecurityMode}
-								/>
+								<div className={isUsageLimited ? "pointer-events-none" : undefined}>
+									<AgentRunSettings
+										modelOptions={visibleModelOptions}
+										selectedModel={selectedModel}
+										runtimeModel={runtimeModel}
+										effort={effort}
+										speedTier={speedTier}
+										planningMode={planningMode}
+										securityMode={securityMode}
+										onModelChange={onModelChange}
+										onEffortChange={onEffortChange}
+										onSpeedTierChange={onSpeedTierChange}
+										onPlanningModeChange={setPlanningMode}
+										onSecurityModeChange={setSecurityMode}
+									/>
+								</div>
 								<motion.button
 									type={isRunning ? "button" : "submit"}
 									onClick={isRunning ? handleCancel : undefined}
@@ -471,6 +517,47 @@ export function Chat({
 				</form>
 			</footer>
 		</div>
+	)
+}
+
+function providerForNotice(
+	thread: AgentThread | null,
+	fallbackProvider: AgentThread["provider"] | undefined
+): AgentThread["provider"] {
+	return thread?.provider ?? fallbackProvider ?? "codex"
+}
+
+function UsageLimitNotice({
+	message,
+	provider
+}: {
+	message: string
+	provider: AgentThread["provider"]
+}): JSX.Element {
+	const providerLabel = provider === "claude" ? "Claude" : "OpenAI"
+	return (
+		<motion.div
+			initial={{ opacity: 0, y: 6 }}
+			animate={{ opacity: 1, y: 0 }}
+			transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+			className="flex min-h-[360px] items-center justify-center"
+			role="status"
+			aria-live="polite"
+		>
+			<div className="max-w-md rounded-xl border border-red-400/25 bg-red-500/8 px-5 py-4 text-center shadow-[0_18px_50px_-30px_rgba(0,0,0,0.9)]">
+				<div className="mx-auto flex size-10 items-center justify-center rounded-lg border border-red-300/25 bg-red-400/10 text-red-200">
+					<Annoyed size={18} />
+				</div>
+				<h2 className="mt-3 font-outfit text-base text-red-100">Usage limit reached</h2>
+				<p className="mt-2 text-[0.6rem] leading-6 text-red-100/75">
+					The agent could not start because the {providerLabel} account appears to be out of credits
+					or usage.
+				</p>
+				<p className="mt-3 break-words rounded-md border border-red-300/15 bg-black/20 px-3 py-2 font-mono text-[11px] leading-5 text-red-100/65">
+					{message}
+				</p>
+			</div>
+		</motion.div>
 	)
 }
 

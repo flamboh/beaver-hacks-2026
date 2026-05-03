@@ -1,4 +1,4 @@
-import { useCallback, useRef, type CSSProperties, type KeyboardEvent } from "react"
+import { useCallback, useRef, useState, type CSSProperties, type KeyboardEvent } from "react"
 import { Globe, Terminal } from "lucide-react"
 import { ProviderIcon } from "./ControlPanelAgentLauncher"
 import type { CreateSide } from "./AgentCardSideCreateButton"
@@ -37,6 +37,8 @@ export default function CreateCardOptionsPopover({
 	style
 }: CreateCardOptionsPopoverProps) {
 	const lightDismissCleanup = useRef<(() => void) | null>(null)
+	const [selectedIndex, setSelectedIndex] = useState(0)
+	const options: StartCardInput[] = showAgents ? [...AGENT_OPTIONS, ...TOOL_OPTIONS] : TOOL_OPTIONS
 	const setPopoverRef = useCallback(
 		(node: HTMLDivElement | null) => {
 			lightDismissCleanup.current?.()
@@ -72,62 +74,71 @@ export default function CreateCardOptionsPopover({
 			onClose()
 			return
 		}
-		const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"))
+		const buttons = Array.from(
+			event.currentTarget.querySelectorAll<HTMLButtonElement>("[data-card-option]")
+		)
 		const activeIndex = buttons.findIndex((button) => button === document.activeElement)
-		const column = activeIndex % 2
-		const row = Math.floor(activeIndex / 2)
-		const rowCount = Math.ceil(buttons.length / 2)
-		const close = (): void => {
+		const currentIndex = activeIndex === -1 ? selectedIndex : activeIndex
+		const focus = (index: number) => {
 			event.preventDefault()
-			onClose()
+			const nextIndex = Math.max(0, Math.min(index, buttons.length - 1))
+			setSelectedIndex(nextIndex)
+			buttons[nextIndex]?.focus()
+		}
+		const adjacentIndex = (direction: "left" | "right" | "up" | "down"): number => {
+			const columnCount = 2
+			const rowCount = Math.ceil(buttons.length / columnCount)
+			const row = Math.floor(currentIndex / columnCount)
+			const column = currentIndex % columnCount
+			if (direction === "left" || direction === "right") {
+				const nextColumn = column === 0 ? 1 : 0
+				const nextIndex = row * columnCount + nextColumn
+				return nextIndex >= buttons.length ? currentIndex : nextIndex
+			}
+			const rowDelta = direction === "down" ? 1 : -1
+			const nextRow = (row + rowDelta + rowCount) % rowCount
+			const nextIndex = nextRow * columnCount + column
+			return nextIndex >= buttons.length ? buttons.length - 1 : nextIndex
 		}
 
 		if (event.key === "ArrowLeft") {
-			if (column === 0) {
-				close()
-				return
-			}
-			event.preventDefault()
-			buttons[activeIndex - 1]?.focus()
+			focus(adjacentIndex("left"))
 			return
 		}
 		if (event.key === "ArrowRight") {
-			if (column === 1 || activeIndex === buttons.length - 1) {
-				close()
-				return
-			}
-			event.preventDefault()
-			buttons[activeIndex + 1]?.focus()
+			focus(adjacentIndex("right"))
 			return
 		}
 		if (event.key === "ArrowUp") {
-			if (row === 0) {
-				close()
-				return
-			}
-			event.preventDefault()
-			buttons[activeIndex - 2]?.focus()
+			focus(adjacentIndex("up"))
 			return
 		}
 		if (event.key === "ArrowDown") {
-			if (row === rowCount - 1 || activeIndex + 2 >= buttons.length) {
-				close()
-				return
-			}
+			focus(adjacentIndex("down"))
+			return
+		}
+		if (event.key === "Enter" || event.key === " ") {
 			event.preventDefault()
-			buttons[activeIndex + 2]?.focus()
+			buttons[currentIndex]?.click()
 			return
 		}
 		if (event.key !== "Tab") return
-		if (event.shiftKey && activeIndex <= 0) {
+		if (event.shiftKey && currentIndex <= 0) {
 			event.preventDefault()
 			buttons.at(-1)?.focus()
 			return
 		}
-		if (!event.shiftKey && activeIndex === buttons.length - 1) {
+		if (!event.shiftKey && currentIndex === buttons.length - 1) {
 			event.preventDefault()
 			buttons[0]?.focus()
 		}
+	}
+	const createCard = (option: StartCardInput): void => {
+		void onCreateCard({
+			...option,
+			side,
+			...(sourceCardId ? { sourceCardId } : {})
+		}).then(onClose)
 	}
 
 	return (
@@ -138,49 +149,39 @@ export default function CreateCardOptionsPopover({
 			onClick={(event) => event.stopPropagation()}
 			onKeyDown={handleKeyDown}
 		>
-			{showAgents ? (
-				<div className="grid grid-cols-2 gap-1.5">
-					{AGENT_OPTIONS.map((option) => (
-						<button
-							key={option.provider}
-							type="button"
-							onClick={(event) => {
-								event.preventDefault()
-								event.stopPropagation()
-								void onCreateCard({
-									...option,
-									side,
-									...(sourceCardId ? { sourceCardId } : {})
-								}).then(onClose)
-							}}
-							className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-black/35 text-neutral-400 outline-none transition-[border-color,background-color,color,box-shadow,scale] duration-150 hover:border-white/12 hover:bg-white/[0.06] hover:text-white focus-visible:border-blue-400/45 focus-visible:shadow-[0_0_0_2px_rgba(96,165,250,0.18)] active:scale-[0.96]"
-							aria-label={`Start ${option.provider} agent`}
-							title={option.provider}
-						>
-							<ProviderIcon provider={option.provider} />
-						</button>
-					))}
-				</div>
-			) : null}
 			<div className="grid grid-cols-2 gap-1.5">
-				{TOOL_OPTIONS.map((option) => (
+				{options.map((option, index) => (
 					<button
-						key={option.tool}
+						key={option.kind === "agent" ? option.provider : option.tool}
+						data-card-option
 						type="button"
+						tabIndex={index === selectedIndex ? 0 : -1}
 						onClick={(event) => {
 							event.preventDefault()
 							event.stopPropagation()
-							void onCreateCard({
-								...option,
-								side,
-								...(sourceCardId ? { sourceCardId } : {})
-							}).then(onClose)
+							createCard(option)
 						}}
-						className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-black/35 text-neutral-400 outline-none transition-[border-color,background-color,color,box-shadow,scale] duration-150 hover:border-white/12 hover:bg-white/[0.06] hover:text-white focus-visible:border-blue-400/45 focus-visible:shadow-[0_0_0_2px_rgba(96,165,250,0.18)] active:scale-[0.96]"
-						aria-label={`Create ${option.tool} card`}
-						title={option.tool}
+						onFocus={() => setSelectedIndex(index)}
+						onPointerEnter={() => setSelectedIndex(index)}
+						className={`flex size-11 shrink-0 items-center justify-center rounded-lg border outline-none transition-[border-color,background-color,color,box-shadow,scale] duration-150 hover:border-white/12 hover:bg-white/[0.06] hover:text-white active:scale-[0.96] ${
+							selectedIndex === index
+								? "border-blue-400/45 bg-blue-500/10 text-white shadow-[0_0_0_2px_rgba(96,165,250,0.18)]"
+								: "border-white/[0.06] bg-black/35 text-neutral-400"
+						}`}
+						aria-label={
+							option.kind === "agent"
+								? `Start ${option.provider} agent`
+								: `Create ${option.tool} card`
+						}
+						title={option.kind === "agent" ? option.provider : option.tool}
 					>
-						{option.tool === "terminal" ? <Terminal size={18} /> : <Globe size={18} />}
+						{option.kind === "agent" ? (
+							<ProviderIcon provider={option.provider} />
+						) : option.tool === "terminal" ? (
+							<Terminal size={18} />
+						) : (
+							<Globe size={18} />
+						)}
 					</button>
 				))}
 			</div>

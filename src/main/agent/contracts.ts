@@ -171,7 +171,10 @@ export interface SpawnThreadInput {
 	threadId: string
 	cwd: string
 	name?: string
+	provider?: AgentProvider
 	model?: string
+	runtimeMode?: AgentRuntimeMode
+	preflight?: boolean
 }
 
 export interface ProviderSessionStartInput {

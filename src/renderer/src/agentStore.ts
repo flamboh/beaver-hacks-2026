@@ -117,7 +117,10 @@ export async function spawnAgentThread(input: {
 	threadId: string
 	cwd: string
 	name?: string
+	provider?: AgentSnapshot["threads"][number]["provider"]
 	model?: string
+	runtimeMode?: AgentSnapshot["threads"][number]["runtimeMode"]
+	preflight?: boolean
 }): Promise<void> {
 	const nextSnapshot = await window.api.agent.spawnThread(input)
 	setSnapshot(nextSnapshot)

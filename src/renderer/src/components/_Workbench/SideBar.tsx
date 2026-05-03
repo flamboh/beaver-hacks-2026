@@ -102,7 +102,7 @@ export default function SideBar({
 						>
 							<PanelLeft size={16} />
 						</button>
-						<p className="min-w-0 flex-1 text-md font-medium tracking-widest text-neutral-500 uppercase">
+						<p className="min-w-0 flex-1 text-md font-medium font-raleway font-semibold tracking-widest text-neutral-500 uppercase">
 							Projects
 						</p>
 						<button

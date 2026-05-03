@@ -59,6 +59,7 @@ export default function AgentCardSideCreateButton({
 			</button>
 			{active ? (
 				<CreateCardOptionsPopover
+					autoFocusFirst
 					onClose={onClose}
 					onCreateCard={onCreateCard}
 					anchor="center"
