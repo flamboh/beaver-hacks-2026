@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { ProjectRow } from "@renderer/types/models"
+import { motion } from "motion/react"
 
 import NewProjectButton from "./NewProjectButton"
 import NewProjectModal from "./NewProjectModal"
@@ -30,10 +31,23 @@ export default function Gallery() {
 	return (
 		<main className="min-h-[calc(100vh-3.5rem)] bg-neutral-950 p-6 text-neutral-50">
 			<section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-				{projects.map((project) => (
-					<ProjectButton key={project.id} name={project.name} accessed={project.accessed} />
+				{projects.map((project, index) => (
+					<motion.div
+						key={project.id}
+						initial={{ opacity: 0, y: 32 }}
+						animate={{ opacity: 1, y: 0 }}
+						transition={{ duration: 0.36, delay: index * 0.1, ease: "easeOut" }}
+					>
+						<ProjectButton name={project.name} accessed={project.accessed} />
+					</motion.div>
 				))}
-				<NewProjectButton onClick={() => setIsNewProjectModalOpen(true)} />
+				<motion.div
+					initial={{ opacity: 0, y: 32 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.36, delay: projects.length * 0.1, ease: "easeOut" }}
+				>
+					<NewProjectButton onClick={() => setIsNewProjectModalOpen(true)} />
+				</motion.div>
 			</section>
 
 			{isNewProjectModalOpen && (
