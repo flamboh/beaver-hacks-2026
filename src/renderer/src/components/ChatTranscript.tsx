@@ -47,6 +47,7 @@ function ActivityInline({ activity }: { activity: TranscriptActivity }): JSX.Ele
 	const meta = activityMeta(activity.kind)
 	const Icon = meta.icon
 	const isOutput = activity.kind === "command.output"
+	const summary = activitySummary(activity)
 
 	return (
 		<div
@@ -59,14 +60,29 @@ function ActivityInline({ activity }: { activity: TranscriptActivity }): JSX.Ele
 				<span className="text-neutral-500"> · </span>
 				{isOutput ? (
 					<code className="block max-h-28 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-4 text-neutral-300">
-						{activity.summary}
+						{summary}
 					</code>
 				) : (
-					<span className="break-words text-neutral-300">{activity.summary}</span>
+					<span className="break-words text-neutral-300">{summary}</span>
 				)}
 			</div>
 		</div>
 	)
+}
+
+function activitySummary(activity: TranscriptActivity): string {
+	if (activity.kind !== "file.change") return activity.summary
+
+	const files = fileNamesFromPayload(activity.payload)
+	if (files.length === 0) return activity.summary
+	if (files.length <= 3) return files.join(", ")
+	return `${files.slice(0, 3).join(", ")} +${files.length - 3} more`
+}
+
+function fileNamesFromPayload(payload: unknown): string[] {
+	const raw = JSON.stringify(payload) ?? ""
+	const matches = raw.match(/[A-Za-z0-9_.@/-]+\.[A-Za-z0-9]+/g) ?? []
+	return Array.from(new Set(matches.map((path) => path.split("/").at(-1) ?? path)))
 }
 
 function activityMeta(kind: string): {
