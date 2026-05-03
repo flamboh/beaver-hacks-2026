@@ -33,35 +33,58 @@ interface DevServerProcess {
 	cwd: string
 	appName: string
 	url: string
+	ready: boolean
+	stopping: boolean
 }
 
 export class DevServerService {
 	private readonly projects = new Map<string, DevServerProcess>()
+	private readonly launches = new Map<string, Promise<ProjectDevServerLaunch>>()
 
 	async launchProject(input: LaunchProjectDevServerInput): Promise<ProjectDevServerLaunch> {
-		await this.assertDirectory(input.cwd)
 		const existing = this.running(this.projects.get(input.cwd) ?? null)
-
-		if (!existing) {
-			const appName = this.projectAppName(input)
-			const command = await this.projectDevCommand(input.cwd)
-			const server = this.spawnServer({
-				cwd: input.cwd,
-				appName,
-				url: this.projectUrl(appName),
-				command: this.portlessBin(),
-				args: [appName, "--force", ...command]
-			})
-			this.projects.set(input.cwd, server)
+		if (existing) {
+			if (existing.stopping) throw new Error("Project dev server is stopping.")
+			if (existing.ready) {
+				void shell.openExternal(existing.url)
+				return this.snapshot(existing, "running", "Project")
+			}
 		}
 
-		const active = this.projects.get(input.cwd)
-		if (!active) throw new Error("Project dev server failed to start.")
+		const pending = this.launches.get(input.cwd)
+		if (pending) return pending
 
-		const ready = existing ? true : await this.waitForUrl(active.url)
-		if (ready && !existing) await this.delay(READY_SETTLE_MS)
-		void shell.openExternal(active.url)
-		return this.snapshot(active, ready ? "running" : "starting", "Project")
+		const launch = existing ? this.finishLaunch(existing) : this.startProject(input)
+		this.launches.set(input.cwd, launch)
+		try {
+			return await launch
+		} finally {
+			if (this.launches.get(input.cwd) === launch) this.launches.delete(input.cwd)
+		}
+	}
+
+	private async startProject(input: LaunchProjectDevServerInput): Promise<ProjectDevServerLaunch> {
+		await this.assertDirectory(input.cwd)
+		const appName = this.projectAppName(input)
+		const command = await this.projectDevCommand(input.cwd)
+		const server = this.spawnServer({
+			cwd: input.cwd,
+			appName,
+			url: this.projectUrl(appName),
+			command: this.portlessBin(),
+			args: [appName, "--force", ...command]
+		})
+		this.projects.set(input.cwd, server)
+		return this.finishLaunch(server)
+	}
+
+	private async finishLaunch(server: DevServerProcess): Promise<ProjectDevServerLaunch> {
+		server.ready = await this.waitForUrl(server.url)
+		if (server.ready) {
+			await this.delay(READY_SETTLE_MS)
+			void shell.openExternal(server.url)
+		}
+		return this.snapshot(server, server.ready ? "running" : "starting", "Project")
 	}
 
 	status(input: ProjectDevServerInput): ProjectDevServerStatus {
@@ -76,7 +99,7 @@ export class DevServerService {
 			}
 		}
 		return {
-			status: "running",
+			status: server.stopping ? "stopping" : server.ready ? "running" : "starting",
 			url: server.url,
 			pid: server.child.pid ?? null,
 			cwd: server.cwd,
@@ -86,16 +109,21 @@ export class DevServerService {
 
 	stopProject(input: ProjectDevServerInput): ProjectDevServerStatus {
 		const server = this.running(this.projects.get(input.cwd) ?? null)
-		server?.child.kill()
-		this.projects.delete(input.cwd)
+		if (!server) return this.status(input)
+		server.stopping = true
+		if (!server.child.kill()) throw new Error("Failed to stop project dev server.")
 		return this.status(input)
 	}
 
 	stop(): void {
+		const failures: string[] = []
 		for (const server of this.projects.values()) {
-			server.child.kill()
+			server.stopping = true
+			if (!server.child.kill()) failures.push(server.cwd)
 		}
-		this.projects.clear()
+		if (failures.length > 0) {
+			throw new Error(`Failed to stop dev servers: ${failures.join(", ")}`)
+		}
 	}
 
 	private spawnServer(input: {
@@ -114,7 +142,9 @@ export class DevServerService {
 			output: "",
 			cwd: input.cwd,
 			appName: input.appName,
-			url: input.url
+			url: input.url,
+			ready: false,
+			stopping: false
 		}
 
 		server.child.stdout?.on("data", (data: Buffer) => this.appendOutput(server, data))

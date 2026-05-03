@@ -37,10 +37,7 @@ export default function AgentCard({ projectCwd }: AgentCardProps) {
 			snapshot.threads.find(
 				(thread) => thread.id === snapshot.activeThreadId && thread.cwd === projectCwd
 			) ??
-			snapshot.threads
-				.slice()
-				.reverse()
-				.find((thread) => thread.cwd === projectCwd) ??
+			snapshot.threads.findLast((thread) => thread.cwd === projectCwd) ??
 			null,
 		[projectCwd, snapshot]
 	)

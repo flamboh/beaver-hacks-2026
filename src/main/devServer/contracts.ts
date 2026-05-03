@@ -18,7 +18,7 @@ export interface ProjectDevServerLaunch {
 }
 
 export interface ProjectDevServerStatus {
-	status: "stopped" | "running"
+	status: "stopped" | "starting" | "running" | "stopping"
 	url: string | null
 	pid: number | null
 	cwd: string

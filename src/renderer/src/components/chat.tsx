@@ -90,7 +90,7 @@ export function Chat({ thread, isRunning, cwd }: ChatProps): JSX.Element {
 						Send
 					</button>
 				</form>
-				<GitBranchControls cwd={thread?.cwd ?? null} />
+				<GitBranchControls cwd={thread?.cwd ?? cwd} />
 				{error ? <p className="mx-auto mt-2 max-w-3xl text-xs text-red-400">{error}</p> : null}
 			</footer>
 		</div>

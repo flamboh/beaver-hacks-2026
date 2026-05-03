@@ -265,7 +265,7 @@ export default function Review({ projectCwd, projectName }: ReviewProps) {
 		try {
 			const result = await window.api.devServer.stopProject({ cwd })
 			setMessage(
-				result.status === "stopped" ? "Project dev server stopped." : "Project dev server running."
+				result.status === "stopped" ? "Project dev server stopped." : "Project dev server stopping."
 			)
 			void devServerQuery.refetch()
 		} catch (error) {

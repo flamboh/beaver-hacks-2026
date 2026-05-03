@@ -10,7 +10,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 
-const WORKBENCH_TABS: WorkbenchTab[] = ["control-panel", "gallery", "review", "agents", "settings"]
+const WORKBENCH_TABS: WorkbenchTab[] = ["control-panel", "review", "agents", "settings"]
 
 export default function Workbench() {
 	const { projectId, tab } = useParams()
