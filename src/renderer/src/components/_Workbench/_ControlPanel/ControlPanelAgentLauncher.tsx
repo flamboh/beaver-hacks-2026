@@ -1,15 +1,10 @@
+import { useState } from "react"
+import { Plus } from "lucide-react"
 import type { AgentRow } from "@renderer/types/models"
 import type { StartCardInput } from "./useControlPanelAgents"
+import CreateCardOptionsPopover from "./CreateCardOptionsPopover"
 
 type AgentProvider = AgentRow["provider"]
-
-const PROVIDERS: {
-	value: AgentProvider
-	label: string
-}[] = [
-	{ value: "codex", label: "OpenAI" },
-	{ value: "claude", label: "Claude" }
-]
 
 interface Props {
 	hasAgents: boolean
@@ -22,32 +17,37 @@ export default function ControlPanelAgentLauncher({
 	isCreatingCard,
 	onCreateCard
 }: Props) {
+	const [open, setOpen] = useState(false)
 	if (hasAgents) return null
 
 	return (
 		<div
-			className="flex h-full flex-col items-center justify-center gap-y-3"
+			className="nodrag group/launcher relative flex flex-col items-center gap-y-3"
 			onMouseDown={(event) => event.stopPropagation()}
 		>
-			<span className="text-sm text-neutral-600">No agents yet</span>
-			<div
-				className="nodrag grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-neutral-900 p-2 shadow-2xl shadow-black/50"
-				onClick={(event) => event.stopPropagation()}
+			<button
+				type="button"
+				onClick={(event) => {
+					event.preventDefault()
+					event.stopPropagation()
+					setOpen((nextOpen) => !nextOpen)
+				}}
+				disabled={isCreatingCard}
+				className="flex size-12 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-neutral-900 text-neutral-500 shadow-2xl shadow-black/40 transition-all duration-150 hover:scale-105 hover:border-white/20 hover:bg-neutral-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+				aria-label="Create card"
+				title="Create card"
 			>
-				{PROVIDERS.map((provider) => (
-					<button
-						key={provider.value}
-						type="button"
-						onClick={() => void onCreateCard({ kind: "agent", provider: provider.value })}
-						disabled={isCreatingCard}
-						className="flex h-14 w-14 items-center justify-center rounded-md border border-white/8 bg-neutral-950 text-neutral-400 transition-colors duration-150 hover:border-white/15 hover:bg-white/8 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-						aria-label={`Start ${provider.label} agent`}
-						title={provider.label}
-					>
-						<ProviderIcon provider={provider.value} />
-					</button>
-				))}
-			</div>
+				<Plus size={18} />
+			</button>
+			<span className="text-xs font-medium text-neutral-600">No cards</span>
+			{open ? (
+				<CreateCardOptionsPopover
+					onClose={() => setOpen(false)}
+					onCreateCard={onCreateCard}
+					side="right"
+					className="absolute top-1/2 left-1/2"
+				/>
+			) : null}
 		</div>
 	)
 }

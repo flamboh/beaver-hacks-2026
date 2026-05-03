@@ -6,21 +6,34 @@ const WORKSPACE_TEMPLATE_KEY = "workspace.default_template"
 const DEFAULT_WORKSPACE_TEMPLATE = "~/.nulloth/worktrees/{projectSlug}/{workspaceSlug}"
 
 interface SettingsProps {
+	onProjectChanged: () => void
 	onWorkspacesChanged: () => void
 	projectId: string
 }
 
-export default function Settings({ onWorkspacesChanged, projectId }: SettingsProps) {
+export default function Settings({
+	onProjectChanged,
+	onWorkspacesChanged,
+	projectId
+}: SettingsProps) {
 	const [templateDraft, setTemplateDraft] = useState("")
+	const [setupDraft, setSetupDraft] = useState<string | null>(null)
 	const [existingName, setExistingName] = useState("")
 	const [existingPath, setExistingPath] = useState("")
 	const [message, setMessage] = useState<string | null>(null)
-	const [busy, setBusy] = useState<"setting" | "workspace" | null>(null)
+	const [busy, setBusy] = useState<"project" | "setting" | "workspace" | null>(null)
+	const projectQuery = useQuery({
+		queryKey: ["project", projectId],
+		queryFn: () => window.api.projects.get({ id: projectId }),
+		enabled: Boolean(projectId)
+	})
 	const templateQuery = useQuery({
 		queryKey: ["setting", WORKSPACE_TEMPLATE_KEY],
 		queryFn: () => window.api.settings.get(WORKSPACE_TEMPLATE_KEY)
 	})
 	const template = templateDraft || templateQuery.data || DEFAULT_WORKSPACE_TEMPLATE
+	const project = projectQuery.data
+	const setupAction = setupDraft ?? project?.enterDevAction ?? ""
 
 	function nameFromPath(path: string): string {
 		return path.split(/[\\/]/g).filter(Boolean).at(-1) ?? ""
@@ -35,6 +48,27 @@ export default function Settings({ onWorkspacesChanged, projectId }: SettingsPro
 				setTemplateDraft("")
 				setMessage("Workspace template saved.")
 				return templateQuery.refetch()
+			})
+			.catch((error: unknown) => setMessage(error instanceof Error ? error.message : String(error)))
+			.finally(() => setBusy(null))
+	}
+
+	function saveSetupAction(): void {
+		if (!project) return
+		setBusy("project")
+		setMessage(null)
+		void window.api.projects
+			.update({
+				id: project.id,
+				name: project.name,
+				path: project.path,
+				enterDevAction: setupAction
+			})
+			.then(() => {
+				setSetupDraft(null)
+				setMessage("Project setup saved.")
+				onProjectChanged()
+				return projectQuery.refetch()
 			})
 			.catch((error: unknown) => setMessage(error instanceof Error ? error.message : String(error)))
 			.finally(() => setBusy(null))
@@ -73,6 +107,30 @@ export default function Settings({ onWorkspacesChanged, projectId }: SettingsPro
 			<section className="border-b border-white/10 pb-6">
 				<h1 className="text-base font-semibold text-white">Settings</h1>
 				<p className="mt-1 text-xs text-neutral-500">Workspace defaults.</p>
+			</section>
+
+			<section className="flex flex-col gap-3 rounded-lg border border-white/8 bg-white/[0.03] p-4">
+				<label className="text-xs font-medium uppercase tracking-widest text-neutral-500">
+					Project setup
+				</label>
+				<textarea
+					value={setupAction}
+					onChange={(event) => setSetupDraft(event.currentTarget.value)}
+					placeholder={"npm i"}
+					rows={4}
+					className="min-h-24 resize-none rounded-md border border-white/10 bg-neutral-950 px-3 py-2 font-mono text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-white/20"
+				/>
+				<div className="flex justify-end">
+					<button
+						type="button"
+						onClick={saveSetupAction}
+						disabled={busy !== null || !project}
+						className="inline-flex h-9 items-center gap-2 rounded-md bg-white px-3 text-sm font-medium text-neutral-950 hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						<Save size={14} />
+						Save
+					</button>
+				</div>
 			</section>
 
 			<section className="flex flex-col gap-3 rounded-lg border border-white/8 bg-white/[0.03] p-4">

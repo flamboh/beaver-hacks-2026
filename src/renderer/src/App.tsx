@@ -3,7 +3,6 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
 import { SessionDataProvider } from "@renderer/hooks/useSessionData"
 import type { JSX } from "react"
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom"
-import Home from "./pages/Home"
 import Workbench from "./pages/Workbench"
 
 const queryClient = new QueryClient()
@@ -14,7 +13,7 @@ export default function App(): JSX.Element {
 			<SessionDataProvider>
 				<HashRouter>
 					<Routes>
-						<Route path="/" element={<Home />} />
+						<Route path="/" element={<Workbench />} />
 						<Route path="/workbench" element={<Navigate to="/" replace />} />
 						<Route path="/workbench/:tab" element={<Navigate to="/" replace />} />
 						<Route path="/project/:projectId/workbench" element={<Workbench />} />
