@@ -18,12 +18,48 @@ export interface ProjectIdInput {
 	id: string
 }
 
+export interface ProjectWorkspaceInput {
+	projectId: string
+}
+
+export interface CreateWorkspaceInput {
+	projectId: string
+	name: string
+	path?: string
+}
+
+export interface WorkspaceIdInput {
+	id: string
+}
+
+export interface UpdateWorkspaceInput {
+	id: string
+	name: string
+	path: string
+}
+
+export interface UpdateSettingInput {
+	key: string
+	value: string
+}
+
 // Schemas
 
 export interface ProjectRow {
 	id: string
 	name: string
 	path: string
+	createdAt: string
+	accessed: string
+}
+
+export interface WorkspaceRow {
+	id: string
+	projectId: string
+	name: string
+	path: string
+	gitRoot: string | null
+	active: boolean
 	createdAt: string
 	accessed: string
 }

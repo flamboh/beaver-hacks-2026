@@ -1,13 +1,10 @@
 import { execFile } from "node:child_process"
 import type {
 	GitBranch,
-	GitCommitAllInput,
 	GitCommitMessage,
 	GitCommitResult,
-	GitCreateBranchInput,
 	GitDiffTour,
 	GitFileChange,
-	GitPushInput,
 	GitPushResult,
 	GitStatusSnapshot,
 	GitWorkingTreeDiffSnapshot
@@ -23,6 +20,24 @@ const DEFAULT_MAX_BUFFER = 2 * 1024 * 1024
 const COMMIT_CONTEXT_MAX_BUFFER = 256 * 1024
 const MINI_MODEL = "gpt-5.4-mini"
 const TOUR_MODEL = "gpt-5.5"
+
+interface GitWorkspaceMeta {
+	workspaceId?: string | null
+	workspacePath?: string | null
+}
+
+interface GitCwdInput {
+	cwd: string
+}
+
+interface GitCwdBranchInput extends GitCwdInput {
+	branch: string
+}
+
+interface GitCwdCommitInput extends GitCwdInput {
+	subject: string
+	body?: string
+}
 
 function nowIso(): string {
 	return new Date().toISOString()
@@ -210,11 +225,13 @@ async function buildUntrackedPatch(cwd: string): Promise<string> {
 }
 
 export class GitService {
-	async status(cwd: string): Promise<GitStatusSnapshot> {
+	async status(cwd: string, meta: GitWorkspaceMeta = {}): Promise<GitStatusSnapshot> {
 		try {
 			await runGit(cwd, ["rev-parse", "--is-inside-work-tree"])
 		} catch {
 			return {
+				workspaceId: meta.workspaceId ?? null,
+				workspacePath: meta.workspacePath ?? null,
 				cwd,
 				isRepo: false,
 				branch: null,
@@ -240,6 +257,8 @@ export class GitService {
 		const stats = parseNumstat(numstatResult.stdout)
 
 		return {
+			workspaceId: meta.workspaceId ?? null,
+			workspacePath: meta.workspacePath ?? null,
 			cwd,
 			isRepo: true,
 			branch: parsed.branch,
@@ -255,21 +274,21 @@ export class GitService {
 		}
 	}
 
-	async checkout(input: { cwd: string; branch: string }): Promise<GitStatusSnapshot> {
+	async checkout(input: GitCwdBranchInput): Promise<GitStatusSnapshot> {
 		const branch = normalizeBranchName(input.branch)
 		if (!branch) throw new Error("Branch required.")
 		await runGit(input.cwd, ["checkout", branch])
 		return this.status(input.cwd)
 	}
 
-	async createBranch(input: GitCreateBranchInput): Promise<GitStatusSnapshot> {
+	async createBranch(input: GitCwdBranchInput): Promise<GitStatusSnapshot> {
 		const branch = normalizeBranchName(input.branch)
 		if (!branch) throw new Error("Branch required.")
 		await runGit(input.cwd, ["checkout", "-b", branch])
 		return this.status(input.cwd)
 	}
 
-	async commitAll(input: GitCommitAllInput): Promise<GitCommitResult> {
+	async commitAll(input: GitCwdCommitInput): Promise<GitCommitResult> {
 		const subject = input.subject.trim()
 		const body = input.body?.trim() ?? ""
 		if (!subject) throw new Error("Commit subject required.")
@@ -285,7 +304,7 @@ export class GitService {
 		}
 	}
 
-	async push(input: GitPushInput): Promise<GitPushResult> {
+	async push(input: GitCwdInput): Promise<GitPushResult> {
 		const snapshot = await this.status(input.cwd)
 		if (!snapshot.branch) throw new Error("Cannot push detached HEAD.")
 		const args = snapshot.upstream
@@ -295,11 +314,16 @@ export class GitService {
 		return { status: await this.status(input.cwd) }
 	}
 
-	async workingTreeDiff(cwd = process.cwd()): Promise<GitWorkingTreeDiffSnapshot> {
+	async workingTreeDiff(
+		cwd = process.cwd(),
+		meta: GitWorkspaceMeta = {}
+	): Promise<GitWorkingTreeDiffSnapshot> {
 		try {
 			await runGit(cwd, ["rev-parse", "--is-inside-work-tree"])
 		} catch {
 			return {
+				workspaceId: meta.workspaceId ?? null,
+				workspacePath: meta.workspacePath ?? null,
 				cwd,
 				isRepo: false,
 				patch: "",
@@ -312,6 +336,8 @@ export class GitService {
 			buildUntrackedPatch(cwd)
 		])
 		return {
+			workspaceId: meta.workspaceId ?? null,
+			workspacePath: meta.workspacePath ?? null,
 			cwd,
 			isRepo: true,
 			patch: [trackedPatch.stdout, untrackedPatch].filter(Boolean).join("\n"),

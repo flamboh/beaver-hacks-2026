@@ -8,10 +8,16 @@ import type {
 } from "../main/agent/ipc"
 import type {
 	CreateProjectInput,
+	CreateWorkspaceInput,
 	DatabaseInfo,
 	ProjectIdInput,
 	ProjectRow,
-	UpdateProjectInput
+	ProjectWorkspaceInput,
+	UpdateProjectInput,
+	UpdateSettingInput,
+	UpdateWorkspaceInput,
+	WorkspaceIdInput,
+	WorkspaceRow
 } from "../main/db/ipc"
 import type {
 	LaunchProjectDevServerInput,
@@ -51,18 +57,18 @@ const api = {
 		}
 	},
 	git: {
-		getStatus: (cwd: string): Promise<GitStatusSnapshot> =>
-			ipcRenderer.invoke("git:get-status", cwd),
-		getWorkingTreeDiff: (cwd?: string): Promise<GitWorkingTreeDiffSnapshot> =>
-			ipcRenderer.invoke("git:get-working-tree-diff", cwd),
+		getStatus: (workspaceId: string): Promise<GitStatusSnapshot> =>
+			ipcRenderer.invoke("git:get-status", workspaceId),
+		getWorkingTreeDiff: (workspaceId: string): Promise<GitWorkingTreeDiffSnapshot> =>
+			ipcRenderer.invoke("git:get-working-tree-diff", workspaceId),
 		checkout: (input: GitCheckoutInput): Promise<GitStatusSnapshot> =>
 			ipcRenderer.invoke("git:checkout", input),
 		createBranch: (input: GitCreateBranchInput): Promise<GitStatusSnapshot> =>
 			ipcRenderer.invoke("git:create-branch", input),
-		generateCommitMessage: (cwd: string): Promise<GitCommitMessage> =>
-			ipcRenderer.invoke("git:generate-commit-message", cwd),
-		generateDiffTour: (cwd: string): Promise<GitDiffTour> =>
-			ipcRenderer.invoke("git:generate-diff-tour", cwd),
+		generateCommitMessage: (workspaceId: string): Promise<GitCommitMessage> =>
+			ipcRenderer.invoke("git:generate-commit-message", workspaceId),
+		generateDiffTour: (workspaceId: string): Promise<GitDiffTour> =>
+			ipcRenderer.invoke("git:generate-diff-tour", workspaceId),
 		commitAll: (input: GitCommitAllInput): Promise<GitCommitResult> =>
 			ipcRenderer.invoke("git:commit-all", input),
 		push: (input: GitPushInput): Promise<GitPushResult> => ipcRenderer.invoke("git:push", input)
@@ -91,6 +97,23 @@ const api = {
 		touch: (input: ProjectIdInput): Promise<ProjectRow> =>
 			ipcRenderer.invoke("project:touch", input),
 		delete: (input: ProjectIdInput): Promise<void> => ipcRenderer.invoke("project:delete", input)
+	},
+	workspaces: {
+		list: (input: ProjectWorkspaceInput): Promise<WorkspaceRow[]> =>
+			ipcRenderer.invoke("workspace:list", input),
+		active: (input: ProjectWorkspaceInput): Promise<WorkspaceRow> =>
+			ipcRenderer.invoke("workspace:active", input),
+		create: (input: CreateWorkspaceInput): Promise<WorkspaceRow> =>
+			ipcRenderer.invoke("workspace:create", input),
+		update: (input: UpdateWorkspaceInput): Promise<WorkspaceRow> =>
+			ipcRenderer.invoke("workspace:update", input),
+		activate: (input: WorkspaceIdInput): Promise<WorkspaceRow> =>
+			ipcRenderer.invoke("workspace:activate", input)
+	},
+	settings: {
+		get: (key: string): Promise<string> => ipcRenderer.invoke("setting:get", key),
+		update: (input: UpdateSettingInput): Promise<string> =>
+			ipcRenderer.invoke("setting:update", input)
 	}
 }
 

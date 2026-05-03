@@ -7,10 +7,16 @@ import type {
 } from "../main/agent/ipc"
 import type {
 	CreateProjectInput,
+	CreateWorkspaceInput,
 	DatabaseInfo,
 	ProjectIdInput,
 	ProjectRow,
-	UpdateProjectInput
+	ProjectWorkspaceInput,
+	UpdateProjectInput,
+	UpdateSettingInput,
+	UpdateWorkspaceInput,
+	WorkspaceIdInput,
+	WorkspaceRow
 } from "../main/db/ipc"
 import type {
 	LaunchProjectDevServerInput,
@@ -40,12 +46,12 @@ interface BeaverApi {
 		onSnapshot: (listener: (snapshot: AgentSnapshot) => void) => () => void
 	}
 	git: {
-		getStatus: (cwd: string) => Promise<GitStatusSnapshot>
-		getWorkingTreeDiff: (cwd?: string) => Promise<GitWorkingTreeDiffSnapshot>
+		getStatus: (workspaceId: string) => Promise<GitStatusSnapshot>
+		getWorkingTreeDiff: (workspaceId: string) => Promise<GitWorkingTreeDiffSnapshot>
 		checkout: (input: GitCheckoutInput) => Promise<GitStatusSnapshot>
 		createBranch: (input: GitCreateBranchInput) => Promise<GitStatusSnapshot>
-		generateCommitMessage: (cwd: string) => Promise<GitCommitMessage>
-		generateDiffTour: (cwd: string) => Promise<GitDiffTour>
+		generateCommitMessage: (workspaceId: string) => Promise<GitCommitMessage>
+		generateDiffTour: (workspaceId: string) => Promise<GitDiffTour>
 		commitAll: (input: GitCommitAllInput) => Promise<GitCommitResult>
 		push: (input: GitPushInput) => Promise<GitPushResult>
 	}
@@ -67,6 +73,17 @@ interface BeaverApi {
 		update: (input: UpdateProjectInput) => Promise<ProjectRow>
 		touch: (input: ProjectIdInput) => Promise<ProjectRow>
 		delete: (input: ProjectIdInput) => Promise<void>
+	}
+	workspaces: {
+		list: (input: ProjectWorkspaceInput) => Promise<WorkspaceRow[]>
+		active: (input: ProjectWorkspaceInput) => Promise<WorkspaceRow>
+		create: (input: CreateWorkspaceInput) => Promise<WorkspaceRow>
+		update: (input: UpdateWorkspaceInput) => Promise<WorkspaceRow>
+		activate: (input: WorkspaceIdInput) => Promise<WorkspaceRow>
+	}
+	settings: {
+		get: (key: string) => Promise<string>
+		update: (input: UpdateSettingInput) => Promise<string>
 	}
 }
 

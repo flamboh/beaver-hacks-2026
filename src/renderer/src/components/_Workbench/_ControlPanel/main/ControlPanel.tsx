@@ -92,11 +92,11 @@ function clamp(offset: { x: number; y: number }, vpW: number, vpH: number, cW: n
 }
 
 interface ControlPanelProps {
-	projectCwd: string
+	workspacePath: string
 }
 
 // ── component ─────────────────────────────────────────────────────
-export default function ControlPanel({ projectCwd }: ControlPanelProps) {
+export default function ControlPanel({ workspacePath }: ControlPanelProps) {
 	const viewportRef = useRef<HTMLDivElement>(null)
 	const resizeObserver = useRef<ResizeObserver | null>(null)
 	const hideMapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -279,7 +279,7 @@ export default function ControlPanel({ projectCwd }: ControlPanelProps) {
 									focused ? "ring-2 ring-white/20 ring-offset-4 ring-offset-neutral-950" : ""
 								}`}
 							>
-								<AgentCard projectCwd={projectCwd} />
+								<AgentCard workspacePath={workspacePath} />
 							</div>
 						</div>
 					)
