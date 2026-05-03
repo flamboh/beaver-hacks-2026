@@ -2,7 +2,7 @@ import { useState } from "react"
 import { AlertTriangle, GitBranch, GitFork, PanelLeft, Tally1, Trash2 } from "lucide-react"
 import { checkoutGitBranch, createGitBranch, useGitStatus } from "@renderer/agentStore"
 import { GitCommitMenu } from "../GitCommitMenu"
-import type { WorkspaceRow } from "../../../../main/db/ipc"
+import type { WorkspaceRow } from "src/main/db/contracts"
 import { useNavigate } from "react-router-dom"
 
 interface Props {

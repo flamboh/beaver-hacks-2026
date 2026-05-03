@@ -9,7 +9,7 @@ import AgentCardSideCreateButton, { type CreateSide } from "./AgentCardSideCreat
 import { parseScopePath } from "./agentCardScopePath"
 import TaskList from "./TaskList"
 import { CARD_H, CARD_W } from "./controlPanelLayout"
-import { agentNameForPrompt, type StartAgentInput } from "./useControlPanelAgents"
+import { agentNameForPrompt, type StartCardInput } from "./useControlPanelAgents"
 
 export type { CreateSide }
 
@@ -45,8 +45,8 @@ interface Props {
 	agent: AgentRow
 	availableCreateSides: CreateSide[]
 	isDeleting: boolean
-	onCreateAgent: (input: StartAgentInput) => Promise<void>
-	onDeleteAgent: (id: string) => Promise<void>
+	onCreateCard: (input: StartCardInput) => Promise<void>
+	onDeleteCard: (id: string) => Promise<void>
 	workspaceId: string
 	workspacePath: string
 }
@@ -55,8 +55,8 @@ export default function AgentCard({
 	agent,
 	availableCreateSides,
 	isDeleting,
-	onCreateAgent,
-	onDeleteAgent,
+	onCreateCard,
+	onDeleteCard,
 	workspaceId,
 	workspacePath
 }: Props) {
@@ -112,7 +112,7 @@ export default function AgentCard({
 	}
 	const deleteAgent = () => {
 		setDeleting(true)
-		void onDeleteAgent(agent.id).finally(() => setDeleting(false))
+		void onDeleteCard(agent.id).finally(() => setDeleting(false))
 	}
 	const requestDelete = () => {
 		if (deleteArmed) {
@@ -185,10 +185,10 @@ export default function AgentCard({
 					key={side}
 					active={activeCreateSide === side}
 					onClose={() => setActiveCreateSide(null)}
-					onCreateAgent={onCreateAgent}
+					onCreateCard={onCreateCard}
 					onOpen={() => setActiveCreateSide(side)}
 					side={side}
-					sourceAgentId={agent.id}
+					sourceCardId={agent.id}
 				/>
 			))}
 
@@ -241,7 +241,7 @@ export default function AgentCard({
 								: "border-red-500/40 text-red-400 hover:border-red-500/60 hover:bg-red-500/10"
 						}`}
 					>
-						{deleting || isDeleting ? "Deleting..." : deleteArmed ? "Confirm" : "Delete"}
+						{deleting || isDeleting ? "Deleting..." : deleteArmed ? "Confirm" : "Terminate"}
 					</button>
 				</div>
 

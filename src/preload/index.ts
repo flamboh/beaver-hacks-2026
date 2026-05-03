@@ -45,7 +45,15 @@ import type {
 	GitWorkingTreeDiffSnapshot
 } from "../main/git/ipc"
 import type { SaveScopeFileInput, SaveScopeFileResult } from "../main/scopeFiles/ipc"
-import type { TerminalRunInput, TerminalRunResult } from "../main/terminal/ipc"
+import type {
+	TerminalCreateInput,
+	TerminalCreateResult,
+	TerminalDisposeInput,
+	TerminalResizeInput,
+	TerminalRunInput,
+	TerminalRunResult,
+	TerminalWriteInput
+} from "../main/terminal/ipc"
 
 // Custom APIs for renderer
 const api = {
@@ -148,7 +156,38 @@ const api = {
 	},
 	terminal: {
 		run: (input: TerminalRunInput): Promise<TerminalRunResult> =>
-			ipcRenderer.invoke("terminal:run", input)
+			ipcRenderer.invoke("terminal:run", input),
+		session: {
+			create: (input: TerminalCreateInput): Promise<TerminalCreateResult> =>
+				ipcRenderer.invoke("terminal:session:create", input),
+			write: (input: TerminalWriteInput): void => {
+				ipcRenderer.send("terminal:session:write", input)
+			},
+			resize: (input: TerminalResizeInput): void => {
+				ipcRenderer.send("terminal:session:resize", input)
+			},
+			dispose: (input: TerminalDisposeInput): void => {
+				ipcRenderer.send("terminal:session:dispose", input)
+			},
+			onData: (sessionId: string, listener: (data: string) => void): (() => void) => {
+				const channel = `terminal:data:${sessionId}`
+				const handler = (_event: Electron.IpcRendererEvent, data: string): void => listener(data)
+				ipcRenderer.on(channel, handler)
+				return () => ipcRenderer.off(channel, handler)
+			},
+			onExit: (
+				sessionId: string,
+				listener: (info: { exitCode: number; signal: number | null }) => void
+			): (() => void) => {
+				const channel = `terminal:exit:${sessionId}`
+				const handler = (
+					_event: Electron.IpcRendererEvent,
+					info: { exitCode: number; signal: number | null }
+				): void => listener(info)
+				ipcRenderer.on(channel, handler)
+				return () => ipcRenderer.off(channel, handler)
+			}
+		}
 	}
 }
 

@@ -1,5 +1,5 @@
 import type { AgentRow } from "@renderer/types/models"
-import type { StartAgentInput } from "./useControlPanelAgents"
+import type { StartCardInput } from "./useControlPanelAgents"
 
 type AgentProvider = AgentRow["provider"]
 
@@ -13,14 +13,14 @@ const PROVIDERS: {
 
 interface Props {
 	hasAgents: boolean
-	isCreatingAgent: boolean
-	onCreateAgent: (input: StartAgentInput) => Promise<void>
+	isCreatingCard: boolean
+	onCreateCard: (input: StartCardInput) => Promise<void>
 }
 
 export default function ControlPanelAgentLauncher({
 	hasAgents,
-	isCreatingAgent,
-	onCreateAgent
+	isCreatingCard,
+	onCreateCard
 }: Props) {
 	if (hasAgents) return null
 
@@ -38,8 +38,8 @@ export default function ControlPanelAgentLauncher({
 					<button
 						key={provider.value}
 						type="button"
-						onClick={() => void onCreateAgent({ provider: provider.value })}
-						disabled={isCreatingAgent}
+						onClick={() => void onCreateCard({ kind: "agent", provider: provider.value })}
+						disabled={isCreatingCard}
 						className="flex h-14 w-14 items-center justify-center rounded-md border border-white/8 bg-neutral-950 text-neutral-400 transition-colors duration-150 hover:border-white/15 hover:bg-white/8 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
 						aria-label={`Start ${provider.label} agent`}
 						title={provider.label}

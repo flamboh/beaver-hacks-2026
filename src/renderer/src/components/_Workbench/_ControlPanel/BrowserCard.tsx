@@ -1,33 +1,75 @@
-import type { FormEvent, JSX } from "react"
-import { useRef, useState } from "react"
+import { useCallback, useRef, useState, type FormEvent, type JSX } from "react"
 import { ArrowLeft, ArrowRight, RotateCw } from "lucide-react"
 
 interface BrowserWebview extends HTMLElement {
 	canGoBack: () => boolean
 	canGoForward: () => boolean
+	getURL: () => string
 	goBack: () => void
 	goForward: () => void
 	reload: () => void
+}
+
+interface DidFailLoadEvent extends Event {
+	errorCode: number
+	errorDescription: string
+	validatedURL: string
 }
 
 function normalizeUrl(value: string): string {
 	const input = value.trim()
 	if (!input) return "about:blank"
 	if (input.startsWith("about:")) return input
-	if (/^[a-zA-Z][a-zA-Z\\d+.-]*:/.test(input)) return input
+	if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(input)) return input
 	return `https://${input}`
 }
 
 export default function BrowserCard(): JSX.Element {
 	const webviewRef = useRef<BrowserWebview | null>(null)
-	const [draftUrl, setDraftUrl] = useState("https://example.com")
-	const [activeUrl, setActiveUrl] = useState("https://example.com")
+	const listenerCleanupRef = useRef<(() => void) | null>(null)
+	const [draftUrl, setDraftUrl] = useState("https://www.google.com")
+	const [activeUrl, setActiveUrl] = useState("https://www.google.com")
+	const [error, setError] = useState<string | null>(null)
+
+	const setWebviewRef = useCallback((node: HTMLElement | null) => {
+		listenerCleanupRef.current?.()
+		listenerCleanupRef.current = null
+		const webview = node as BrowserWebview | null
+		webviewRef.current = webview
+		if (!webview) return
+
+		const handleNavigate = (): void => {
+			const current = webview.getURL()
+			setActiveUrl(current)
+			setDraftUrl(current)
+			setError(null)
+		}
+		const handleFailLoad = (event: Event): void => {
+			const detail = event as DidFailLoadEvent
+			if (detail.errorCode === -3) return
+			setError(
+				detail.errorDescription
+					? `${detail.errorDescription}${detail.validatedURL ? ` (${detail.validatedURL})` : ""}`
+					: "Failed to load page."
+			)
+		}
+
+		webview.addEventListener("did-navigate", handleNavigate)
+		webview.addEventListener("did-navigate-in-page", handleNavigate)
+		webview.addEventListener("did-fail-load", handleFailLoad)
+		listenerCleanupRef.current = () => {
+			webview.removeEventListener("did-navigate", handleNavigate)
+			webview.removeEventListener("did-navigate-in-page", handleNavigate)
+			webview.removeEventListener("did-fail-load", handleFailLoad)
+		}
+	}, [])
 
 	function navigate(event: FormEvent<HTMLFormElement>): void {
 		event.preventDefault()
 		const next = normalizeUrl(draftUrl)
 		setDraftUrl(next)
 		setActiveUrl(next)
+		setError(null)
 	}
 
 	return (
@@ -53,7 +95,10 @@ export default function BrowserCard(): JSX.Element {
 				</button>
 				<button
 					type="button"
-					onClick={() => webviewRef.current?.reload()}
+					onClick={() => {
+						setError(null)
+						webviewRef.current?.reload()
+					}}
 					className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 text-neutral-400 transition-colors hover:border-white/20 hover:text-neutral-200"
 				>
 					<RotateCw size={12} />
@@ -75,13 +120,15 @@ export default function BrowserCard(): JSX.Element {
 				</form>
 			</div>
 
-			<webview
-				ref={(node) => {
-					webviewRef.current = node as BrowserWebview | null
-				}}
-				src={activeUrl}
-				className="h-full w-full"
-			/>
+			{error ? (
+				<div className="border-b border-red-500/20 bg-red-500/10 px-3 py-1 text-[11px] text-red-300">
+					{error}
+				</div>
+			) : null}
+
+			<div className="min-h-0 flex-1">
+				<webview ref={setWebviewRef} src={activeUrl} className="h-full w-full" />
+			</div>
 		</div>
 	)
 }

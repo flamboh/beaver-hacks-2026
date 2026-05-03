@@ -18,9 +18,9 @@ export default function SideBar({ currentPage, projectName, open, setCurrentPage
 	return (
 		<div
 			className="h-full bg-neutral-900 border-r border-white/5 flex flex-col shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out"
-			style={{ width: open ? 200 : 0 }}
+			style={{ width: open ? 250 : 0 }}
 		>
-			<div className="w-[200px] flex flex-col flex-1">
+			<div className="w-[250px] flex flex-col flex-1">
 				<div className="flex items-center gap-1 px-1.5 border-b border-white/5 h-[60px]">
 					<div
 						className="flex-1 min-w-0 transition-opacity duration-150 ease-in-out p-2"
