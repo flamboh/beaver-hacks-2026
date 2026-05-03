@@ -22,6 +22,7 @@ import {
 	assertDirectory,
 	canonicalPath,
 	DEFAULT_WORKSPACE_TEMPLATE,
+	expandHomePath,
 	resolveGitRoot,
 	runGit,
 	slugify
@@ -318,7 +319,8 @@ export class DatabaseService {
 		const expanded = template
 			.replaceAll("{projectSlug}", projectSlug)
 			.replaceAll("{workspaceSlug}", workspaceSlug)
-		const basePath = isAbsolute(expanded) ? expanded : resolve(projectParent, expanded)
+		const expandedPath = expandHomePath(expanded)
+		const basePath = isAbsolute(expandedPath) ? expandedPath : resolve(projectParent, expandedPath)
 		let candidate = basePath
 		let suffix = 2
 		while (existsSync(candidate)) {

@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process"
 import { existsSync, realpathSync, statSync } from "node:fs"
+import { homedir } from "node:os"
 import { resolve } from "node:path"
 
-export const DEFAULT_WORKSPACE_TEMPLATE = "../nulloth-workspaces/{projectSlug}/{workspaceSlug}"
+export const DEFAULT_WORKSPACE_TEMPLATE = "~/.nulloth/worktrees/{projectSlug}/{workspaceSlug}"
 
 export function slugify(value: string): string {
 	const slug = value
@@ -14,8 +15,14 @@ export function slugify(value: string): string {
 }
 
 export function canonicalPath(path: string): string {
-	const resolved = resolve(path.trim())
+	const resolved = resolve(expandHomePath(path.trim()))
 	return existsSync(resolved) ? realpathSync(resolved) : resolved
+}
+
+export function expandHomePath(path: string): string {
+	if (path === "~") return homedir()
+	if (path.startsWith("~/")) return resolve(homedir(), path.slice(2))
+	return path
 }
 
 export function assertDirectory(path: string): void {
