@@ -49,6 +49,7 @@ export default function AgentCard({
 	const thread = snapshot.threads.find((agentThread) => agentThread.id === agentThreadId) ?? null
 	const session = thread?.session ?? null
 	const runtimeModel = session?.model ?? null
+	const hasPlan = (thread?.plan.items.length ?? 0) > 0
 	const isRunning =
 		session !== null &&
 		(session.status === "starting" || session.status === "running" || session.activeTurnId !== null)
@@ -223,9 +224,11 @@ export default function AgentCard({
 				</div>
 
 				<div className="flex flex-1 overflow-hidden">
-					<div className="flex w-[28%] shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
-						<TaskList plan={thread?.plan ?? null} />
-					</div>
+					{hasPlan ? (
+						<div className="flex w-[28%] shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
+							<TaskList plan={thread?.plan ?? null} />
+						</div>
+					) : null}
 
 					<div className="flex min-w-0 flex-1 flex-col overflow-hidden">
 						<div className="min-h-0 flex-1">
