@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { ClaudeAdapter } from "./claudeAdapter"
 import { CodexAdapter } from "./codexAdapter"
 import { assistantMessageId } from "./runtimeIds"
+import { checkSemgrepAvailability, runSemgrepScan, semgrepSummaryForPrompt } from "./semgrep"
 import {
 	buildAgentNamePrompt,
 	parseAgentName,
@@ -23,6 +24,7 @@ import type {
 	AgentMessage,
 	AgentPlan,
 	AgentProvider,
+	SemgrepStatus,
 	ProviderAdapter,
 	AgentRuntimeMode,
 	AgentSession,
@@ -66,6 +68,59 @@ function agentIdForThread(threadId: string): string | null {
 	return threadId.slice("thread:".length)
 }
 
+function planningToolForProvider(provider: AgentProvider): "update_plan" | "TodoWrite" {
+	return provider === "claude" ? "TodoWrite" : "update_plan"
+}
+
+function promptForTurn(input: {
+	provider: AgentProvider
+	prompt: string
+	planningMode: boolean
+	securityMode: boolean
+	semgrepSummary: string | null
+}): string {
+	if (!input.planningMode && !input.securityMode) return input.prompt
+
+	const lines: string[] = []
+	if (input.planningMode) {
+		const planningTool = planningToolForProvider(input.provider)
+		lines.push(
+			"Planning mode is enabled for this turn.",
+			`Before doing anything else, your first tool call must be ${planningTool}.`,
+			"This turn is plan-only.",
+			"Do not modify files, do not run write operations, and do not apply patches.",
+			"Lay out a concrete task list and stop after planning.",
+			"Plan-only rules:",
+			"- Include clear actionable tasks.",
+			"- Mark exactly one task as in_progress.",
+			"- Leave remaining tasks as pending unless already completed.",
+			"If you cannot call the planning tool, stop and explain why."
+		)
+	}
+
+	if (input.securityMode) {
+		lines.push(
+			"Security mode is enabled for this turn.",
+			"Semgrep has already been run and must be accounted for without exception.",
+			"Review findings first. If planning mode is enabled, include remediation tasks only and do not implement in this turn.",
+			"Semgrep summary:",
+			input.semgrepSummary ?? "Semgrep summary unavailable."
+		)
+	}
+
+	lines.push("", "User request:", input.prompt)
+	return lines.join("\n")
+}
+
+function runtimeModeForTurn(input: StartTurnInput): AgentRuntimeMode {
+	if (input.planningMode) return "approval-required"
+	return input.runtimeMode ?? "full-access"
+}
+
+function turnPolicyKey(threadId: string, turnId: string): string {
+	return `${threadId}:${turnId}`
+}
+
 function newMessage(input: {
 	role: AgentMessage["role"]
 	text: string
@@ -90,6 +145,8 @@ export class AgentEngine {
 	private readonly providers: Record<AgentProvider, ProviderAdapter>
 	private planSink: AgentPlanSink | null = null
 	private threads = new Map<string, AgentThread>()
+	private planningOnlyTurns = new Set<string>()
+	private planningTurnRequests = new Set<string>()
 	private activeThreadId: string | null = null
 
 	constructor(options: { cwd: string }) {
@@ -109,6 +166,10 @@ export class AgentEngine {
 
 	async listModels(provider: AgentProvider): Promise<AgentModelOption[]> {
 		return this.providers[provider].listModels?.() ?? []
+	}
+
+	async getSemgrepStatus(): Promise<SemgrepStatus> {
+		return checkSemgrepAvailability()
 	}
 
 	getSnapshot(): AgentSnapshot {
@@ -134,23 +195,68 @@ export class AgentEngine {
 
 		try {
 			const provider = this.providers[providerForThread(thread)]
+			const turnRuntimeMode = runtimeModeForTurn(input)
+			if (thread.runtimeMode !== turnRuntimeMode) {
+				await provider.stopSession(thread.id)
+				thread.session = null
+				thread.runtimeMode = turnRuntimeMode
+			}
+			let semgrepSummary: string | null = null
+			if (input.securityMode) {
+				thread.activities.push({
+					id: `activity:${randomUUID()}`,
+					kind: "security.scan.started",
+					summary: "Running Semgrep security scan.",
+					payload: {},
+					turnId: null,
+					createdAt: nowIso()
+				})
+				this.emitSnapshot()
+				const semgrep = await runSemgrepScan(thread.cwd)
+				semgrepSummary = semgrepSummaryForPrompt(semgrep)
+				thread.activities.push({
+					id: `activity:${randomUUID()}`,
+					kind: "security.scan.completed",
+					summary:
+						semgrep.findingCount > 0
+							? `Semgrep found ${semgrep.findingCount} issue${semgrep.findingCount === 1 ? "" : "s"}.`
+							: "Semgrep found no issues.",
+					payload: semgrep,
+					turnId: null,
+					createdAt: nowIso()
+				})
+				this.emitSnapshot()
+			}
+			const turnPrompt = promptForTurn({
+				provider: providerForThread(thread),
+				prompt: input.prompt,
+				planningMode: input.planningMode ?? false,
+				securityMode: input.securityMode ?? false,
+				semgrepSummary
+			})
 			const session = await provider.startSession({
 				threadId: thread.id,
 				cwd: thread.cwd,
 				provider: providerForThread(thread),
 				...(input.model ? { model: input.model } : {}),
-				runtimeMode: input.runtimeMode ?? thread.runtimeMode
+				runtimeMode: thread.runtimeMode
 			})
 			this.setThreadSession(thread.id, session)
 
-			await provider.sendTurn({
+			if (input.planningMode) this.planningTurnRequests.add(thread.id)
+			const turn = await provider.sendTurn({
 				threadId: thread.id,
-				prompt: input.prompt,
+				prompt: turnPrompt,
 				...(input.model ? { model: input.model } : {}),
 				...(input.effort ? { effort: input.effort } : {}),
 				...(input.speedTier ? { speedTier: input.speedTier } : {})
 			})
+			if (input.planningMode) {
+				this.planningTurnRequests.delete(thread.id)
+				this.planningOnlyTurns.add(turnPolicyKey(thread.id, turn.turnId))
+			}
 		} catch (error) {
+			this.planningTurnRequests.delete(thread.id)
 			this.setThreadSession(thread.id, {
 				status: "error",
 				provider: providerForThread(thread),
@@ -391,6 +497,10 @@ export class AgentEngine {
 				break
 
 			case "turn.started":
+				if (this.planningTurnRequests.has(event.threadId)) {
+					this.planningOnlyTurns.add(turnPolicyKey(event.threadId, event.turnId))
+					this.planningTurnRequests.delete(event.threadId)
+				}
 				this.setThreadSession(event.threadId, {
 					status: "running",
 					provider: providerForThread(thread),
@@ -422,6 +532,9 @@ export class AgentEngine {
 			}
 
 			case "turn.completed":
+				if (event.turnId) {
+					this.planningOnlyTurns.delete(turnPolicyKey(event.threadId, event.turnId))
+				}
 				for (const message of thread.messages) {
 					if (message.role === "assistant" && message.turnId === event.turnId) {
 						message.streaming = false
@@ -445,6 +558,7 @@ export class AgentEngine {
 			case "plan.updated":
 				thread.plan = event.payload.plan
 				this.syncPlanTasks(thread, event)
+				this.stopPlanningModeTurn(thread, event.turnId, event.createdAt)
 				break
 
 			case "runtime.error":
@@ -562,5 +676,37 @@ export class AgentEngine {
 				})
 				this.emitSnapshot()
 			})
+	}
+
+	private stopPlanningModeTurn(
+		thread: AgentThread,
+		turnId: string | null,
+		createdAt: string
+	): void {
+		const activeTurnId = turnId ?? thread.session?.activeTurnId
+		if (!activeTurnId) return
+		const key = turnPolicyKey(thread.id, activeTurnId)
+		if (!this.planningOnlyTurns.delete(key)) return
+
+		thread.activities.push({
+			id: `activity:${randomUUID()}`,
+			kind: "planning.mode.completed",
+			summary: "Planning mode captured tasks and stopped before implementation.",
+			payload: {},
+			turnId: activeTurnId,
+			createdAt
+		})
+		const provider = this.providers[providerForThread(thread)]
+		void provider.stopSession(thread.id).catch((error: unknown) => {
+			thread.activities.push({
+				id: `activity:${randomUUID()}`,
+				kind: "runtime.error",
+				summary: error instanceof Error ? error.message : String(error),
+				payload: {},
+				turnId: activeTurnId,
+				createdAt: nowIso()
+			})
+			this.emitSnapshot()
+		})
 	}
 }

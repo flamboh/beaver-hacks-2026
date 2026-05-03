@@ -8,7 +8,10 @@ import type {
 	GitDiffTour,
 	GitCommitMessage,
 	GitCreateBranchInput,
-	GitPushInput
+	GitPushInput,
+	GitReviewFileInput,
+	GitReviewFilesInput,
+	GitRunStackedActionInput
 } from "./contracts"
 
 async function resolveWorkspaceCwd(
@@ -46,6 +49,26 @@ export function registerGitIpc(
 		const status = await git.createBranch({ cwd: workspace.cwd, branch: input.branch })
 		return { ...status, workspaceId: workspace.workspaceId, workspacePath: workspace.workspacePath }
 	})
+	ipcMain.handle("git:accept-file", async (_event, input: GitReviewFileInput) => {
+		const workspace = await resolveWorkspaceCwd(database, input.workspaceId)
+		const status = await git.acceptFile({ cwd: workspace.cwd, path: input.path })
+		return { ...status, workspaceId: workspace.workspaceId, workspacePath: workspace.workspacePath }
+	})
+	ipcMain.handle("git:accept-files", async (_event, input: GitReviewFilesInput) => {
+		const workspace = await resolveWorkspaceCwd(database, input.workspaceId)
+		const status = await git.acceptFiles({ cwd: workspace.cwd, paths: input.paths })
+		return { ...status, workspaceId: workspace.workspaceId, workspacePath: workspace.workspacePath }
+	})
+	ipcMain.handle("git:deny-file", async (_event, input: GitReviewFileInput) => {
+		const workspace = await resolveWorkspaceCwd(database, input.workspaceId)
+		const status = await git.denyFile({ cwd: workspace.cwd, path: input.path })
+		return { ...status, workspaceId: workspace.workspaceId, workspacePath: workspace.workspacePath }
+	})
+	ipcMain.handle("git:deny-files", async (_event, input: GitReviewFilesInput) => {
+		const workspace = await resolveWorkspaceCwd(database, input.workspaceId)
+		const status = await git.denyFiles({ cwd: workspace.cwd, paths: input.paths })
+		return { ...status, workspaceId: workspace.workspaceId, workspacePath: workspace.workspacePath }
+	})
 	ipcMain.handle("git:commit-all", async (_event, input: GitCommitAllInput) => {
 		const workspace = await resolveWorkspaceCwd(database, input.workspaceId)
 		const result = await git.commitAll({ ...input, cwd: workspace.cwd })
@@ -61,6 +84,38 @@ export function registerGitIpc(
 	ipcMain.handle("git:push", async (_event, input: GitPushInput) => {
 		const workspace = await resolveWorkspaceCwd(database, input.workspaceId)
 		const result = await git.push({ cwd: workspace.cwd })
+		return {
+			...result,
+			status: {
+				...result.status,
+				workspaceId: workspace.workspaceId,
+				workspacePath: workspace.workspacePath
+			}
+		}
+	})
+	ipcMain.handle("git:run-stacked-action", async (_event, input: GitRunStackedActionInput) => {
+		const workspace = await resolveWorkspaceCwd(database, input.workspaceId)
+		const result = await git.runStackedAction({
+			...input,
+			cwd: workspace.cwd,
+			onProgress: (progress) => {
+				_event.sender.send("git:stacked-action-progress", {
+					...progress,
+					workspaceId: workspace.workspaceId
+				})
+			},
+			createPrContent: async (cwd) => {
+				const prompt = await git.buildPullRequestPrompt(cwd)
+				const raw = await agentEngine.runOneShot({
+					cwd,
+					prompt,
+					model: MINI_MODEL,
+					runtimeMode: "approval-required",
+					timeoutMs: 60_000
+				})
+				return git.parsePullRequestContent(raw)
+			}
+		})
 		return {
 			...result,
 			status: {
@@ -110,7 +165,13 @@ export type {
 	GitCommitMessage,
 	GitCreateBranchInput,
 	GitPushInput,
+	GitReviewFileInput,
+	GitReviewFilesInput,
 	GitPushResult,
+	GitRunStackedActionInput,
+	GitRunStackedActionResult,
+	GitStackedActionProgressEvent,
+	GitStackedAction,
 	GitStatusSnapshot,
 	GitWorkingTreeDiffSnapshot
 } from "./contracts"

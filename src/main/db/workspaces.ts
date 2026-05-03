@@ -253,12 +253,22 @@ export class WorkspaceService {
 		path: string,
 		branchInput: string
 	): Promise<void> {
-		const branch = normalizeBranchName(branchInput)
+		const branch = await this.nextBranchName(sourceGitRoot, branchInput)
 		if (!branch) throw new Error("Branch name is required.")
 		mkdirSync(dirname(path), { recursive: true })
-		const exists = await this.branchExists(sourceGitRoot, branch)
-		if (exists) throw new Error(`Branch already exists: ${branch}`)
 		await runGit(sourceGitRoot, ["worktree", "add", "-b", branch, path, "HEAD"])
+	}
+
+	private async nextBranchName(cwd: string, branchInput: string): Promise<string> {
+		const base = normalizeBranchName(branchInput)
+		if (!base) return ""
+		let candidate = base
+		let suffix = 2
+		while (await this.branchExists(cwd, candidate)) {
+			candidate = `${base}-${suffix}`
+			suffix += 1
+		}
+		return candidate
 	}
 
 	private async branchExists(cwd: string, branch: string): Promise<boolean> {

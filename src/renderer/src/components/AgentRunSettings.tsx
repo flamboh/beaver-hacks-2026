@@ -8,9 +8,13 @@ interface AgentRunSettingsProps {
 	runtimeModel?: string | null
 	effort?: string
 	speedTier?: string | null
+	planningMode?: boolean
+	securityMode?: boolean
 	onModelChange?: (model: string) => void
 	onEffortChange?: (effort: string) => void
 	onSpeedTierChange?: (speedTier: string | null) => void
+	onPlanningModeChange?: (planningMode: boolean) => void
+	onSecurityModeChange?: (securityMode: boolean) => void
 }
 
 export function AgentRunSettings({
@@ -19,9 +23,13 @@ export function AgentRunSettings({
 	runtimeModel,
 	effort,
 	speedTier,
+	planningMode = false,
+	securityMode = false,
 	onModelChange,
 	onEffortChange,
-	onSpeedTierChange
+	onSpeedTierChange,
+	onPlanningModeChange,
+	onSecurityModeChange
 }: AgentRunSettingsProps): JSX.Element {
 	const [open, setOpen] = useState(false)
 	const selectedOption = modelOptions.find((option) => option.id === selectedModel)
@@ -40,6 +48,20 @@ export function AgentRunSettings({
 	return (
 		<div className="flex min-w-0 flex-col items-end gap-1">
 			<div className="relative flex items-center gap-1">
+				<ModeSwitch
+					label="Plan"
+					enabled={planningMode}
+					onToggle={() => onPlanningModeChange?.(!planningMode)}
+					theme="emerald"
+					title={`Planning mode ${planningMode ? "on" : "off"}`}
+				/>
+				<ModeSwitch
+					label="Secure"
+					enabled={securityMode}
+					onToggle={() => onSecurityModeChange?.(!securityMode)}
+					theme="cyan"
+					title={`Security mode ${securityMode ? "on" : "off"}`}
+				/>
 				<div className="relative w-40">
 					<select
 						value={selectedModel}
@@ -64,7 +86,7 @@ export function AgentRunSettings({
 					type="button"
 					disabled={!hasSettings}
 					onClick={() => setOpen((value) => !value)}
-					className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/5 bg-white/[0.03] text-neutral-500 transition-colors duration-150 hover:border-white/10 hover:text-neutral-300 disabled:cursor-not-allowed disabled:opacity-45"
+					className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/10 bg-white/[0.03] text-neutral-500 transition-colors duration-150 hover:border-white/10 hover:text-neutral-300 disabled:cursor-not-allowed disabled:opacity-45"
 					aria-label="Run settings"
 					title="Run settings"
 				>
@@ -125,6 +147,46 @@ export function AgentRunSettings({
 					running {runtimeModel}
 				</span>
 			) : null}
+		</div>
+	)
+}
+
+function ModeSwitch({
+	label,
+	enabled,
+	onToggle,
+	theme,
+	title
+}: {
+	label: string
+	enabled: boolean
+	onToggle: () => void
+	theme: "emerald" | "cyan"
+	title: string
+}): JSX.Element {
+	return (
+		<div className="flex items-center gap-1.5 px-1">
+			<span className="text-[10px] uppercase tracking-widest text-neutral-600 mx-2">{label}</span>
+			<button
+				type="button"
+				role="switch"
+				aria-checked={enabled}
+				onClick={onToggle}
+				className={`relative h-6 w-10 cursor-pointer rounded-full border transition-colors ${
+					enabled
+						? theme === "emerald"
+							? "border-emerald-400/60 bg-emerald-400/90"
+							: "border-cyan-400/60 bg-cyan-400/90"
+						: "border-white/10 bg-neutral-800"
+				}`}
+				title={title}
+			>
+				<span
+					className={`absolute top-0.5 h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform ${
+						enabled ? "translate-x-[1px]" : "-translate-x-[19px]"
+					}`}
+				/>
+			</button>
 		</div>
 	)
 }

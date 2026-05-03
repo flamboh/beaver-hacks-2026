@@ -4,6 +4,7 @@ import type {
 	AgentProvider,
 	AgentSnapshot,
 	FindMcpsInput,
+	SemgrepStatus,
 	FindSkillsInput,
 	InstallSkillInput,
 	SpawnThreadInput,
@@ -52,6 +53,11 @@ import type {
 	GitDiffTour,
 	GitPushInput,
 	GitPushResult,
+	GitReviewFileInput,
+	GitReviewFilesInput,
+	GitRunStackedActionInput,
+	GitRunStackedActionResult,
+	GitStackedActionProgressEvent,
 	GitStatusSnapshot,
 	GitWorkingTreeDiffSnapshot
 } from "../main/git/ipc"
@@ -70,6 +76,7 @@ interface BeaverApi {
 	agent: {
 		getSnapshot: () => Promise<AgentSnapshot>
 		listModels: (provider: AgentProvider) => Promise<AgentModelOption[]>
+		getSemgrepStatus: () => Promise<SemgrepStatus>
 		startTurn: (input: StartTurnInput) => Promise<AgentSnapshot>
 		stopTurn: (input: StopTurnInput) => Promise<AgentSnapshot>
 		findSkills: (input: FindSkillsInput) => Promise<AgentSnapshot>
@@ -88,10 +95,18 @@ interface BeaverApi {
 		getWorkingTreeDiff: (workspaceId: string) => Promise<GitWorkingTreeDiffSnapshot>
 		checkout: (input: GitCheckoutInput) => Promise<GitStatusSnapshot>
 		createBranch: (input: GitCreateBranchInput) => Promise<GitStatusSnapshot>
+		acceptFile: (input: GitReviewFileInput) => Promise<GitStatusSnapshot>
+		acceptFiles: (input: GitReviewFilesInput) => Promise<GitStatusSnapshot>
+		denyFile: (input: GitReviewFileInput) => Promise<GitStatusSnapshot>
+		denyFiles: (input: GitReviewFilesInput) => Promise<GitStatusSnapshot>
 		generateCommitMessage: (workspaceId: string) => Promise<GitCommitMessage>
 		generateDiffTour: (workspaceId: string) => Promise<GitDiffTour>
 		commitAll: (input: GitCommitAllInput) => Promise<GitCommitResult>
 		push: (input: GitPushInput) => Promise<GitPushResult>
+		runStackedAction: (input: GitRunStackedActionInput) => Promise<GitRunStackedActionResult>
+		onStackedActionProgress: (
+			listener: (event: GitStackedActionProgressEvent) => void
+		) => () => void
 	}
 	db: {
 		getInfo: () => Promise<DatabaseInfo>

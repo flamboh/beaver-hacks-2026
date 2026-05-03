@@ -1,12 +1,18 @@
-import type { FormEvent, JSX, KeyboardEvent } from "react"
+import type { CSSProperties, FormEvent, JSX, KeyboardEvent, RefObject } from "react"
 import { useCallback, useRef, useState, useSyncExternalStore } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { ChevronDown } from "lucide-react"
-import { listAgentModels, sendAgentMessage, stopAgentMessage } from "../agentStore"
+import { AnimatePresence, motion } from "motion/react"
+import { ArrowUp } from "lucide-react"
+import {
+	getSemgrepStatus,
+	listAgentModels,
+	sendAgentMessage,
+	stopAgentMessage
+} from "../agentStore"
 import type { AgentSnapshot } from "../../../main/agent/ipc"
 import type { ComposerMentionSuggestion } from "../../../main/composer/ipc"
 import { AgentRunSettings } from "./AgentRunSettings"
-import { TranscriptBlockView } from "./ChatTranscript"
+import { StreamingDots, TranscriptBlockView } from "./ChatTranscript"
 import { buildTranscript } from "./chatTranscriptModel"
 import {
 	activeComposerToken,
@@ -14,7 +20,6 @@ import {
 	replaceComposerToken,
 	type ComposerSuggestion
 } from "./chatComposerSyntax"
-import { GitBranchControls } from "./GitBranchControls"
 
 type AgentThread = AgentSnapshot["threads"][number]
 type AgentProvider = AgentThread["provider"]
@@ -63,10 +68,7 @@ function scrollToBottom(element: HTMLElement | null): void {
 	if (element) element.scrollTop = element.scrollHeight
 }
 
-function useAutoFollowTranscript(
-	scrollRef: React.RefObject<HTMLElement | null>,
-	version: string
-): void {
+function useAutoFollowTranscript(scrollRef: RefObject<HTMLElement | null>, version: string): void {
 	const subscribe = useCallback(
 		(listener: () => void) => {
 			const frame = requestAnimationFrame(() => {
@@ -96,7 +98,6 @@ interface ChatProps {
 	onSpeedTierChange?: (speedTier: string | null) => void
 	onFirstMessage?: (prompt: string) => Promise<void>
 	provider?: AgentThread["provider"]
-	workspaceId: string
 }
 
 export function Chat({
@@ -113,14 +114,14 @@ export function Chat({
 	onEffortChange,
 	onSpeedTierChange,
 	onFirstMessage,
-	provider,
-	workspaceId
+	provider
 }: ChatProps): JSX.Element {
 	const [draft, setDraft] = useState("")
 	const [isSending, setIsSending] = useState(false)
 	const [isCancelling, setIsCancelling] = useState(false)
+	const [planningMode, setPlanningMode] = useState(false)
+	const [securityMode, setSecurityMode] = useState(false)
 	const [error, setError] = useState<string | null>(null)
-	const [branchOpen, setBranchOpen] = useState(false)
 	const [cursor, setCursor] = useState(0)
 	const [suggestionIndex, setSuggestionIndex] = useState(0)
 	const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -132,12 +133,20 @@ export function Chat({
 		? `${thread.updatedAt}:${thread.messages.length}:${thread.activities.length}`
 		: ""
 	useAutoFollowTranscript(transcriptScrollRef, transcriptVersion)
+	const lastBlock = transcript.at(-1)
+	const isAwaitingAssistant =
+		(isSending || isRunning) && (!lastBlock || lastBlock.kind === "user" || !lastBlock.streaming)
 	const activeToken = activeComposerToken(draft, Math.min(cursor || draft.length, draft.length))
 	const { data: modelOptions = [] } = useQuery({
 		queryKey: ["agent-models", provider],
 		queryFn: () => listAgentModels(provider ?? "codex"),
 		enabled: Boolean(provider),
 		staleTime: 5 * 60 * 1000
+	})
+	const { data: semgrepStatus } = useQuery({
+		queryKey: ["agent-semgrep-status"],
+		queryFn: getSemgrepStatus,
+		staleTime: 60 * 1000
 	})
 	const { data: fileSuggestions = [] } = useQuery({
 		queryKey: ["composer-files", cwd, activeToken?.kind === "file" ? activeToken.query : ""],
@@ -175,11 +184,23 @@ export function Chat({
 	)
 		? speedTier
 		: null
+	const semgrepUnavailable =
+		securityMode && semgrepStatus !== undefined && semgrepStatus.available === false
+	const autoScrollKey = thread?.updatedAt ?? "idle"
+
+	function scrollAnchorRef(node: HTMLDivElement | null): void {
+		if (!node) return
+		node.scrollIntoView({ block: "end" })
+	}
 
 	function handleSubmit(event: FormEvent<HTMLFormElement>): void {
 		event.preventDefault()
 		const prompt = draft.trim()
 		if (!prompt || isSending || isRunning) return
+		if (semgrepUnavailable) {
+			setError("Security mode requires Semgrep CLI. Install Semgrep and retry.")
+			return
+		}
 
 		setDraft("")
 		setError(null)
@@ -194,7 +215,9 @@ export function Chat({
 					...(thread || !provider ? {} : { provider }),
 					...(selectedModel ? { model: selectedModel } : {}),
 					...(selectedEffort ? { effort: selectedEffort } : {}),
-					...(selectedSpeedTier ? { speedTier: selectedSpeedTier } : {})
+					...(selectedSpeedTier ? { speedTier: selectedSpeedTier } : {}),
+					...(planningMode ? { planningMode: true } : {}),
+					...(securityMode ? { securityMode: true } : {})
 				})
 			)
 			.then(() => onMessageSent?.(prompt).catch(() => undefined))
@@ -273,103 +296,162 @@ export function Chat({
 			>
 				<div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
 					{thread ? (
-						transcript.map((block) => <TranscriptBlockView key={block.id} block={block} />)
+						<>
+							{transcript.map((block) => (
+								<TranscriptBlockView key={block.id} block={block} />
+							))}
+							<AnimatePresence>
+								{isAwaitingAssistant ? (
+									<motion.article
+										key="pending"
+										initial={{ opacity: 0, y: 4 }}
+										animate={{ opacity: 1, y: 0 }}
+										exit={{ opacity: 0, y: -2 }}
+										transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+										className="mr-auto flex max-w-[86%] items-center rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5"
+										aria-live="polite"
+										aria-label="Agent is thinking"
+									>
+										<StreamingDots />
+									</motion.article>
+								) : null}
+							</AnimatePresence>
+						</>
 					) : (
-						<div className="mt-24 text-center">
+						<motion.div
+							initial={{ opacity: 0, y: 6 }}
+							animate={{ opacity: 1, y: 0 }}
+							transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
+							className="mt-24 text-center"
+						>
 							<h2 className="text-lg font-medium text-zinc-100">Ask Agent</h2>
 							<p className="mt-2 text-sm text-zinc-500">Send a message to start the loop.</p>
-						</div>
+						</motion.div>
 					)}
+					<div key={`scroll-anchor:${autoScrollKey}`} ref={scrollAnchorRef} />
 				</div>
 			</section>
 
-			<footer className="nodrag shrink-0 cursor-default border-t border-white/10 bg-[#0c0c0f] p-4">
-				<form onSubmit={handleSubmit} className="mx-auto flex max-w-3xl gap-2">
-					<div className="relative flex-1">
-						{suggestions.length > 0 ? (
-							<div className="absolute bottom-full left-0 z-20 mb-2 max-h-64 w-full overflow-hidden rounded-lg border border-white/10 bg-[#111114] p-1 shadow-2xl shadow-black/50">
-								{suggestions.map((suggestion, index) => (
-									<button
-										key={suggestion.id}
-										type="button"
-										onMouseDown={(event) => event.preventDefault()}
-										onClick={() => insertSuggestion(suggestion)}
-										className={`flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-											index === selectedSuggestionIndex
-												? "bg-white/10 text-zinc-100"
-												: "text-zinc-400 hover:bg-white/6 hover:text-zinc-100"
-										}`}
-									>
-										<span className="min-w-0 truncate">{suggestion.label}</span>
-										{suggestion.detail ? (
-											<span className="max-w-56 shrink truncate text-xs text-zinc-600">
-												{suggestion.detail}
-											</span>
-										) : null}
-									</button>
-								))}
+			<footer className="nodrag shrink-0 cursor-default p-4">
+				<form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
+					<div className="relative">
+						<AnimatePresence>
+							{suggestions.length > 0 ? (
+								<motion.div
+									key="suggestions"
+									initial={{ opacity: 0, y: 4 }}
+									animate={{ opacity: 1, y: 0 }}
+									exit={{ opacity: 0, y: 4 }}
+									transition={{ duration: 0.12, ease: [0.2, 0, 0, 1] }}
+									className="absolute bottom-full left-0 z-20 mb-2 max-h-64 w-full overflow-hidden rounded-lg border border-white/10 bg-[#111114] p-1 shadow-2xl shadow-black/50"
+								>
+									{suggestions.map((suggestion, index) => (
+										<button
+											key={suggestion.id}
+											type="button"
+											onMouseDown={(event) => event.preventDefault()}
+											onClick={() => insertSuggestion(suggestion)}
+											className={`flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+												index === selectedSuggestionIndex
+													? "bg-white/10 text-zinc-100"
+													: "text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100"
+											}`}
+										>
+											<span className="min-w-0 truncate">{suggestion.label}</span>
+											{suggestion.detail ? (
+												<span className="max-w-56 shrink truncate text-xs text-zinc-600">
+													{suggestion.detail}
+												</span>
+											) : null}
+										</button>
+									))}
+								</motion.div>
+							) : null}
+						</AnimatePresence>
+
+						<div className="flex flex-col rounded-2xl border border-white/10 bg-white/[0.04] transition-[border-color,box-shadow,background-color] duration-150 ease-out focus-within:border-blue-400/40 focus-within:bg-white/[0.05] focus-within:shadow-[0_0_0_1px_rgba(96,165,250,0.18)]">
+							<textarea
+								ref={inputRef}
+								value={draft}
+								onChange={(event) => {
+									setDraft(event.currentTarget.value)
+									syncCursor(event.currentTarget)
+									setSuggestionIndex(0)
+								}}
+								onSelect={(event) => syncCursor(event.currentTarget)}
+								onClick={(event) => syncCursor(event.currentTarget)}
+								onKeyUp={(event) => syncCursor(event.currentTarget)}
+								onKeyDown={handleKeyDown}
+								rows={1}
+								placeholder="Message agent..."
+								style={{ fieldSizing: "content" } as CSSProperties}
+								className="block max-h-[220px] min-h-[44px] w-full resize-none rounded-2xl bg-transparent px-4 pt-3 pb-1 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600"
+							/>
+							<div className="flex items-center justify-between gap-2 px-2 pb-2">
+								<AgentRunSettings
+									modelOptions={visibleModelOptions}
+									selectedModel={selectedModel}
+									runtimeModel={runtimeModel}
+									effort={effort}
+									speedTier={speedTier}
+									planningMode={planningMode}
+									securityMode={securityMode}
+									onModelChange={onModelChange}
+									onEffortChange={onEffortChange}
+									onSpeedTierChange={onSpeedTierChange}
+									onPlanningModeChange={setPlanningMode}
+									onSecurityModeChange={setSecurityMode}
+								/>
+								<motion.button
+									type={isRunning ? "button" : "submit"}
+									onClick={isRunning ? handleCancel : undefined}
+									disabled={isRunning ? !canCancel : !canSend}
+									aria-label={isRunning ? "Cancel message" : "Send message"}
+									title={isRunning ? "Cancel" : "Send message"}
+									whileHover={isRunning ? { scale: 1.02 } : canSend ? { scale: 1.06 } : undefined}
+									whileTap={isRunning || canSend ? { scale: 0.92 } : undefined}
+									animate={{
+										backgroundColor: isRunning
+											? "rgb(244 244 245)"
+											: canSend
+												? "rgb(59 130 246)"
+												: "rgba(255,255,255,0.08)",
+										color: isRunning
+											? "rgb(9 9 11)"
+											: canSend
+												? "rgb(255 255 255)"
+												: "rgb(113 113 122)"
+									}}
+									transition={{ type: "spring", stiffness: 500, damping: 32, mass: 0.6 }}
+									className="flex h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center rounded-full px-2 text-xs font-medium shadow-[0_4px_14px_-4px_rgba(59,130,246,0.55)] outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed disabled:shadow-none"
+								>
+									{isRunning ? "Cancel" : <ArrowUp size={15} strokeWidth={2.75} />}
+								</motion.button>
 							</div>
-						) : null}
-						<textarea
-							ref={inputRef}
-							value={draft}
-							onChange={(event) => {
-								setDraft(event.currentTarget.value)
-								syncCursor(event.currentTarget)
-								setSuggestionIndex(0)
-							}}
-							onSelect={(event) => syncCursor(event.currentTarget)}
-							onClick={(event) => syncCursor(event.currentTarget)}
-							onKeyUp={(event) => syncCursor(event.currentTarget)}
-							onKeyDown={handleKeyDown}
-							rows={1}
-							placeholder="Message agent..."
-							className="h-12 w-full resize-none rounded-lg border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-white/20"
-						/>
-					</div>
-					<button
-						type={isRunning ? "button" : "submit"}
-						onClick={isRunning ? handleCancel : undefined}
-						disabled={isRunning ? !canCancel : !canSend}
-						className="h-12 cursor-pointer rounded-lg bg-zinc-100 px-4 text-sm font-medium text-zinc-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-					>
-						{isRunning ? "Cancel" : "Send"}
-					</button>
-				</form>
-				<div className="mx-auto mt-3 flex max-w-3xl items-start justify-between gap-3">
-					<button
-						type="button"
-						onClick={() => setBranchOpen((v) => !v)}
-						className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-neutral-600 transition-colors duration-150 hover:text-neutral-400"
-					>
-						<ChevronDown
-							size={12}
-							className={`transition-transform duration-200 ${branchOpen ? "rotate-180" : ""}`}
-						/>
-						Branch
-					</button>
-					<AgentRunSettings
-						modelOptions={visibleModelOptions}
-						selectedModel={selectedModel}
-						runtimeModel={runtimeModel}
-						effort={effort}
-						speedTier={speedTier}
-						onModelChange={onModelChange}
-						onEffortChange={onEffortChange}
-						onSpeedTierChange={onSpeedTierChange}
-					/>
-				</div>
-				<div className="mx-auto max-w-3xl">
-					<div
-						className="overflow-hidden transition-[max-height] duration-200"
-						style={{ maxHeight: branchOpen ? 200 : 0 }}
-					>
-						<div className="pt-2">
-							<GitBranchControls workspaceId={workspaceId} />
 						</div>
 					</div>
-				</div>
-				{error ? <p className="mx-auto mt-2 max-w-3xl text-xs text-red-400">{error}</p> : null}
+					{semgrepUnavailable ? (
+						<p className="mt-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
+							Security mode requires Semgrep CLI (`{semgrepStatus?.command ?? "semgrep"}` not
+							found). Install it with `brew install semgrep` or `python3 -m pip install semgrep`,
+							then retry.
+						</p>
+					) : null}
+					<AnimatePresence>
+						{error ? (
+							<motion.p
+								key="error"
+								initial={{ opacity: 0, y: -2 }}
+								animate={{ opacity: 1, y: 0 }}
+								exit={{ opacity: 0, y: -2 }}
+								transition={{ duration: 0.15 }}
+								className="mt-2 text-xs text-red-400"
+							>
+								{error}
+							</motion.p>
+						) : null}
+					</AnimatePresence>
+				</form>
 			</footer>
 		</div>
 	)

@@ -1,5 +1,10 @@
 import { useMemo, useSyncExternalStore } from "react"
-import type { AgentModelOption, AgentProvider, AgentSnapshot } from "../../main/agent/ipc"
+import type {
+	AgentModelOption,
+	AgentProvider,
+	AgentSnapshot,
+	SemgrepStatus
+} from "../../main/agent/ipc"
 import type {
 	GitCheckoutInput,
 	GitCommitAllInput,
@@ -7,6 +12,10 @@ import type {
 	GitCreateBranchInput,
 	GitDiffTour,
 	GitPushInput,
+	GitReviewFilesInput,
+	GitRunStackedActionInput,
+	GitRunStackedActionResult,
+	GitStackedActionProgressEvent,
 	GitStatusSnapshot
 } from "../../main/git/ipc"
 
@@ -67,6 +76,10 @@ export function listAgentModels(provider: AgentProvider): Promise<AgentModelOpti
 	return window.api.agent.listModels(provider)
 }
 
+export function getSemgrepStatus(): Promise<SemgrepStatus> {
+	return window.api.agent.getSemgrepStatus()
+}
+
 export async function sendAgentMessage(input: {
 	prompt: string
 	cwd: string
@@ -75,6 +88,8 @@ export async function sendAgentMessage(input: {
 	model?: string
 	effort?: string
 	speedTier?: string | null
+	planningMode?: boolean
+	securityMode?: boolean
 }): Promise<AgentSnapshot> {
 	const nextSnapshot = await window.api.agent.startTurn({
 		...(input.threadId ? { threadId: input.threadId } : {}),
@@ -82,6 +97,8 @@ export async function sendAgentMessage(input: {
 		...(input.model ? { model: input.model } : {}),
 		...(input.effort ? { effort: input.effort } : {}),
 		...(input.speedTier ? { speedTier: input.speedTier } : {}),
+		...(input.planningMode ? { planningMode: true } : {}),
+		...(input.securityMode ? { securityMode: true } : {}),
 		cwd: input.cwd,
 		prompt: input.prompt,
 		runtimeMode: "full-access"
@@ -209,6 +226,18 @@ export async function createGitBranch(input: GitCreateBranchInput): Promise<void
 	emitGit()
 }
 
+export async function acceptGitFileChanges(input: GitReviewFilesInput): Promise<void> {
+	const nextSnapshot = await window.api.git.acceptFiles(input)
+	gitSnapshots.set(input.workspaceId, nextSnapshot)
+	emitGit()
+}
+
+export async function denyGitFileChanges(input: GitReviewFilesInput): Promise<void> {
+	const nextSnapshot = await window.api.git.denyFiles(input)
+	gitSnapshots.set(input.workspaceId, nextSnapshot)
+	emitGit()
+}
+
 export async function generateGitCommitMessage(workspaceId: string): Promise<GitCommitMessage> {
 	return window.api.git.generateCommitMessage(workspaceId)
 }
@@ -227,6 +256,21 @@ export async function pushGitBranch(input: GitPushInput): Promise<void> {
 	const result = await window.api.git.push(input)
 	gitSnapshots.set(input.workspaceId, result.status)
 	emitGit()
+}
+
+export async function runGitStackedAction(
+	input: GitRunStackedActionInput
+): Promise<GitRunStackedActionResult> {
+	const result = await window.api.git.runStackedAction(input)
+	gitSnapshots.set(input.workspaceId, result.status)
+	emitGit()
+	return result
+}
+
+export function onGitStackedActionProgress(
+	listener: (event: GitStackedActionProgressEvent) => void
+): () => void {
+	return window.api.git.onStackedActionProgress(listener)
 }
 
 function retainGitWatch(workspaceId: string): void {
