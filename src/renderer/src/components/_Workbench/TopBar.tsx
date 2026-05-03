@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { AlertTriangle, GitBranch, PanelLeft, Tally1 } from "lucide-react"
+import { AlertTriangle, GitBranch, GitFork, PanelLeft, Tally1, Trash2 } from "lucide-react"
 import { checkoutGitBranch, createGitBranch, useGitStatus } from "@renderer/agentStore"
 import { GitCommitMenu } from "../GitCommitMenu"
 import type { WorkspaceRow } from "../../../../main/db/ipc"
@@ -8,16 +8,20 @@ import { useNavigate } from "react-router-dom"
 interface Props {
 	activeAgentCount: number
 	activeWorkspace: WorkspaceRow | null
+	onWorkspacesChanged: () => Promise<unknown>
 	onToggleSidebar: () => void
 	onWorkspaceChange: (workspaceId: string) => void
+	projectId: string | null
 	workspaces: WorkspaceRow[]
 }
 
 export default function TopBar({
 	activeAgentCount,
 	activeWorkspace,
+	onWorkspacesChanged,
 	onToggleSidebar,
 	onWorkspaceChange,
+	projectId,
 	workspaces
 }: Props) {
 	const navigate = useNavigate()
@@ -27,11 +31,59 @@ export default function TopBar({
 	const [isBusy, setIsBusy] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 
+	function slugify(value: string): string {
+		return (
+			value
+				.trim()
+				.toLowerCase()
+				.replace(/[^a-z0-9._/-]+/g, "-")
+				.replace(/^[-/]+|[-/]+$/g, "") || "worktree"
+		)
+	}
+
 	function run(task: () => Promise<void>): void {
 		if (!workspaceId || isBusy) return
 		setError(null)
 		setIsBusy(true)
 		void task()
+			.catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
+			.finally(() => setIsBusy(false))
+	}
+
+	function createWorktree(): void {
+		if (!projectId || !workspaceId || isBusy) return
+		const baseSlug = slugify(status?.branch ?? activeWorkspace?.name ?? "worktree")
+		const slug = `${baseSlug}-${Date.now().toString(36).slice(-5)}`
+		setError(null)
+		setIsBusy(true)
+		void window.api.workspaces
+			.create({
+				projectId,
+				name: slug,
+				branch: slug,
+				sourceWorkspaceId: workspaceId
+			})
+			.then((workspace) => window.api.workspaces.activate({ id: workspace.id }))
+			.then((workspace) => {
+				void onWorkspacesChanged()
+				onWorkspaceChange(workspace.id)
+			})
+			.catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
+			.finally(() => setIsBusy(false))
+	}
+
+	function deleteWorkspace(): void {
+		if (!workspaceId || workspaces.length <= 1 || isBusy) return
+		const confirmed = window.confirm(`Delete workspace "${activeWorkspace?.name ?? "current"}"?`)
+		if (!confirmed) return
+		setError(null)
+		setIsBusy(true)
+		void window.api.workspaces
+			.delete({ id: workspaceId })
+			.then((result) => {
+				void onWorkspacesChanged()
+				onWorkspaceChange(result.activeWorkspace.id)
+			})
 			.catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
 			.finally(() => setIsBusy(false))
 	}
@@ -124,6 +176,26 @@ export default function TopBar({
 						New
 					</button>
 				</div>
+				<button
+					type="button"
+					disabled={!projectId || !workspaceId || isBusy}
+					onClick={createWorktree}
+					className="inline-flex size-7 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] text-zinc-400 transition hover:border-white/20 hover:bg-white/[0.07] hover:text-zinc-200 disabled:cursor-not-allowed disabled:text-zinc-700"
+					aria-label="Create worktree"
+					title="Create worktree"
+				>
+					<GitFork size={14} />
+				</button>
+				<button
+					type="button"
+					disabled={!workspaceId || workspaces.length <= 1 || isBusy}
+					onClick={deleteWorkspace}
+					className="inline-flex size-7 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] text-zinc-500 transition hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:text-zinc-700"
+					aria-label="Delete workspace"
+					title="Delete workspace"
+				>
+					<Trash2 size={14} />
+				</button>
 				<GitCommitMenu workspaceId={workspaceId} />
 				<span className="text-xs tabular-nums text-neutral-600">v1.1.0</span>
 			</div>

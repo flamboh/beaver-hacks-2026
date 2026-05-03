@@ -90,8 +90,10 @@ export default function Workbench() {
 			<TopBar
 				activeAgentCount={activeAgentCount}
 				activeWorkspace={activeWorkspace}
+				onWorkspacesChanged={() => workspacesQuery.refetch()}
 				onToggleSidebar={() => setSidebarOpen((open) => !open)}
 				onWorkspaceChange={setWorkspace}
+				projectId={project?.id ?? null}
 				workspaces={workspaces}
 			/>
 			<div className="flex flex-1 overflow-hidden">

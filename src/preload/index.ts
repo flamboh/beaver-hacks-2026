@@ -18,6 +18,7 @@ import type {
 	WorkspaceRow,
 	CreateTaskInput,
 	DatabaseInfo,
+	DeleteWorkspaceResult,
 	ProjectIdInput,
 	ProjectRow,
 	TaskRow,
@@ -119,7 +120,9 @@ const api = {
 		update: (input: UpdateWorkspaceInput): Promise<WorkspaceRow> =>
 			ipcRenderer.invoke("workspace:update", input),
 		activate: (input: WorkspaceIdInput): Promise<WorkspaceRow> =>
-			ipcRenderer.invoke("workspace:activate", input)
+			ipcRenderer.invoke("workspace:activate", input),
+		delete: (input: WorkspaceIdInput): Promise<DeleteWorkspaceResult> =>
+			ipcRenderer.invoke("workspace:delete", input)
 	},
 	settings: {
 		get: (key: string): Promise<string> => ipcRenderer.invoke("setting:get", key),

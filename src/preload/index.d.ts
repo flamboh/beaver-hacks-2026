@@ -12,6 +12,7 @@ import type {
 	CreateTaskInput,
 	CreateWorkspaceInput,
 	DatabaseInfo,
+	DeleteWorkspaceResult,
 	ProjectIdInput,
 	ProjectRow,
 	ProjectWorkspaceInput,
@@ -90,6 +91,7 @@ interface BeaverApi {
 		create: (input: CreateWorkspaceInput) => Promise<WorkspaceRow>
 		update: (input: UpdateWorkspaceInput) => Promise<WorkspaceRow>
 		activate: (input: WorkspaceIdInput) => Promise<WorkspaceRow>
+		delete: (input: WorkspaceIdInput) => Promise<DeleteWorkspaceResult>
 	}
 	settings: {
 		get: (key: string) => Promise<string>

@@ -34,6 +34,11 @@ export interface WorkspaceIdInput {
 	id: string
 }
 
+export interface DeleteWorkspaceResult {
+	activeWorkspace: WorkspaceRow
+	deletedWorkspaceId: string
+}
+
 export interface UpdateWorkspaceInput {
 	id: string
 	name: string

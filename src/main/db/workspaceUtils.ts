@@ -14,6 +14,21 @@ export function slugify(value: string): string {
 	return slug || "workspace"
 }
 
+export function normalizeBranchName(value: string): string {
+	return value
+		.trim()
+		.replace(/[^A-Za-z0-9._/-]+/g, "-")
+		.replace(/^[-/]+|[-/]+$/g, "")
+}
+
+export function assertWorkspaceTemplate(template: string): void {
+	const trimmed = template.trim()
+	if (!trimmed) throw new Error("Workspace template is required.")
+	if (!trimmed.includes("{workspaceSlug}")) {
+		throw new Error("Workspace template must include {workspaceSlug}.")
+	}
+}
+
 export function canonicalPath(path: string): string {
 	const resolved = resolve(expandHomePath(path.trim()))
 	return existsSync(resolved) ? realpathSync(resolved) : resolved
