@@ -31,6 +31,7 @@ export interface CreateAgentInput {
 export interface UpdateAgentInput {
 	id: string
 	name: string
+	expectedName?: string
 }
 
 // ── mapper ────────────────────────────────────────────────────────
@@ -97,7 +98,16 @@ export class AgentService {
 	}
 
 	async updateAgent(input: UpdateAgentInput): Promise<AgentRow> {
-		await this.run(`UPDATE agents SET name = ? WHERE id = ?`, [input.name.trim(), input.id])
+		const name = input.name.trim()
+		if (input.expectedName === undefined) {
+			await this.run(`UPDATE agents SET name = ? WHERE id = ?`, [name, input.id])
+		} else {
+			await this.run(`UPDATE agents SET name = ? WHERE id = ? AND name = ?`, [
+				name,
+				input.id,
+				input.expectedName
+			])
+		}
 		const row = await this.get<AgentTableRow>(
 			`SELECT id, name, project_id, workspace_id, provider, model, scope_path, effort, layout_x, layout_y
 			 FROM agents

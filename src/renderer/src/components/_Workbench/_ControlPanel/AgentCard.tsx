@@ -46,6 +46,10 @@ export default function AgentCard({
 	workspacePath
 }: Props) {
 	const [activeCreateSide, setActiveCreateSide] = useState<CreateSide | null>(null)
+	const [isEditingName, setIsEditingName] = useState(false)
+	const [nameDraft, setNameDraft] = useState(agent.name)
+	const [isSavingName, setIsSavingName] = useState(false)
+	const skipNameCommitRef = useRef(false)
 	const queryClient = useQueryClient()
 	const snapshot = useAgentSnapshot()
 	const activeThread =
@@ -68,13 +72,47 @@ export default function AgentCard({
 			description: prompt
 		})
 		if (agent.name === "New Agent") {
+			const seedName = agentNameForPrompt(prompt)
 			await window.api.agents.update({
 				id: agent.id,
-				name: agentNameForPrompt(prompt)
+				name: seedName
 			})
 			await queryClient.invalidateQueries({ queryKey: ["agents"] })
+			void window.api.agent
+				.generateName({ cwd: workspacePath, prompt })
+				.then(async ({ name }) => {
+					if (!name || name === seedName || name === "New Agent") return
+					await window.api.agents.update({
+						id: agent.id,
+						name,
+						expectedName: seedName
+					})
+					await queryClient.invalidateQueries({ queryKey: ["agents"] })
+				})
+				.catch(() => undefined)
 		}
 		await queryClient.invalidateQueries({ queryKey: ["tasks", agent.id] })
+	}
+
+	async function commitName(): Promise<void> {
+		if (skipNameCommitRef.current) {
+			skipNameCommitRef.current = false
+			return
+		}
+		const nextName = nameDraft.trim()
+		if (!nextName || nextName === agent.name) {
+			setNameDraft(agent.name)
+			setIsEditingName(false)
+			return
+		}
+		setIsSavingName(true)
+		try {
+			await window.api.agents.update({ id: agent.id, name: nextName })
+			await queryClient.invalidateQueries({ queryKey: ["agents"] })
+			setIsEditingName(false)
+		} finally {
+			setIsSavingName(false)
+		}
 	}
 
 	return (
@@ -95,10 +133,42 @@ export default function AgentCard({
 				/>
 			))}
 			<div className="flex h-full flex-col overflow-hidden rounded-xl border border-white/8 bg-neutral-900 shadow-2xl shadow-black/40">
-				<div className="flex h-11 shrink-0 items-center justify-between border-b border-white/5 bg-neutral-800/60 px-5">
-					<span className="min-w-0 truncate text-sm font-semibold tracking-wide text-neutral-100">
-						{agent.name}
-					</span>
+				<div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-white/5 bg-neutral-800/60 px-5">
+					{isEditingName ? (
+						<input
+							value={nameDraft}
+							disabled={isSavingName}
+							autoFocus
+							style={{ width: `${Math.min(Math.max(nameDraft.length + 1, 8), 30)}ch` }}
+							onChange={(event) => setNameDraft(event.currentTarget.value)}
+							onBlur={() => void commitName()}
+							onKeyDown={(event) => {
+								if (event.key === "Enter") {
+									event.preventDefault()
+									event.currentTarget.blur()
+								}
+								if (event.key === "Escape") {
+									skipNameCommitRef.current = true
+									setNameDraft(agent.name)
+									setIsEditingName(false)
+								}
+							}}
+							className="nodrag min-w-0 max-w-full bg-transparent text-sm font-semibold tracking-wide text-neutral-100 outline-none"
+							aria-label="Agent name"
+						/>
+					) : (
+						<button
+							type="button"
+							onClick={() => {
+								setNameDraft(agent.name)
+								setIsEditingName(true)
+							}}
+							className="min-w-0 max-w-full truncate text-left text-sm font-semibold tracking-wide text-neutral-100"
+							title="Rename agent"
+						>
+							{agent.name}
+						</button>
+					)}
 					<button
 						type="button"
 						disabled={isDeleting}
