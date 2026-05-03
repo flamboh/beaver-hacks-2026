@@ -26,11 +26,13 @@ import type {
 	WorkspaceIdInput,
 	WorkspaceRow,
 	CreateTaskInput,
+	CreateToolCardInput,
 	DatabaseInfo,
 	DeleteWorkspaceResult,
 	ProjectIdInput,
 	ProjectRow,
 	TaskRow,
+	ToolCardRow,
 	UpdateProjectInput
 } from "../main/db/ipc"
 import type {
@@ -166,6 +168,13 @@ const api = {
 		update: (input: UpdateAgentInput): Promise<AgentRow> =>
 			ipcRenderer.invoke("agent:update", input),
 		delete: (id: string): Promise<void> => ipcRenderer.invoke("agent:delete", id)
+	},
+	toolCards: {
+		list: (projectId: string): Promise<ToolCardRow[]> =>
+			ipcRenderer.invoke("tool-card:list", projectId),
+		create: (input: CreateToolCardInput): Promise<ToolCardRow> =>
+			ipcRenderer.invoke("tool-card:create", input),
+		delete: (id: string): Promise<void> => ipcRenderer.invoke("tool-card:delete", id)
 	},
 	tasks: {
 		list: (agentId: string): Promise<TaskRow[]> => ipcRenderer.invoke("task:list", agentId),

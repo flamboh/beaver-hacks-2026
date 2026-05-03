@@ -10,6 +10,7 @@ const navItems: { label: string; tab: WorkbenchTab }[] = [
 	{ label: "Control Panel", tab: "control-panel" },
 	{ label: "Review", tab: "review" },
 	{ label: "Agents", tab: "agents" },
+	{ label: "Skills", tab: "skills" },
 	{ label: "Settings", tab: "settings" }
 ]
 

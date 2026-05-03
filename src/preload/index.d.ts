@@ -18,6 +18,7 @@ import type {
 	CreateAgentInput,
 	CreateProjectInput,
 	CreateTaskInput,
+	CreateToolCardInput,
 	CreateWorkspaceInput,
 	DatabaseInfo,
 	DeleteWorkspaceResult,
@@ -25,6 +26,7 @@ import type {
 	ProjectRow,
 	ProjectWorkspaceInput,
 	TaskRow,
+	ToolCardRow,
 	UpdateAgentInput,
 	UpdateProjectInput,
 	UpdateSettingInput,
@@ -126,6 +128,11 @@ interface BeaverApi {
 		list: (projectId: string) => Promise<AgentRow[]>
 		create: (input: CreateAgentInput) => Promise<AgentRow>
 		update: (input: UpdateAgentInput) => Promise<AgentRow>
+		delete: (id: string) => Promise<void>
+	}
+	toolCards: {
+		list: (projectId: string) => Promise<ToolCardRow[]>
+		create: (input: CreateToolCardInput) => Promise<ToolCardRow>
 		delete: (id: string) => Promise<void>
 	}
 	tasks: {

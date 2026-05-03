@@ -1,9 +1,10 @@
-export type WorkbenchTab = "control-panel" | "review" | "agents" | "settings"
+export type WorkbenchTab = "control-panel" | "review" | "agents" | "skills" | "settings"
 
 export type ProjectRow = {
 	id: string
 	name: string
 	path: string
+	enterDevAction: string
 	createdAt: string
 	accessed: string
 }

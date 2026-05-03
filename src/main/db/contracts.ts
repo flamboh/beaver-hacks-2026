@@ -6,12 +6,14 @@ export interface DatabaseInfo {
 export interface CreateProjectInput {
 	name: string
 	path: string
+	enterDevAction?: string
 }
 
 export interface UpdateProjectInput {
 	id: string
 	name: string
 	path: string
+	enterDevAction?: string
 }
 
 export interface ProjectIdInput {
@@ -60,6 +62,7 @@ export interface ProjectRow {
 	id: string
 	name: string
 	path: string
+	enterDevAction: string
 	createdAt: string
 	accessed: string
 }
@@ -86,6 +89,7 @@ export interface WorkspaceCreationResult {
 }
 
 export type AgentProvider = "codex" | "claude"
+export type ToolCardKind = "terminal" | "browser"
 
 export type AgentRow = {
 	id: string
@@ -99,6 +103,16 @@ export type AgentRow = {
 	thread_id: string | null
 	layout_x: number
 	layout_y: number
+}
+
+export type ToolCardRow = {
+	id: string
+	project_id: string
+	workspace_id: string
+	kind: ToolCardKind
+	layout_x: number
+	layout_y: number
+	created_at: string
 }
 
 export type TaskRow = {

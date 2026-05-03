@@ -49,6 +49,7 @@ export default function ControlPanel({
 	const wheelPanFrame = useRef<number | null>(null)
 	const wheelTargetOffset = useRef({ x: PADDING, y: PADDING })
 	const lastCenteredWorkspace = useRef<string | null>(null)
+	const initialLaneSelected = useRef(false)
 	const isPanning = useRef(false)
 	const spacePan = useRef(false)
 	const draggedDuringPan = useRef(false)
@@ -139,6 +140,13 @@ export default function ControlPanel({
 			resizeObserver.current?.disconnect()
 			viewportRef.current = el
 			if (!el) return
+			if (!initialLaneSelected.current) {
+				initialLaneSelected.current = true
+				const topLane = workspaces[0]
+				if (topLane && topLane.id !== activeWorkspaceId) {
+					onWorkspaceActivate(topLane.id)
+				}
+			}
 			const ro = new ResizeObserver(([entry]) =>
 				setVpSize({ w: entry.contentRect.width, h: entry.contentRect.height })
 			)
@@ -146,7 +154,7 @@ export default function ControlPanel({
 			resizeObserver.current = ro
 			el.addEventListener("wheel", stableWheelCapture, { capture: true, passive: false })
 		},
-		[stableWheelCapture]
+		[activeWorkspaceId, onWorkspaceActivate, stableWheelCapture, workspaces]
 	)
 
 	const activateCardWorkspace = useCallback(

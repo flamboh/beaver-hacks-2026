@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type FormEvent, type JSX } from "react"
-import { ArrowLeft, ArrowRight, RotateCw } from "lucide-react"
+import { ArrowLeft, ArrowRight, Play, RotateCw } from "lucide-react"
 
 interface BrowserWebview extends HTMLElement {
 	canGoBack: () => boolean
@@ -16,6 +16,12 @@ interface DidFailLoadEvent extends Event {
 	validatedURL: string
 }
 
+interface BrowserCardProps {
+	enterDevAction: string
+	projectName: string
+	workspacePath: string
+}
+
 function normalizeUrl(value: string): string {
 	const input = value.trim()
 	if (!input) return "about:blank"
@@ -24,12 +30,38 @@ function normalizeUrl(value: string): string {
 	return `https://${input}`
 }
 
-export default function BrowserCard(): JSX.Element {
+function devServerUrl(projectName: string, workspacePath: string): string {
+	const hash = stableHash(workspacePath)
+	const slug =
+		projectName
+			.toLowerCase()
+			.replaceAll(/[^a-z0-9]+/g, "-")
+			.replaceAll(/(^-|-$)/g, "")
+			.slice(0, 32) || "project"
+	return `https://beaver-${slug}-${hash}.localhost:1355`
+}
+
+function stableHash(value: string): string {
+	let hash = 0x811c9dc5
+	for (let index = 0; index < value.length; index += 1) {
+		hash ^= value.charCodeAt(index)
+		hash = Math.imul(hash, 0x01000193)
+	}
+	return (hash >>> 0).toString(16).padStart(8, "0")
+}
+
+export default function BrowserCard({
+	enterDevAction,
+	projectName,
+	workspacePath
+}: BrowserCardProps): JSX.Element {
 	const webviewRef = useRef<BrowserWebview | null>(null)
 	const listenerCleanupRef = useRef<(() => void) | null>(null)
-	const [draftUrl, setDraftUrl] = useState("https://www.google.com")
-	const [activeUrl, setActiveUrl] = useState("https://www.google.com")
+	const initialUrl = devServerUrl(projectName, workspacePath)
+	const [draftUrl, setDraftUrl] = useState(initialUrl)
+	const [activeUrl, setActiveUrl] = useState(initialUrl)
 	const [error, setError] = useState<string | null>(null)
+	const [launching, setLaunching] = useState(false)
 
 	const setWebviewRef = useCallback((node: HTMLElement | null) => {
 		listenerCleanupRef.current?.()
@@ -72,6 +104,25 @@ export default function BrowserCard(): JSX.Element {
 		setError(null)
 	}
 
+	async function openDevServer(): Promise<void> {
+		setLaunching(true)
+		setError(null)
+		try {
+			const result = await window.api.devServer.launchProject({
+				cwd: workspacePath,
+				name: projectName,
+				enterDevAction,
+				openExternal: false
+			})
+			setDraftUrl(result.url)
+			setActiveUrl(result.url)
+		} catch (launchError) {
+			setError(launchError instanceof Error ? launchError.message : "Failed to open dev server.")
+		} finally {
+			setLaunching(false)
+		}
+	}
+
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-neutral-950">
 			<div className="flex items-center gap-2 border-b border-white/8 p-2">
@@ -102,6 +153,16 @@ export default function BrowserCard(): JSX.Element {
 					className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 text-neutral-400 transition-colors hover:border-white/20 hover:text-neutral-200"
 				>
 					<RotateCw size={12} />
+				</button>
+				<button
+					type="button"
+					onClick={() => void openDevServer()}
+					disabled={launching}
+					className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 text-neutral-400 transition-colors hover:border-white/20 hover:text-neutral-200 disabled:cursor-wait disabled:opacity-60"
+					aria-label="Open dev server"
+					title="Open dev server"
+				>
+					<Play size={12} />
 				</button>
 
 				<form onSubmit={navigate} className="flex min-w-0 flex-1 items-center gap-2">

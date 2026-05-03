@@ -1,6 +1,6 @@
 import { DEFAULT_WORKSPACE_TEMPLATE } from "./workspaceUtils"
 
-export const SCHEMA_VERSION = 6
+export const SCHEMA_VERSION = 8
 
 export const INITIALIZE_SCHEMA_SQL = `
 	PRAGMA journal_mode = WAL;
@@ -15,6 +15,7 @@ export const INITIALIZE_SCHEMA_SQL = `
 		id TEXT PRIMARY KEY,
 		name TEXT NOT NULL,
 		path TEXT NOT NULL UNIQUE,
+		enter_dev_action TEXT NOT NULL DEFAULT '',
 		created_at TEXT NOT NULL,
 		accessed TEXT NOT NULL
 	);
@@ -46,6 +47,18 @@ export const INITIALIZE_SCHEMA_SQL = `
 		layout_y INTEGER NOT NULL DEFAULT 0,
 		FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
 		FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE SET NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS tool_cards (
+		id TEXT PRIMARY KEY,
+		project_id TEXT NOT NULL,
+		workspace_id TEXT NOT NULL,
+		kind TEXT NOT NULL,
+		layout_x INTEGER NOT NULL DEFAULT 0,
+		layout_y INTEGER NOT NULL DEFAULT 0,
+		created_at TEXT NOT NULL,
+		FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+		FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
 	);
 
 	CREATE TABLE IF NOT EXISTS task (

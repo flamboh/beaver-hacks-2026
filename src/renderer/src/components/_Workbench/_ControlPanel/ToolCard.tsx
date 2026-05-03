@@ -126,7 +126,15 @@ export default function ToolCard({
 					</button>
 				</div>
 				<div className="min-h-0 flex-1">
-					{card.tool === "terminal" ? <TerminalCard cwd={workspacePath} /> : <BrowserCard />}
+					{card.tool === "terminal" ? (
+						<TerminalCard cwd={workspacePath} />
+					) : (
+						<BrowserCard
+							enterDevAction={card.enterDevAction}
+							projectName={card.projectName}
+							workspacePath={workspacePath}
+						/>
+					)}
 				</div>
 			</div>
 			{isResizable ? (

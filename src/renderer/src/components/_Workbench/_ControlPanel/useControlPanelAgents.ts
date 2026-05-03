@@ -26,6 +26,8 @@ const NAME_STOP_WORDS = new Set([
 
 export type WorkspaceLane = WorkspaceRow & {
 	projectName: string
+	projectPath: string
+	projectEnterDevAction: string
 }
 
 export interface StartAgentInput {
@@ -51,6 +53,10 @@ export interface ToolCard {
 	layout_x: number
 	layout_y: number
 	workspace_id: string
+	projectId: string
+	projectName: string
+	projectPath: string
+	enterDevAction: string
 	workspaceName: string
 	workspacePath: string
 }
@@ -59,6 +65,10 @@ export type ControlPanelCard =
 	| ({
 			kind: "agent"
 			workspace_id: string
+			projectId: string
+			projectName: string
+			projectPath: string
+			enterDevAction: string
 			workspaceName: string
 			workspacePath: string
 	  } & AgentRow)
@@ -84,9 +94,17 @@ export function useControlPanelAgents(
 			enabled: Boolean(projectId)
 		}))
 	})
+	const toolCardQueries = useQueries({
+		queries: projectIds.map((projectId) => ({
+			queryKey: ["tool-cards", projectId],
+			queryFn: () => window.api.toolCards.list(projectId),
+			enabled: Boolean(projectId)
+		}))
+	})
 	const agents = agentQueries.flatMap((query) => query.data ?? [])
-	const refetchAgents = () => Promise.all(agentQueries.map((query) => query.refetch()))
-	const [toolCards, setToolCards] = useState<ToolCard[]>([])
+	const persistedToolCards = toolCardQueries.flatMap((query) => query.data ?? [])
+	const refetchCards = () =>
+		Promise.all([...agentQueries, ...toolCardQueries].map((query) => query.refetch()))
 	const [isCreatingCard, setIsCreatingCard] = useState(false)
 	const [deletingCardId, setDeletingCardId] = useState<string | null>(null)
 	const laneByWorkspaceId = useMemo(
@@ -103,8 +121,32 @@ export function useControlPanelAgents(
 					...agent,
 					kind: "agent" as const,
 					workspace_id: agent.workspace_id,
+					projectId: lane.workspace.projectId,
+					projectName: lane.workspace.projectName,
+					projectPath: lane.workspace.projectPath,
+					enterDevAction: lane.workspace.projectEnterDevAction,
 					workspaceName: lane.workspace.name,
 					workspacePath: lane.workspace.path,
+					layout_y: lane.index
+				}
+			]
+		})
+		const toolCards = persistedToolCards.flatMap((card) => {
+			const lane = laneByWorkspaceId.get(card.workspace_id)
+			if (!lane) return []
+			return [
+				{
+					id: card.id,
+					kind: "tool" as const,
+					tool: card.kind,
+					workspace_id: card.workspace_id,
+					projectId: lane.workspace.projectId,
+					projectName: lane.workspace.projectName,
+					projectPath: lane.workspace.projectPath,
+					enterDevAction: lane.workspace.projectEnterDevAction,
+					workspaceName: lane.workspace.name,
+					workspacePath: lane.workspace.path,
+					layout_x: card.layout_x,
 					layout_y: lane.index
 				}
 			]
@@ -113,7 +155,7 @@ export function useControlPanelAgents(
 			if (a.layout_y !== b.layout_y) return a.layout_y - b.layout_y
 			return a.layout_x - b.layout_x
 		})
-	}, [agents, laneByWorkspaceId, toolCards])
+	}, [agents, laneByWorkspaceId, persistedToolCards])
 
 	async function createCard(input: StartCardInput): Promise<void> {
 		if (isCreatingCard) return
@@ -126,18 +168,14 @@ export function useControlPanelAgents(
 			const laneCards = cards.filter((card) => card.workspace_id === workspaceId)
 			const layout = layoutForCard(input, laneCards, lane.index)
 			if (input.kind === "tool") {
-				setToolCards((previous) => [
-					...previous,
-					{
-						id: `tool:${input.tool}:${crypto.randomUUID()}`,
-						kind: "tool",
-						tool: input.tool,
-						workspace_id: workspaceId,
-						workspaceName: lane.workspace.name,
-						workspacePath: lane.workspace.path,
-						...layout
-					}
-				])
+				await window.api.toolCards.create({
+					project_id: lane.workspace.projectId,
+					workspace_id: workspaceId,
+					kind: input.tool,
+					layout_x: layout.layout_x,
+					layout_y: 0
+				})
+				await refetchCards()
 				return
 			}
 			const model = MODEL_BY_PROVIDER[input.provider]
@@ -152,7 +190,7 @@ export function useControlPanelAgents(
 				layout_x: layout.layout_x,
 				layout_y: 0
 			})
-			await refetchAgents()
+			await refetchCards()
 		} finally {
 			setIsCreatingCard(false)
 		}
@@ -163,12 +201,13 @@ export function useControlPanelAgents(
 		setDeletingCardId(id)
 		try {
 			if (id.startsWith("tool:")) {
-				setToolCards((previous) => previous.filter((card) => card.id !== id))
+				await window.api.toolCards.delete(id)
+				await refetchCards()
 				return
 			}
 			await window.api.agents.delete(id)
 			queryClient.removeQueries({ queryKey: ["tasks", id] })
-			await refetchAgents()
+			await refetchCards()
 		} finally {
 			setDeletingCardId(null)
 		}
@@ -180,7 +219,7 @@ export function useControlPanelAgents(
 		deleteCard,
 		deletingCardId,
 		isCreatingCard,
-		refetch: () => void refetchAgents()
+		refetch: () => void refetchCards()
 	}
 }
 

@@ -4,6 +4,7 @@ export interface ProjectTableRow {
 	id: string
 	name: string
 	path: string
+	enter_dev_action: string | null
 	created_at: string
 	accessed: string
 }
@@ -25,6 +26,7 @@ export function toProjectRow(row: ProjectTableRow): ProjectRow {
 		id: row.id,
 		name: row.name,
 		path: row.path,
+		enterDevAction: row.enter_dev_action ?? "",
 		createdAt: row.created_at,
 		accessed: row.accessed
 	}

@@ -3,6 +3,7 @@ import SideBar from "@renderer/components/_Workbench/SideBar"
 import ControlPanel from "@renderer/components/_Workbench/_ControlPanel/main/ControlPanel"
 import Review from "@renderer/components/_Workbench/_Review/main/Review"
 import Agents from "@renderer/components/_Workbench/_Agents/main/Agents"
+import Skills from "@renderer/components/_Workbench/_Skills/main/Skills"
 import Settings from "@renderer/components/_Workbench/_Settings/main/Settings"
 import NewProjectModal from "@renderer/components/_Home/NewProjectModal"
 import type { WorkspaceLane } from "@renderer/components/_Workbench/_ControlPanel/useControlPanelAgents"
@@ -14,7 +15,7 @@ import { useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import type { WorkspaceRow } from "../../../main/db/ipc"
 
-const WORKBENCH_TABS: WorkbenchTab[] = ["control-panel", "review", "agents", "settings"]
+const WORKBENCH_TABS: WorkbenchTab[] = ["control-panel", "review", "agents", "skills", "settings"]
 
 export default function Workbench() {
 	const { projectId, tab } = useParams()
@@ -28,6 +29,7 @@ export default function Workbench() {
 		: "control-panel"
 	const currentPage = initialPage
 	const [sidebarOpen, setSidebarOpen] = useState(true)
+	const [controlPanelWorkspaceId, setControlPanelWorkspaceId] = useState<string | null>(null)
 	const projectQuery = useQuery({
 		queryKey: ["project", projectId],
 		queryFn: () => window.api.projects.get({ id: projectId ?? "" }),
@@ -45,7 +47,8 @@ export default function Workbench() {
 			setProject({
 				id: nextProject.id,
 				name: nextProject.name,
-				path: nextProject.path
+				path: nextProject.path,
+				enterDevAction: nextProject.enterDevAction
 			})
 			void window.api.projects.touch({ id: nextProject.id })
 			navigate(`/project/${encodeURIComponent(nextProject.id)}/workbench/${currentPage}`)
@@ -82,19 +85,35 @@ export default function Workbench() {
 				if (createdOrder !== 0) return createdOrder
 				return a.name.localeCompare(b.name)
 			})
-			.map((workspace) => ({ ...workspace, projectName: project.name }))
+			.map((workspace) => ({
+				...workspace,
+				projectName: project.name,
+				projectPath: project.path,
+				projectEnterDevAction: project.enterDevAction
+			}))
 	})
-	const activeAgentCount = activeWorkspace
+	const controlPanelLane =
+		currentPage === "control-panel"
+			? (allWorkspaces.find((workspace) => workspace.id === controlPanelWorkspaceId) ??
+				(allWorkspaces[0] || null))
+			: null
+	const selectedWorkspace = controlPanelLane ?? activeWorkspace
+	const selectedProject = controlPanelLane
+		? (projects.find((candidate) => candidate.id === controlPanelLane.projectId) ?? project)
+		: project
+	const activeAgentCount = selectedWorkspace
 		? snapshot.threads.filter((thread) => {
 				const status = thread.session?.status
 				return (
-					thread.cwd === activeWorkspace.path && (status === "starting" || status === "running")
+					thread.cwd === selectedWorkspace.path && (status === "starting" || status === "running")
 				)
 			}).length
 		: 0
 
 	const setProjectPage = (nextTab: WorkbenchTab) => {
-		if (projectId) navigate(`/project/${encodeURIComponent(projectId)}/workbench/${nextTab}`)
+		const targetProjectId = selectedProject?.id ?? projectId
+		if (targetProjectId)
+			navigate(`/project/${encodeURIComponent(targetProjectId)}/workbench/${nextTab}`)
 	}
 
 	const slugify = (value: string): string =>
@@ -105,10 +124,13 @@ export default function Workbench() {
 			.replace(/^[-/]+|[-/]+$/g, "") || "worktree"
 
 	const selectProject = (nextProject: ProjectRow) => {
+		const [firstWorkspace] = workspacesByProjectId.get(nextProject.id) ?? []
+		if (currentPage === "control-panel") setControlPanelWorkspaceId(firstWorkspace?.id ?? null)
 		setProject({
 			id: nextProject.id,
 			name: nextProject.name,
-			path: nextProject.path
+			path: nextProject.path,
+			enterDevAction: nextProject.enterDevAction
 		})
 		void window.api.projects.touch({ id: nextProject.id })
 		navigate(`/project/${encodeURIComponent(nextProject.id)}/workbench/${currentPage}`)
@@ -133,7 +155,7 @@ export default function Workbench() {
 	}
 
 	const createWorkspace = (
-		nextProject: Pick<ProjectRow, "id" | "name" | "path">,
+		nextProject: Pick<ProjectRow, "id" | "name" | "path" | "enterDevAction">,
 		sourceWorkspaceId?: string
 	) => {
 		const workspaces = workspacesByProjectId.get(nextProject.id) ?? []
@@ -153,11 +175,13 @@ export default function Workbench() {
 				sourceWorkspaceId: sourceWorkspace.id
 			})
 			.then((workspace) => window.api.workspaces.activate({ id: workspace.id }))
-			.then(async () => {
+			.then(async (workspace) => {
+				if (currentPage === "control-panel") setControlPanelWorkspaceId(workspace.id)
 				setProject({
 					id: nextProject.id,
 					name: nextProject.name,
-					path: nextProject.path
+					path: nextProject.path,
+					enterDevAction: nextProject.enterDevAction
 				})
 				await queryClient.invalidateQueries({ queryKey: ["workspaces", nextProject.id] })
 				navigate(`/project/${encodeURIComponent(nextProject.id)}/workbench/${currentPage}`)
@@ -167,10 +191,12 @@ export default function Workbench() {
 	}
 
 	const selectWorkspace = (nextProject: ProjectRow, workspace: WorkspaceRow) => {
+		if (currentPage === "control-panel") setControlPanelWorkspaceId(workspace.id)
 		setProject({
 			id: nextProject.id,
 			name: nextProject.name,
-			path: nextProject.path
+			path: nextProject.path,
+			enterDevAction: nextProject.enterDevAction
 		})
 		void window.api.projects.touch({ id: nextProject.id })
 		void window.api.workspaces
@@ -183,6 +209,7 @@ export default function Workbench() {
 	}
 
 	const activateWorkspace = (workspaceId: string) => {
+		if (currentPage === "control-panel") setControlPanelWorkspaceId(workspaceId)
 		if (workspaceId === activeWorkspace?.id) return
 		const workspace = allWorkspaces.find((candidate) => candidate.id === workspaceId)
 		const nextProject = projects.find((candidate) => candidate.id === workspace?.projectId)
@@ -190,7 +217,8 @@ export default function Workbench() {
 		setProject({
 			id: nextProject.id,
 			name: nextProject.name,
-			path: nextProject.path
+			path: nextProject.path,
+			enterDevAction: nextProject.enterDevAction
 		})
 		void window.api.projects.touch({ id: nextProject.id })
 		void window.api.workspaces
@@ -209,7 +237,10 @@ export default function Workbench() {
 		if (!confirmed) return
 		void window.api.workspaces
 			.delete({ id: workspace.id })
-			.then(async () => {
+			.then(async (result) => {
+				if (currentPage === "control-panel" && controlPanelWorkspaceId === workspace.id) {
+					setControlPanelWorkspaceId(result.activeWorkspace.id)
+				}
 				await queryClient.invalidateQueries({ queryKey: ["workspaces", workspace.projectId] })
 				if (workspace.projectId === projectId) await workspacesQuery.refetch()
 			})
@@ -217,15 +248,17 @@ export default function Workbench() {
 	}
 
 	const renderPage = () => {
-		if (!project || !activeWorkspace) return null
+		if (!selectedProject || !selectedWorkspace) return null
 
 		switch (currentPage) {
 			case "control-panel":
 				return (
 					<ControlPanel
-						activeWorkspaceId={activeWorkspace.id}
+						activeWorkspaceId={selectedWorkspace.id}
 						onWorkspaceActivate={activateWorkspace}
-						onWorkspaceCreate={(sourceWorkspaceId) => createWorkspace(project, sourceWorkspaceId)}
+						onWorkspaceCreate={(sourceWorkspaceId) =>
+							createWorkspace(selectedProject, sourceWorkspaceId)
+						}
 						projectIds={stableProjects.map((project) => project.id)}
 						workspaces={allWorkspaces}
 					/>
@@ -233,16 +266,26 @@ export default function Workbench() {
 			case "review":
 				return (
 					<Review
-						projectName={project.name}
-						workspaceId={activeWorkspace.id}
-						workspacePath={activeWorkspace.path}
+						enterDevAction={selectedProject.enterDevAction}
+						projectName={selectedProject.name}
+						workspaceId={selectedWorkspace.id}
+						workspacePath={selectedWorkspace.path}
 					/>
 				)
 			case "agents":
-				return <Agents projectPath={project.path} />
+				return <Agents projectPath={selectedProject.path} />
+			case "skills":
+				return <Skills projectPath={selectedProject.path} />
 			case "settings":
 				return (
-					<Settings projectId={project.id} onWorkspacesChanged={() => workspacesQuery.refetch()} />
+					<Settings
+						projectId={selectedProject.id}
+						onProjectChanged={async () => {
+							await queryClient.invalidateQueries({ queryKey: ["project", selectedProject.id] })
+							await queryClient.invalidateQueries({ queryKey: ["projects"] })
+						}}
+						onWorkspacesChanged={() => workspacesQuery.refetch()}
+					/>
 				)
 			default:
 				return null
@@ -255,16 +298,16 @@ export default function Workbench() {
 		<div className="flex h-screen flex-col bg-neutral-950 text-white">
 			<TopBar
 				activeAgentCount={activeAgentCount}
-				activeProject={project}
-				activeWorkspace={activeWorkspace}
+				activeProject={selectedProject}
+				activeWorkspace={selectedWorkspace}
 				currentPage={currentPage}
 				onTabChange={setProjectPage}
 				onToggleSidebar={() => setSidebarOpen((open) => !open)}
 			/>
 			<div className="flex flex-1 overflow-hidden">
 				<SideBar
-					activeProjectId={project?.id ?? null}
-					activeWorkspaceId={activeWorkspace?.id ?? null}
+					activeProjectId={selectedProject?.id ?? null}
+					activeWorkspaceId={selectedWorkspace?.id ?? null}
 					onNewProject={() => setNewProjectOpen(true)}
 					onProjectSelect={selectProject}
 					onWorkspaceCreate={createWorkspace}
@@ -276,15 +319,15 @@ export default function Workbench() {
 				/>
 				<main className={`flex-1 overflow-hidden ${isCanvas ? "" : "overflow-auto p-6"}`}>
 					{(projectQuery.isLoading || workspacesQuery.isLoading) &&
-					(!project || !activeWorkspace) ? (
+					(!selectedProject || !selectedWorkspace) ? (
 						<div className="flex h-full items-center justify-center text-xs text-neutral-500">
 							Loading project.
 						</div>
-					) : !projectId ? (
+					) : !selectedProject || !selectedWorkspace ? (
 						<div className="flex h-full items-center justify-center text-xs text-neutral-500">
 							Select a project or create one from the sidebar.
 						</div>
-					) : projectQuery.error || workspacesQuery.error ? (
+					) : projectId && (projectQuery.error || workspacesQuery.error) ? (
 						<div className="flex h-full items-center justify-center px-4 text-center text-xs text-red-300/80">
 							{projectQuery.error instanceof Error
 								? projectQuery.error.message

@@ -102,10 +102,12 @@ export async function spawnAgentThread(input: {
 
 export async function findProjectSkills(input: {
 	threadId?: string
+	cwd?: string
 	prompt?: string
 }): Promise<void> {
 	const nextSnapshot = await window.api.agent.findSkills({
 		...(input.threadId ? { threadId: input.threadId } : {}),
+		...(input.cwd ? { cwd: input.cwd } : {}),
 		...(input.prompt ? { prompt: input.prompt } : {}),
 		runtimeMode: "full-access"
 	})

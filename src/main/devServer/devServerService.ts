@@ -1,5 +1,4 @@
 import { spawn, type ChildProcess } from "node:child_process"
-import { createHash } from "node:crypto"
 import { existsSync } from "node:fs"
 import { readFile, stat } from "node:fs/promises"
 import { get } from "node:https"
@@ -16,16 +15,10 @@ const OUTPUT_LIMIT = 4000
 const STARTUP_TIMEOUT_MS = 10_000
 const POLL_INTERVAL_MS = 250
 const READY_SETTLE_MS = 600
-
-interface PackageManifest {
-	packageManager?: string
-	scripts?: Record<string, string>
-	beaver?: {
-		devServer?: {
-			command?: string | string[]
-		}
-	}
-}
+const SHELL_COMMAND = process.platform === "win32" ? "cmd.exe" : "sh"
+const SHELL_ARGS = process.platform === "win32" ? ["/d", "/s", "/c"] : ["-lc"]
+const DEV_SHELL_ARGS = process.platform === "win32" ? ["/d", "/s", "/c"] : ["-c"]
+const DEV_PORT = process.platform === "win32" ? "%PORT%" : '"$PORT"'
 
 interface DevServerProcess {
 	child: ChildProcess
@@ -35,6 +28,19 @@ interface DevServerProcess {
 	url: string
 	ready: boolean
 	stopping: boolean
+	aliasedPort: string | null
+}
+
+interface DevServerAction {
+	command: string[]
+	setup: string[]
+}
+
+interface PackageManifest {
+	dependencies?: Record<string, string>
+	devDependencies?: Record<string, string>
+	packageManager?: string
+	scripts?: Record<string, string>
 }
 
 export class DevServerService {
@@ -46,7 +52,7 @@ export class DevServerService {
 		if (existing) {
 			if (existing.stopping) throw new Error("Project dev server is stopping.")
 			if (existing.ready) {
-				void shell.openExternal(existing.url)
+				if (input.openExternal !== false) void shell.openExternal(existing.url)
 				return this.snapshot(existing, "running", "Project")
 			}
 		}
@@ -54,7 +60,9 @@ export class DevServerService {
 		const pending = this.launches.get(input.cwd)
 		if (pending) return pending
 
-		const launch = existing ? this.finishLaunch(existing) : this.startProject(input)
+		const launch = existing
+			? this.finishLaunch(existing, input.openExternal !== false)
+			: this.startProject(input)
 		this.launches.set(input.cwd, launch)
 		try {
 			return await launch
@@ -66,48 +74,68 @@ export class DevServerService {
 	private async startProject(input: LaunchProjectDevServerInput): Promise<ProjectDevServerLaunch> {
 		await this.assertDirectory(input.cwd)
 		const appName = this.projectAppName(input)
-		const command = await this.projectDevCommand(input.cwd)
+		const url = this.projectUrl(appName)
+		if (await this.canReach(url)) {
+			if (input.openExternal !== false) void shell.openExternal(url)
+			return {
+				url,
+				status: "running",
+				pid: null,
+				message: "Project dev server ready.",
+				output: "",
+				cwd: input.cwd,
+				appName
+			}
+		}
+		const action = await this.projectDevAction(input.cwd, input.enterDevAction)
+		await this.runSetup(input.cwd, action.setup)
+		await this.runPortless(["alias", "--remove", appName])
 		const server = this.spawnServer({
 			cwd: input.cwd,
 			appName,
-			url: this.projectUrl(appName),
+			url,
 			command: this.portlessBin(),
-			args: [appName, "--force", ...command]
+			args: [appName, ...action.command]
 		})
 		this.projects.set(input.cwd, server)
-		return this.finishLaunch(server)
+		return this.finishLaunch(server, input.openExternal !== false)
 	}
 
-	private async finishLaunch(server: DevServerProcess): Promise<ProjectDevServerLaunch> {
+	private async finishLaunch(
+		server: DevServerProcess,
+		openExternal = true
+	): Promise<ProjectDevServerLaunch> {
 		server.ready = await this.waitForUrl(server.url)
 		if (server.ready) {
 			await this.delay(READY_SETTLE_MS)
-			void shell.openExternal(server.url)
+			if (openExternal) void shell.openExternal(server.url)
 		}
 		return this.snapshot(server, server.ready ? "running" : "starting", "Project")
 	}
 
-	status(input: ProjectDevServerInput): ProjectDevServerStatus {
+	async status(input: ProjectDevServerInput): Promise<ProjectDevServerStatus> {
 		const server = this.running(this.projects.get(input.cwd) ?? null)
-		if (!server) {
+		if (server) {
 			return {
-				status: "stopped",
-				url: null,
-				pid: null,
-				cwd: input.cwd,
-				appName: null
+				status: server.stopping ? "stopping" : server.ready ? "running" : "starting",
+				url: server.url,
+				pid: server.child.pid ?? null,
+				cwd: server.cwd,
+				appName: server.appName
 			}
 		}
+		const appName = this.projectAppName(input)
+		const url = this.projectUrl(appName)
 		return {
-			status: server.stopping ? "stopping" : server.ready ? "running" : "starting",
-			url: server.url,
-			pid: server.child.pid ?? null,
-			cwd: server.cwd,
-			appName: server.appName
+			status: (await this.canReach(url)) ? "running" : "stopped",
+			url,
+			pid: null,
+			cwd: input.cwd,
+			appName
 		}
 	}
 
-	stopProject(input: ProjectDevServerInput): ProjectDevServerStatus {
+	async stopProject(input: ProjectDevServerInput): Promise<ProjectDevServerStatus> {
 		const server = this.running(this.projects.get(input.cwd) ?? null)
 		if (!server) return this.status(input)
 		server.stopping = true
@@ -136,7 +164,11 @@ export class DevServerService {
 		const server: DevServerProcess = {
 			child: spawn(input.command, input.args, {
 				cwd: input.cwd,
-				env: { ...process.env, BROWSER: "none", PORTLESS_PORT: this.proxyPort() },
+				env: {
+					...process.env,
+					BROWSER: "none",
+					PORTLESS_PORT: this.proxyPort()
+				},
 				stdio: ["ignore", "pipe", "pipe"]
 			}),
 			output: "",
@@ -144,11 +176,12 @@ export class DevServerService {
 			appName: input.appName,
 			url: input.url,
 			ready: false,
-			stopping: false
+			stopping: false,
+			aliasedPort: null
 		}
 
-		server.child.stdout?.on("data", (data: Buffer) => this.appendOutput(server, data))
-		server.child.stderr?.on("data", (data: Buffer) => this.appendOutput(server, data))
+		server.child.stdout?.on("data", (data: Buffer) => this.appendServerOutput(server, data))
+		server.child.stderr?.on("data", (data: Buffer) => this.appendServerOutput(server, data))
 		server.child.on("error", (error) => this.appendOutput(server, error.message))
 		server.child.on("exit", () => {
 			if (this.projects.get(server.cwd) === server) this.projects.delete(server.cwd)
@@ -161,6 +194,17 @@ export class DevServerService {
 		server.output = `${server.output}${data.toString()}`
 		if (server.output.length > OUTPUT_LIMIT) {
 			server.output = server.output.slice(-OUTPUT_LIMIT)
+		}
+	}
+
+	private appendServerOutput(server: DevServerProcess, data: Buffer): void {
+		this.appendOutput(server, data)
+		const port = this.outputPort(server.output)
+		if (port && server.aliasedPort !== port) {
+			server.aliasedPort = port
+			void this.registerAlias(server.appName, port).catch((error: Error) =>
+				this.appendOutput(server, error.message)
+			)
 		}
 	}
 
@@ -201,39 +245,56 @@ export class DevServerService {
 		return new Promise((resolve) => setTimeout(resolve, ms))
 	}
 
-	private async projectDevCommand(cwd: string): Promise<string[]> {
+	private async projectDevAction(cwd: string, setupAction?: string): Promise<DevServerAction> {
+		const command = await this.inferDevCommand(cwd)
+		const setup = (setupAction ?? "")
+			.split(/\r?\n/u)
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.filter((line) => !this.isDevCommand(line, command))
+		return {
+			command,
+			setup
+		}
+	}
+
+	private isDevCommand(line: string, command: string[]): boolean {
+		if (line === command.join(" ")) return true
+		return /^(bun|pnpm|yarn) (run )?dev(\s|$)|^npm run dev(\s|$)/u.test(line)
+	}
+
+	private async inferDevCommand(cwd: string): Promise<string[]> {
 		const manifest = JSON.parse(
 			await readFile(join(cwd, "package.json"), "utf8")
 		) as PackageManifest
-		const configured = manifest.beaver?.devServer?.command
-		if (Array.isArray(configured) && configured.length > 0) return configured
-		if (configured && !Array.isArray(configured) && configured.trim()) {
-			return this.splitCommand(configured)
-		}
 		if (!manifest.scripts?.dev) throw new Error("Project package.json has no dev script.")
-
-		const devCommand = this.splitCommand(manifest.scripts.dev)
-		if (this.isSimpleCommand(devCommand)) {
-			return [...this.execRunner(cwd, manifest), ...devCommand]
+		const manager = this.packageManager(cwd, manifest)
+		if (this.needsExplicitPort(manifest)) {
+			return [
+				SHELL_COMMAND,
+				...DEV_SHELL_ARGS,
+				`${this.devScriptCommand(manager)} -- --host 127.0.0.1 --port ${DEV_PORT}`
+			]
 		}
-
-		return [...this.scriptRunner(cwd, manifest), "dev"]
+		if (manager === "bun") return ["bun", "run", "dev"]
+		if (manager === "pnpm") return ["pnpm", "run", "dev"]
+		if (manager === "yarn") return ["yarn", "dev"]
+		return ["npm", "run", "dev"]
 	}
 
-	private execRunner(cwd: string, manifest: PackageManifest): string[] {
-		const manager = this.packageManager(cwd, manifest)
-		if (manager === "bun") return ["bunx"]
-		if (manager === "npm") return ["npx"]
-		if (manager === "yarn") return ["yarn", "exec"]
-		return ["pnpm", "exec"]
+	private devScriptCommand(manager: string): string {
+		if (manager === "bun") return "bun run dev"
+		if (manager === "pnpm") return "pnpm run dev"
+		if (manager === "yarn") return "yarn dev"
+		return "npm run dev"
 	}
 
-	private scriptRunner(cwd: string, manifest: PackageManifest): string[] {
-		const manager = this.packageManager(cwd, manifest)
-		if (manager === "bun") return ["bun", "run"]
-		if (manager === "npm") return ["npm", "run"]
-		if (manager === "yarn") return ["yarn"]
-		return ["pnpm", "run"]
+	private needsExplicitPort(manifest: PackageManifest): boolean {
+		const dependencies = {
+			...manifest.dependencies,
+			...manifest.devDependencies
+		}
+		return Boolean(dependencies.astro || dependencies.vite)
 	}
 
 	private packageManager(cwd: string, manifest: PackageManifest): string {
@@ -241,32 +302,39 @@ export class DevServerService {
 		if (declared) return declared
 		if (existsSync(join(cwd, "bun.lock"))) return "bun"
 		if (existsSync(join(cwd, "pnpm-lock.yaml"))) return "pnpm"
-		if (existsSync(join(cwd, "package-lock.json"))) return "npm"
 		if (existsSync(join(cwd, "yarn.lock"))) return "yarn"
-		return "pnpm"
+		return "npm"
 	}
 
-	private splitCommand(command: string): string[] {
-		return (
-			command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g)?.map((part) => {
-				if (
-					(part.startsWith('"') && part.endsWith('"')) ||
-					(part.startsWith("'") && part.endsWith("'"))
-				) {
-					return part.slice(1, -1)
+	private async runSetup(cwd: string, commands: string[]): Promise<void> {
+		for (const command of commands) {
+			await new Promise<void>((resolve, reject) => {
+				const child = spawn(SHELL_COMMAND, [...SHELL_ARGS, command], {
+					cwd,
+					env: { ...process.env, BROWSER: "none" },
+					stdio: ["ignore", "pipe", "pipe"]
+				})
+				let output = ""
+				const append = (data: Buffer | string): void => {
+					output = `${output}${data.toString()}`
+					if (output.length > OUTPUT_LIMIT) output = output.slice(-OUTPUT_LIMIT)
 				}
-				return part
-			}) ?? []
-		)
+				child.stdout?.on("data", append)
+				child.stderr?.on("data", append)
+				child.on("error", reject)
+				child.on("exit", (code) => {
+					if (code === 0) {
+						resolve()
+						return
+					}
+					reject(new Error(output.trim() || `Project setup command failed: ${command}`))
+				})
+			})
+		}
 	}
 
-	private isSimpleCommand(command: string[]): boolean {
-		if (command.length === 0) return false
-		return command.every((part) => !/[;&|<>$`]/.test(part) && !part.includes("="))
-	}
-
-	private projectAppName(input: LaunchProjectDevServerInput): string {
-		const hash = createHash("sha1").update(input.cwd).digest("hex").slice(0, 8)
+	private projectAppName(input: { cwd: string; name?: string }): string {
+		const hash = this.stableHash(input.cwd)
 		const slug = (input.name || basename(input.cwd))
 			.toLowerCase()
 			.replaceAll(/[^a-z0-9]+/g, "-")
@@ -275,9 +343,44 @@ export class DevServerService {
 		return `beaver-${slug || "project"}-${hash}`
 	}
 
+	private stableHash(value: string): string {
+		let hash = 0x811c9dc5
+		for (let index = 0; index < value.length; index += 1) {
+			hash ^= value.charCodeAt(index)
+			hash = Math.imul(hash, 0x01000193)
+		}
+		return (hash >>> 0).toString(16).padStart(8, "0")
+	}
+
 	private portlessBin(): string {
 		const binary = process.platform === "win32" ? "portless.cmd" : "portless"
 		return join(process.cwd(), "node_modules", ".bin", binary)
+	}
+
+	private async registerAlias(appName: string, port: string): Promise<void> {
+		await this.runPortless(["alias", "--remove", appName])
+		await this.runPortless(["alias", appName, port])
+	}
+
+	private runPortless(args: string[]): Promise<void> {
+		return new Promise((resolve, reject) => {
+			const child = spawn(this.portlessBin(), args, {
+				env: { ...process.env, PORTLESS_PORT: this.proxyPort() },
+				stdio: "ignore"
+			})
+			child.on("error", reject)
+			child.on("exit", (code) => {
+				if (code === 0 || args.includes("--remove")) {
+					resolve()
+					return
+				}
+				reject(new Error("Failed to register dev server URL."))
+			})
+		})
+	}
+
+	private outputPort(output: string): string | null {
+		return output.match(/https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)/)?.[1] ?? null
 	}
 
 	private projectUrl(appName: string): string {

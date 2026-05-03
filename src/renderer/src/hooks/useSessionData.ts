@@ -4,6 +4,7 @@ export type SessionProject = {
 	id: string
 	name: string
 	path: string
+	enterDevAction: string
 }
 
 type SessionData = {

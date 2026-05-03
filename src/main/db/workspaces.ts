@@ -208,7 +208,7 @@ export class WorkspaceService {
 	private async getProject(projectId: string): Promise<ProjectRow> {
 		const row = await this.getRow<ProjectTableRow>(
 			`
-				SELECT id, name, path, created_at, accessed
+				SELECT id, name, path, enter_dev_action, created_at, accessed
 				FROM projects
 				WHERE id = ?
 			`,

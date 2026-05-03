@@ -2,6 +2,7 @@ import { ipcMain } from "electron"
 import { DatabaseService } from "./database"
 import { AgentService, CreateAgentInput, UpdateAgentInput } from "./agents"
 import { TaskService, CreateTaskInput } from "./tasks"
+import { CreateToolCardInput, ToolCardService } from "./toolCards"
 
 import type {
 	CreateProjectInput,
@@ -17,6 +18,7 @@ import type {
 export function registerDatabaseIpc(database: DatabaseService): void {
 	const agents = new AgentService(database.db)
 	const tasks = new TaskService(database.db)
+	const toolCards = new ToolCardService(database.db)
 
 	// project handlers
 	ipcMain.handle("db:get-info", () => database.getInfo())
@@ -62,6 +64,15 @@ export function registerDatabaseIpc(database: DatabaseService): void {
 	ipcMain.handle("agent:update", (_event, input: UpdateAgentInput) => agents.updateAgent(input))
 	ipcMain.handle("agent:delete", (_event, id: string) => agents.deleteAgent(id))
 
+	// tool card handlers
+	ipcMain.handle("tool-card:list", (_event, projectId: string) =>
+		toolCards.listToolCards(projectId)
+	)
+	ipcMain.handle("tool-card:create", (_event, input: CreateToolCardInput) =>
+		toolCards.createToolCard(input)
+	)
+	ipcMain.handle("tool-card:delete", (_event, id: string) => toolCards.deleteToolCard(id))
+
 	// task handlers
 	ipcMain.handle("task:list", (_event, agentId: string) => tasks.listTasks(agentId))
 	ipcMain.handle("task:create", (_event, input: CreateTaskInput) => tasks.createTask(input))
@@ -84,4 +95,6 @@ export type {
 
 export type { AgentRow, TaskRow } from "./contracts"
 export type { CreateAgentInput, UpdateAgentInput } from "./agents"
+export type { CreateToolCardInput } from "./toolCards"
+export type { ToolCardRow } from "./contracts"
 export type { CreateTaskInput } from "./tasks"
