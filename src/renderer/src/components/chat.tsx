@@ -43,7 +43,7 @@ export function Chat({ thread, isRunning, cwd, workspaceId }: ChatProps): JSX.El
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<section className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+			<section className="nowheel nodrag min-h-0 flex-1 overflow-y-auto px-4 py-5">
 				<div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
 					{thread ? (
 						thread.messages.map((message) => (

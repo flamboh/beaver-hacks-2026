@@ -1,69 +1,62 @@
-import { useRef, useState, useCallback, useEffect } from "react"
-import { useQuery } from "@tanstack/react-query"
-import { RefreshCw } from "lucide-react"
+import { useRef, useState, useCallback, useEffect, useMemo } from "react"
+import { LucideSquareArrowOutUpRight, RefreshCw } from "lucide-react"
 import NavigationMap from "../NavigationMap"
-import AgentCard from "../AgentCard"
-import { useSessionData } from "@renderer/hooks/useSessionData"
-import { LucideSquareArrowOutUpRight } from "lucide-react"
-
-// ── layout constants ──────────────────────────────────────────────
-const CARD_W = 1000
-const CARD_H = 700
-const GAP = 50
-const PADDING = 50
-const COLS = 3
-
-// ── canvas math ───────────────────────────────────────────────────
-function canvasSize(count: number) {
-	const rows = Math.ceil(count / COLS)
-	return {
-		w: COLS * CARD_W + (COLS - 1) * GAP + PADDING * 2,
-		h: rows * CARD_H + (rows - 1) * GAP + PADDING * 2
-	}
-}
-
-function cardPos(idx: number) {
-	return {
-		x: PADDING + (idx % COLS) * (CARD_W + GAP),
-		y: PADDING + Math.floor(idx / COLS) * (CARD_H + GAP)
-	}
-}
-
-function clamp(offset: { x: number; y: number }, vpW: number, vpH: number, cW: number, cH: number) {
-	return {
-		x: Math.min(PADDING, Math.max(offset.x, vpW - cW)),
-		y: Math.min(PADDING, Math.max(offset.y, vpH - cH))
-	}
-}
+import { CanvasControls } from "../CanvasControls"
+import { ControlPanelCanvas } from "../ControlPanelCanvas"
+import { useControlPanelAgents } from "../useControlPanelAgents"
+import { useControlPanelKeyboard } from "../useControlPanelKeyboard"
+import {
+	PADDING,
+	canElementScroll,
+	canStartPan,
+	canvasSize,
+	cardCenter,
+	centerOffset,
+	clampOffset,
+	clampZoom,
+	fitZoom,
+	nearestCardInDirection,
+	nearestCardIndex
+} from "../controlPanelLayout"
 
 interface ControlPanelProps {
 	workspaceId: string
 	workspacePath: string
 }
 
-// ── component ─────────────────────────────────────────────────────
 export default function ControlPanel({ workspaceId, workspacePath }: ControlPanelProps) {
-	const { project } = useSessionData()
-	const projectId = project?.id ?? ""
-
-	const { data: agents = [], refetch } = useQuery({
-		queryKey: ["agents", projectId, workspaceId, workspacePath],
-		queryFn: () => window.api.agents.list(projectId),
-		enabled: !!projectId
-	})
-
 	const viewportRef = useRef<HTMLDivElement>(null)
 	const resizeObserver = useRef<ResizeObserver | null>(null)
 	const hideMapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const smoothPanTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const edgePanFrame = useRef<number | null>(null)
+	const wheelPanFrame = useRef<number | null>(null)
+	const wheelTargetOffset = useRef({ x: PADDING, y: PADDING })
 	const isPanning = useRef(false)
+	const spacePan = useRef(false)
+	const draggedDuringPan = useRef(false)
 	const lastPos = useRef({ x: 0, y: 0 })
+	const edgePointer = useRef({ x: 0, y: 0 })
 	const wheelFnRef = useRef<(e: WheelEvent) => void>(() => {})
 
 	const [offset, setOffset] = useState({ x: PADDING, y: PADDING })
+	const [zoom, setZoom] = useState(1)
 	const [vpSize, setVpSize] = useState({ w: 0, h: 0 })
 	const [showMap, setShowMap] = useState(false)
 	const [focusedIdx, setFocusedIdx] = useState(0)
 	const [smoothPan, setSmoothPan] = useState(false)
+	const [spacePanActive, setSpacePanActive] = useState(false)
+	const { agents, refetch } = useControlPanelAgents(workspaceId, workspacePath)
+	const canvas = useMemo(() => canvasSize(agents.length), [agents.length])
+	const hasAgents = agents.length > 0
+
+	const viewportCenter = useCallback(
+		(nextOffset: { x: number; y: number }, nextZoom: number) => ({
+			x: (vpSize.w / 2 - nextOffset.x) / nextZoom,
+			y: (vpSize.h / 2 - nextOffset.y) / nextZoom
+		}),
+		[vpSize.h, vpSize.w]
+	)
 
 	const flashMap = useCallback(() => {
 		setShowMap(true)
@@ -71,7 +64,40 @@ export default function ControlPanel({ workspaceId, workspacePath }: ControlPane
 		hideMapTimer.current = setTimeout(() => setShowMap(false), 2000)
 	}, [])
 
+	const stopWheelPan = useCallback(() => {
+		if (wheelPanFrame.current) cancelAnimationFrame(wheelPanFrame.current)
+		wheelPanFrame.current = null
+	}, [])
+
+	const commitOffset = useCallback(
+		(nextOffset: { x: number; y: number }, nextZoom = zoom, syncFocus = true) => {
+			stopWheelPan()
+			const clamped = clampOffset(nextOffset, vpSize, canvas, nextZoom)
+			wheelTargetOffset.current = clamped
+			setOffset(clamped)
+			if (syncFocus && agents.length > 0) {
+				setFocusedIdx(nearestCardIndex(viewportCenter(clamped, nextZoom), agents.length))
+			}
+			flashMap()
+		},
+		[agents.length, canvas, flashMap, stopWheelPan, viewportCenter, vpSize, zoom]
+	)
+
+	const setView = useCallback(
+		(nextOffset: { x: number; y: number }, nextZoom: number, syncFocus = true) => {
+			const clampedZoom = clampZoom(nextZoom)
+			setZoom(clampedZoom)
+			commitOffset(nextOffset, clampedZoom, syncFocus)
+		},
+		[commitOffset]
+	)
+
 	const stableWheelCapture = useCallback((e: WheelEvent) => {
+		const target = e.target as Element | null
+		const scrollable = target?.closest(".nowheel")
+		if (scrollable instanceof HTMLElement && canElementScroll(scrollable, e.deltaX, e.deltaY)) {
+			return
+		}
 		e.preventDefault()
 		wheelFnRef.current(e)
 	}, [])
@@ -94,101 +120,222 @@ export default function ControlPanel({ workspaceId, workspacePath }: ControlPane
 		[stableWheelCapture]
 	)
 
-	const snapToCard = useCallback(
+	const centerCard = useCallback(
 		(idx: number) => {
-			const clamped = Math.max(0, Math.min(idx, agents.length - 1))
-			setFocusedIdx(clamped)
-
-			const vp = viewportRef.current
-			if (!vp) return
-			const vpW = vp.offsetWidth
-			const vpH = vp.offsetHeight
-			const { w, h } = canvasSize(agents.length)
-			const pos = cardPos(clamped)
-
-			const tx = vpW / 2 - pos.x - CARD_W / 2
-			const ty = vpH / 2 - pos.y + 20 - CARD_H / 2 + PADDING / 2
-
+			if (!viewportRef.current) return
 			setSmoothPan(true)
-			setOffset(clamp({ x: tx, y: ty }, vpW, vpH, w, h))
+			setFocusedIdx(idx)
+			commitOffset(centerOffset(cardCenter(idx), vpSize, canvas, zoom), zoom, false)
 			flashMap()
-			setTimeout(() => setSmoothPan(false), 620)
+			if (smoothPanTimer.current) clearTimeout(smoothPanTimer.current)
+			smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 320)
 		},
-		[agents.length, flashMap]
+		[canvas, commitOffset, flashMap, vpSize, zoom]
 	)
 
-	useEffect(() => {
-		const handler = (e: KeyboardEvent) => {
-			if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return
-			e.preventDefault()
-			if (e.key === "ArrowRight") snapToCard(focusedIdx + 1)
-			if (e.key === "ArrowLeft") snapToCard(focusedIdx - 1)
-			if (e.key === "ArrowDown") snapToCard(focusedIdx + COLS)
-			if (e.key === "ArrowUp") snapToCard(focusedIdx - COLS)
-		}
-		window.addEventListener("keydown", handler)
-		return () => window.removeEventListener("keydown", handler)
-	}, [focusedIdx, snapToCard])
+	const snapToCard = useCallback(
+		(idx: number) => centerCard(Math.max(0, Math.min(idx, agents.length - 1))),
+		[agents.length, centerCard]
+	)
 
-	const onMouseDown = useCallback((e: React.MouseEvent) => {
-		const tag = (e.target as HTMLElement).tagName
-		if (tag === "INPUT" || tag === "TEXTAREA" || tag === "BUTTON" || tag === "SELECT") return
-		isPanning.current = true
-		lastPos.current = { x: e.clientX, y: e.clientY }
-		e.preventDefault()
+	const moveFocus = useCallback(
+		(direction: "left" | "right" | "up" | "down") => {
+			if (!hasAgents) return
+			centerCard(nearestCardInDirection(viewportCenter(offset, zoom), agents.length, direction))
+		},
+		[agents.length, centerCard, hasAgents, offset, viewportCenter, zoom]
+	)
+
+	useControlPanelKeyboard({
+		centerFocused: () => centerCard(focusedIdx),
+		focusedIdx,
+		moveFocus,
+		setSpacePanActive,
+		snapToCard,
+		spacePan
+	})
+
+	const panBy = useCallback(
+		(dx: number, dy: number) => {
+			stopWheelPan()
+			setOffset((current) => {
+				const clamped = clampOffset({ x: current.x + dx, y: current.y + dy }, vpSize, canvas, zoom)
+				wheelTargetOffset.current = clamped
+				if (agents.length > 0) {
+					setFocusedIdx(nearestCardIndex(viewportCenter(clamped, zoom), agents.length))
+				}
+				return clamped
+			})
+			flashMap()
+		},
+		[agents.length, canvas, flashMap, stopWheelPan, viewportCenter, vpSize, zoom]
+	)
+
+	const smoothWheelPanBy = useCallback(
+		(dx: number, dy: number) => {
+			wheelTargetOffset.current = clampOffset(
+				{ x: wheelTargetOffset.current.x + dx, y: wheelTargetOffset.current.y + dy },
+				vpSize,
+				canvas,
+				zoom
+			)
+			flashMap()
+			if (wheelPanFrame.current) return
+
+			function tick() {
+				let done = false
+				setOffset((current) => {
+					const target = wheelTargetOffset.current
+					const next = {
+						x: current.x + (target.x - current.x) * 0.24,
+						y: current.y + (target.y - current.y) * 0.24
+					}
+					if (Math.abs(target.x - next.x) + Math.abs(target.y - next.y) < 0.5) {
+						done = true
+						next.x = target.x
+						next.y = target.y
+					}
+					if (agents.length > 0) {
+						setFocusedIdx(nearestCardIndex(viewportCenter(next, zoom), agents.length))
+					}
+					return next
+				})
+				if (done) {
+					wheelPanFrame.current = null
+					return
+				}
+				wheelPanFrame.current = requestAnimationFrame(tick)
+			}
+
+			wheelPanFrame.current = requestAnimationFrame(tick)
+		},
+		[agents.length, canvas, flashMap, viewportCenter, vpSize, zoom]
+	)
+
+	const stopEdgePan = useCallback(() => {
+		if (edgePanFrame.current) cancelAnimationFrame(edgePanFrame.current)
+		edgePanFrame.current = null
 	}, [])
+
+	const startEdgePan = useCallback(() => {
+		function tick() {
+			if (!isPanning.current) {
+				stopEdgePan()
+				return
+			}
+			const vp = viewportRef.current
+			if (!vp) return
+			const rect = vp.getBoundingClientRect()
+			const edge = 56
+			const maxSpeed = 18
+			const left = Math.max(0, edge - (edgePointer.current.x - rect.left))
+			const right = Math.max(0, edge - (rect.right - edgePointer.current.x))
+			const top = Math.max(0, edge - (edgePointer.current.y - rect.top))
+			const bottom = Math.max(0, edge - (rect.bottom - edgePointer.current.y))
+			const vx = ((left - right) / edge) * maxSpeed
+			const vy = ((top - bottom) / edge) * maxSpeed
+			if (vx || vy) panBy(vx, vy)
+			edgePanFrame.current = requestAnimationFrame(tick)
+		}
+		edgePanFrame.current = requestAnimationFrame(tick)
+	}, [panBy, stopEdgePan])
+
+	const onMouseDown = useCallback(
+		(e: React.MouseEvent) => {
+			if (e.button !== 0 && e.button !== 1) return
+			if (!canStartPan(e.target, spacePan.current)) return
+			isPanning.current = true
+			draggedDuringPan.current = false
+			lastPos.current = { x: e.clientX, y: e.clientY }
+			edgePointer.current = { x: e.clientX, y: e.clientY }
+			e.preventDefault()
+			stopEdgePan()
+			startEdgePan()
+		},
+		[startEdgePan, stopEdgePan]
+	)
 
 	const onMouseMove = useCallback(
 		(e: React.MouseEvent) => {
 			if (!isPanning.current) return
 			const dx = e.clientX - lastPos.current.x
 			const dy = e.clientY - lastPos.current.y
+			if (Math.abs(dx) + Math.abs(dy) > 1) draggedDuringPan.current = true
 			lastPos.current = { x: e.clientX, y: e.clientY }
-			setOffset((prev) => {
-				const vp = viewportRef.current
-				const vpW = vp?.offsetWidth ?? 0
-				const vpH = vp?.offsetHeight ?? 0
-				const { w, h } = canvasSize(agents.length)
-				return clamp({ x: prev.x + dx, y: prev.y + dy }, vpW, vpH, w, h)
-			})
-			flashMap()
+			edgePointer.current = { x: e.clientX, y: e.clientY }
+			panBy(dx, dy)
 		},
-		[agents.length, flashMap]
+		[panBy]
 	)
 
 	const onMouseUp = useCallback(() => {
 		isPanning.current = false
-	}, [])
+		stopEdgePan()
+	}, [stopEdgePan])
 
 	useEffect(() => {
 		wheelFnRef.current = (e: WheelEvent) => {
 			const vp = viewportRef.current
 			if (!vp) return
-			const { w, h } = canvasSize(agents.length)
-			setOffset((prev) =>
-				clamp({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }, vp.offsetWidth, vp.offsetHeight, w, h)
-			)
-			flashMap()
+			if (e.metaKey || e.ctrlKey) {
+				const rect = vp.getBoundingClientRect()
+				const nextZoom = clampZoom(zoom * (e.deltaY > 0 ? 0.92 : 1.08))
+				const anchor = {
+					x: (e.clientX - rect.left - offset.x) / zoom,
+					y: (e.clientY - rect.top - offset.y) / zoom
+				}
+				setView(
+					{
+						x: e.clientX - rect.left - anchor.x * nextZoom,
+						y: e.clientY - rect.top - anchor.y * nextZoom
+					},
+					nextZoom
+				)
+				return
+			}
+			const dx = e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX
+			const dy = e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX) ? 0 : e.deltaY
+			smoothWheelPanBy(-dx, -dy)
 		}
-	}, [agents.length, flashMap])
+	}, [offset.x, offset.y, setView, smoothWheelPanBy, zoom])
 
-	const canvas = canvasSize(agents.length)
-	const hasAgents = agents.length > 0
+	const fitAll = useCallback(() => {
+		const nextZoom = fitZoom(vpSize, canvas)
+		setSmoothPan(true)
+		setView(centerOffset({ x: canvas.w / 2, y: canvas.h / 2 }, vpSize, canvas, nextZoom), nextZoom)
+		if (smoothPanTimer.current) clearTimeout(smoothPanTimer.current)
+		smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 320)
+	}, [canvas, setView, vpSize])
+
+	const actualSize = useCallback(() => {
+		const center = viewportCenter(offset, zoom)
+		setSmoothPan(true)
+		setView(centerOffset(center, vpSize, canvas, 1), 1)
+		if (smoothPanTimer.current) clearTimeout(smoothPanTimer.current)
+		smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 320)
+	}, [canvas, offset, setView, viewportCenter, vpSize, zoom])
+
+	const navigateToCanvasPoint = useCallback(
+		(center: { x: number; y: number }) => {
+			commitOffset(centerOffset(center, vpSize, canvas, zoom), zoom)
+		},
+		[canvas, commitOffset, vpSize, zoom]
+	)
+	const isActualSize = Math.abs(zoom - 1) < 0.01
 
 	return (
 		<div
 			ref={hasAgents ? setViewportRef : undefined}
-			className={`w-full h-full overflow-hidden relative select-none bg-neutral-950 focus:outline-none ${
-				hasAgents ? "cursor-grab active:cursor-grabbing" : ""
+			className={`relative h-full w-full overflow-hidden select-none bg-neutral-950 focus:outline-none ${
+				hasAgents ? (spacePanActive ? "cursor-grabbing" : "cursor-grab active:cursor-grabbing") : ""
 			}`}
-			onMouseDown={hasAgents ? onMouseDown : undefined}
-			onMouseMove={hasAgents ? onMouseMove : undefined}
-			onMouseUp={hasAgents ? onMouseUp : undefined}
+			onMouseDownCapture={hasAgents ? onMouseDown : undefined}
+			onMouseMoveCapture={hasAgents ? onMouseMove : undefined}
+			onMouseUpCapture={hasAgents ? onMouseUp : undefined}
 			onMouseLeave={hasAgents ? onMouseUp : undefined}
 		>
-			{/* dot grid — always visible */}
 			<div
-				className="absolute inset-0 pointer-events-none"
+				className="pointer-events-none absolute inset-0"
 				style={{
 					backgroundImage: "radial-gradient(circle, #ffffff18 1px, transparent 1px)",
 					backgroundSize: "24px 24px",
@@ -196,77 +343,56 @@ export default function ControlPanel({ workspaceId, workspacePath }: ControlPane
 				}}
 			/>
 
-			{/* refresh button */}
 			<button
-				onClick={() => refetch()}
-				className="absolute top-3 right-3 p-1.5 rounded-md text-neutral-600 hover:text-neutral-300 hover:bg-white/5 transition-colors duration-150 z-10"
+				onClick={refetch}
+				className="nodrag absolute top-3 right-3 z-10 rounded-md p-1.5 text-neutral-600 transition-colors duration-150 hover:bg-white/5 hover:text-neutral-300"
 				title="Refresh agents"
 			>
 				<RefreshCw size={13} />
 			</button>
 
-			{!hasAgents ? (
-				<div className="flex flex-col items-center justify-center h-full pointer-events-none gap-y-2">
-					<span className="text-sm text-neutral-600 text-[1.5rem]">No Agents Yet</span>
-					<div className="flex gap-x-2 text-blue-200">
-						<h1 className="text-center hover:underline z-10">Get started now</h1>
-						<LucideSquareArrowOutUpRight />
-					</div>
-				</div>
-			) : (
+			{hasAgents ? (
 				<>
-					{/* canvas */}
-					<div
-						style={{
-							position: "absolute",
-							width: canvas.w,
-							height: canvas.h,
-							transform: `translate(${offset.x}px, ${offset.y}px)`,
-							transformOrigin: "0 0",
-							willChange: "transform",
-							transition: smoothPan ? "transform 600ms cubic-bezier(0.16, 1, 0.3, 1)" : "none"
-						}}
-					>
-						{agents.map((agent, i) => {
-							const pos = cardPos(i)
-							const focused = focusedIdx === i
-							return (
-								<div
-									key={agent.id}
-									className="absolute"
-									style={{ left: pos.x, top: pos.y }}
-									onClick={() => snapToCard(i)}
-								>
-									<div
-										className={`rounded-xl transition-shadow duration-150 ${
-											focused ? "ring-2 ring-white/20 ring-offset-4 ring-offset-neutral-950" : ""
-										}`}
-									>
-										<AgentCard
-											agent={agent}
-											workspaceId={workspaceId}
-											workspacePath={workspacePath}
-										/>
-									</div>
-								</div>
-							)
-						})}
-					</div>
-
+					<ControlPanelCanvas
+						agents={agents}
+						canvas={canvas}
+						draggedDuringPan={draggedDuringPan}
+						focusedIdx={focusedIdx}
+						offset={offset}
+						onFocus={setFocusedIdx}
+						onSnap={snapToCard}
+						smoothPan={smoothPan}
+						workspaceId={workspaceId}
+						workspacePath={workspacePath}
+						zoom={zoom}
+					/>
 					<NavigationMap
 						canvasWidth={canvas.w}
 						canvasHeight={canvas.h}
 						viewportWidth={vpSize.w}
 						viewportHeight={vpSize.h}
 						offset={offset}
-						scale={1}
+						scale={zoom}
 						visible={showMap}
+						onNavigate={navigateToCanvasPoint}
 					/>
-
-					<div className="absolute bottom-3 left-3 text-xs text-neutral-600 pointer-events-none select-none">
+					<CanvasControls
+						onCenterFocused={() => centerCard(focusedIdx)}
+						onToggleFit={isActualSize ? fitAll : actualSize}
+						showFitAll={isActualSize}
+					/>
+					<div className="pointer-events-none absolute right-3 bottom-3 select-none text-xs text-neutral-600">
 						{agents.length} agents
 					</div>
 				</>
+			) : (
+				<div className="pointer-events-none flex h-full flex-col items-center justify-center gap-y-2">
+					<span className="text-[1.5rem] text-sm text-neutral-600">No Agents Yet</span>
+					<div className="flex gap-x-2 text-blue-200">
+						<h1 className="text-center">Get started now</h1>
+						<LucideSquareArrowOutUpRight />
+					</div>
+				</div>
 			)}
 		</div>
 	)

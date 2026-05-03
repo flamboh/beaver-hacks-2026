@@ -2,11 +2,16 @@ import { Chat } from "@renderer/components/chat"
 import { useAgentSnapshot } from "@renderer/agentStore"
 import type { AgentRow } from "@renderer/types/models"
 import TaskList from "./TaskList"
+import { CARD_H, CARD_W } from "./controlPanelLayout"
 
-function parseScopePath(p: string): string {
-	if (!p) return ""
-	const parts = p.replace(/\\/g, "/").split("/")
-	return parts.findLast((s) => s.endsWith(".md") || s.endsWith(".txt")) ?? parts[parts.length - 1]
+function parseScopePath(path: string): string {
+	if (!path) return ""
+	const parts = path.replace(/\\/g, "/").split("/")
+	return (
+		parts.findLast((segment) => segment.endsWith(".md") || segment.endsWith(".txt")) ??
+		parts.at(-1) ??
+		""
+	)
 }
 
 const PRIORITY_LEVELS = ["low", "medium", "high"] as const
@@ -25,7 +30,8 @@ interface Props {
 
 export default function AgentCard({ agent, workspaceId, workspacePath }: Props) {
 	const snapshot = useAgentSnapshot()
-	const activeThread = snapshot.threads.find((t) => t.id === snapshot.activeThreadId) ?? null
+	const activeThread =
+		snapshot.threads.find((thread) => thread.id === snapshot.activeThreadId) ?? null
 	const session = activeThread?.session ?? null
 	const isRunning =
 		session !== null &&
@@ -35,53 +41,52 @@ export default function AgentCard({ agent, workspaceId, workspacePath }: Props) 
 
 	return (
 		<div
-			className="flex flex-col rounded-xl border border-white/8 bg-neutral-900 text-white overflow-hidden shadow-2xl shadow-black/40"
-			style={{ width: 1000, height: 600 }}
+			className="flex flex-col overflow-hidden rounded-xl border border-white/8 bg-neutral-900 text-white shadow-2xl shadow-black/40"
+			style={{ width: CARD_W, height: CARD_H }}
+			onWheel={(event) => event.stopPropagation()}
 		>
-			{/* header */}
-			<div className="flex items-center justify-between px-5 h-11 border-b border-white/5 bg-neutral-800/60 shrink-0">
-				<span className="text-sm font-semibold tracking-wide text-neutral-100">{agent.name}</span>
-				<button className="text-xs px-2.5 py-1 rounded-md border border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-500/60 transition-all duration-150">
+			<div className="flex h-11 shrink-0 items-center justify-between border-b border-white/5 bg-neutral-800/60 px-5">
+				<span className="min-w-0 truncate text-sm font-semibold tracking-wide text-neutral-100">
+					{agent.name}
+				</span>
+				<button className="rounded-md border border-red-500/40 px-2.5 py-1 text-xs text-red-400 transition-all duration-150 hover:border-red-500/60 hover:bg-red-500/10">
 					Terminate
 				</button>
 			</div>
 
-			{/* body */}
 			<div className="flex flex-1 overflow-hidden">
-				{/* left panel */}
-				<div className="flex flex-col w-[35%] shrink-0 border-r border-white/5 px-4 py-4 gap-5">
+				<div className="flex w-[35%] shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
 					<TaskList />
 
 					<div className="flex flex-col gap-1">
-						<span className="text-[10px] uppercase tracking-widest text-neutral-600 font-medium">
+						<span className="text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
 							Model
 						</span>
-						<span className="text-xs text-neutral-400 font-mono">{agent.model}</span>
+						<span className="break-words font-mono text-xs text-neutral-400">{agent.model}</span>
 					</div>
 				</div>
 
-				{/* right panel */}
-				<div className="flex flex-col flex-1 overflow-hidden">
-					<div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 shrink-0">
+				<div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+					<div className="flex shrink-0 items-center gap-3 border-b border-white/5 px-4 py-3">
 						<div className="flex items-center gap-1">
 							{PRIORITY_LEVELS.map((level) => (
 								<span
 									key={level}
-									className={`text-[11px] px-2 py-0.5 rounded-md border capitalize transition-colors ${
+									className={`rounded-md border px-2 py-0.5 text-[11px] capitalize transition-colors ${
 										agent.effort === level
 											? EFFORT_STYLES[level]
-											: "border-white/5 text-neutral-700 bg-transparent"
+											: "border-white/5 bg-transparent text-neutral-700"
 									}`}
 								>
 									{level}
 								</span>
 							))}
 						</div>
-						{scopeDisplay && (
-							<span className="text-xs text-neutral-600">
-								Scope: <span className="text-blue-400/80 font-mono">{scopeDisplay}</span>
+						{scopeDisplay ? (
+							<span className="min-w-0 truncate text-xs text-neutral-600">
+								Scope: <span className="font-mono text-blue-400/80">{scopeDisplay}</span>
 							</span>
-						)}
+						) : null}
 					</div>
 
 					<div className="min-h-0 flex-1">
