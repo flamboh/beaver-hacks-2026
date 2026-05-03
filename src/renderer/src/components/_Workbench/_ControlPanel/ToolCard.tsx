@@ -1,10 +1,11 @@
-import { useState } from "react"
+import { forwardRef, useImperativeHandle, useRef, useState } from "react"
 import { motion } from "motion/react"
 import type { StartCardInput, ToolCard as ToolCardModel } from "./useControlPanelAgents"
 import AgentCardSideCreateButton, { type CreateSide } from "./AgentCardSideCreateButton"
 import type { CardSize } from "./controlPanelLayout"
-import TerminalCard from "./TerminalCard"
+import TerminalCard, { type TerminalCardHandle } from "./TerminalCard"
 import BrowserCard from "./BrowserCard"
+import type { CardTypingHandle } from "./AgentCard"
 
 interface ToolCardProps {
 	card: ToolCardModel
@@ -17,19 +18,30 @@ interface ToolCardProps {
 	workspacePath: string
 }
 
-export default function ToolCard({
-	card,
-	availableCreateSides,
-	isDeleting,
-	onCreateCard,
-	onCreateWorkspace,
-	onDeleteCard,
-	size,
-	workspacePath
-}: ToolCardProps) {
+const ToolCard = forwardRef<CardTypingHandle, ToolCardProps>(function ToolCard(
+	{
+		card,
+		availableCreateSides,
+		isDeleting,
+		onCreateCard,
+		onCreateWorkspace,
+		onDeleteCard,
+		size,
+		workspacePath
+	}: ToolCardProps,
+	ref
+) {
 	const [activeCreateSide, setActiveCreateSide] = useState<CreateSide | null>(null)
 	const [deleteArmed, setDeleteArmed] = useState(false)
 	const [deleting, setDeleting] = useState(false)
+	const terminalRef = useRef<TerminalCardHandle | null>(null)
+	useImperativeHandle(
+		ref,
+		() => ({
+			focusTyping: () => terminalRef.current?.focusTerminal()
+		}),
+		[]
+	)
 
 	return (
 		<div
@@ -71,7 +83,7 @@ export default function ToolCard({
 				</div>
 				<div className="min-h-0 flex-1">
 					{card.tool === "terminal" ? (
-						<TerminalCard cwd={workspacePath} />
+						<TerminalCard ref={terminalRef} cwd={workspacePath} />
 					) : (
 						<BrowserCard
 							enterDevAction={card.enterDevAction}
@@ -95,4 +107,6 @@ export default function ToolCard({
 			))}
 		</div>
 	)
-}
+})
+
+export default ToolCard

@@ -1,10 +1,14 @@
-import { useCallback, useRef, type JSX } from "react"
+import { forwardRef, useCallback, useImperativeHandle, useRef, type JSX } from "react"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import "@xterm/xterm/css/xterm.css"
 
 interface TerminalCardProps {
 	cwd: string
+}
+
+export interface TerminalCardHandle {
+	focusTerminal: () => void
 }
 
 const THEME = {
@@ -31,11 +35,22 @@ const THEME = {
 	brightWhite: "#fafafa"
 }
 
-export default function TerminalCard({ cwd }: TerminalCardProps): JSX.Element {
+const TerminalCard = forwardRef<TerminalCardHandle, TerminalCardProps>(function TerminalCard(
+	{ cwd },
+	ref
+): JSX.Element {
 	const cleanupRef = useRef<(() => void) | null>(null)
 	const fitAddonRef = useRef<FitAddon | null>(null)
 	const sessionIdRef = useRef<string | null>(null)
 	const resizeObserverRef = useRef<ResizeObserver | null>(null)
+	const termRef = useRef<Terminal | null>(null)
+	useImperativeHandle(
+		ref,
+		() => ({
+			focusTerminal: () => termRef.current?.focus()
+		}),
+		[]
+	)
 
 	const setHostRef = useCallback(
 		(node: HTMLDivElement | null) => {
@@ -54,6 +69,7 @@ export default function TerminalCard({ cwd }: TerminalCardProps): JSX.Element {
 				theme: THEME
 			})
 			const fit = new FitAddon()
+			termRef.current = term
 			term.loadAddon(fit)
 			term.open(node)
 			term.attachCustomKeyEventHandler((event) => {
@@ -143,6 +159,7 @@ export default function TerminalCard({ cwd }: TerminalCardProps): JSX.Element {
 					sessionIdRef.current = null
 				}
 				term.dispose()
+				termRef.current = null
 				fitAddonRef.current = null
 			}
 		},
@@ -157,4 +174,6 @@ export default function TerminalCard({ cwd }: TerminalCardProps): JSX.Element {
 			<div ref={setHostRef} className="nowheel min-h-0 flex-1 overflow-hidden bg-[#0a0a0a] p-2" />
 		</div>
 	)
-}
+})
+
+export default TerminalCard

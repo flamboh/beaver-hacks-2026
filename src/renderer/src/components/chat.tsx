@@ -1,5 +1,12 @@
 import type { CSSProperties, FormEvent, JSX, KeyboardEvent, RefObject, UIEvent } from "react"
-import { useCallback, useRef, useState, useSyncExternalStore } from "react"
+import {
+	forwardRef,
+	useCallback,
+	useImperativeHandle,
+	useRef,
+	useState,
+	useSyncExternalStore
+} from "react"
 import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "motion/react"
 import { ArrowUp } from "lucide-react"
@@ -100,22 +107,29 @@ interface ChatProps {
 	provider?: AgentThread["provider"]
 }
 
-export function Chat({
-	thread,
-	threadId,
-	isRunning,
-	cwd,
-	model,
-	runtimeModel,
-	effort,
-	speedTier,
-	onModelChange,
-	onMessageSent,
-	onEffortChange,
-	onSpeedTierChange,
-	onFirstMessage,
-	provider
-}: ChatProps): JSX.Element {
+export interface ChatHandle {
+	focusComposer: () => void
+}
+
+export const Chat = forwardRef<ChatHandle, ChatProps>(function Chat(
+	{
+		thread,
+		threadId,
+		isRunning,
+		cwd,
+		model,
+		runtimeModel,
+		effort,
+		speedTier,
+		onModelChange,
+		onMessageSent,
+		onEffortChange,
+		onSpeedTierChange,
+		onFirstMessage,
+		provider
+	}: ChatProps,
+	ref
+): JSX.Element {
 	const [draft, setDraft] = useState("")
 	const [isSending, setIsSending] = useState(false)
 	const [isCancelling, setIsCancelling] = useState(false)
@@ -128,8 +142,13 @@ export function Chat({
 	const transcriptViewportRef = useRef<HTMLDivElement | null>(null)
 	const inputRef = useRef<HTMLTextAreaElement | null>(null)
 	const transcriptScrollRef = useRef<HTMLElement | null>(null)
-	const canSend = draft.trim().length > 0 && !isSending && !isRunning
-	const canCancel = isRunning && !isCancelling
+	useImperativeHandle(
+		ref,
+		() => ({
+			focusComposer: () => inputRef.current?.focus()
+		}),
+		[]
+	)
 	const transcript = thread ? buildTranscript(thread) : []
 	const transcriptVersion = thread
 		? `${thread.updatedAt}:${thread.messages.length}:${thread.activities.length}`
@@ -165,9 +184,6 @@ export function Chat({
 		queryFn: () => window.api.composer.listMentions(cwd),
 		staleTime: 30_000
 	})
-	const suggestions = buildSuggestions(activeToken, fileSuggestions, mentionSuggestions)
-	const selectedSuggestionIndex =
-		suggestions.length === 0 ? 0 : suggestionIndex % suggestions.length
 	const visibleModelOptions =
 		modelOptions.length > 0 ? modelOptions : FALLBACK_MODELS[provider ?? "codex"]
 	const defaultModel =
@@ -188,6 +204,14 @@ export function Chat({
 		: null
 	const semgrepUnavailable =
 		securityMode && semgrepStatus !== undefined && semgrepStatus.available === false
+	const secureBlockMessage = `Security mode requires Semgrep CLI (${semgrepStatus?.command ?? "semgrep"} not found). Install it with brew install semgrep or python3 -m pip install semgrep, then retry.`
+	const suggestions = semgrepUnavailable
+		? []
+		: buildSuggestions(activeToken, fileSuggestions, mentionSuggestions)
+	const selectedSuggestionIndex =
+		suggestions.length === 0 ? 0 : suggestionIndex % suggestions.length
+	const canSend = draft.trim().length > 0 && !isSending && !isRunning && !semgrepUnavailable
+	const canCancel = isRunning && !isCancelling
 	const autoScrollKey = thread?.updatedAt ?? "idle"
 
 	function scrollAnchorRef(node: HTMLDivElement | null): void {
@@ -207,11 +231,7 @@ export function Chat({
 	function handleSubmit(event: FormEvent<HTMLFormElement>): void {
 		event.preventDefault()
 		const prompt = draft.trim()
-		if (!prompt || isSending || isRunning) return
-		if (semgrepUnavailable) {
-			setError("Security mode requires Semgrep CLI. Install Semgrep and retry.")
-			return
-		}
+		if (!prompt || isSending || isRunning || semgrepUnavailable) return
 
 		setDraft("")
 		setError(null)
@@ -387,23 +407,29 @@ export function Chat({
 						</AnimatePresence>
 
 						<div className="flex flex-col rounded-2xl border border-white/10 bg-white/[0.04] transition-[border-color,box-shadow,background-color] duration-150 ease-out focus-within:border-blue-400/40 focus-within:bg-white/[0.05] focus-within:shadow-[0_0_0_1px_rgba(96,165,250,0.18)]">
-							<textarea
-								ref={inputRef}
-								value={draft}
-								onChange={(event) => {
-									setDraft(event.currentTarget.value)
-									syncCursor(event.currentTarget)
-									setSuggestionIndex(0)
-								}}
-								onSelect={(event) => syncCursor(event.currentTarget)}
-								onClick={(event) => syncCursor(event.currentTarget)}
-								onKeyUp={(event) => syncCursor(event.currentTarget)}
-								onKeyDown={handleKeyDown}
-								rows={1}
-								placeholder="Message agent..."
-								style={{ fieldSizing: "content" } as CSSProperties}
-								className="block max-h-[220px] min-h-[44px] w-full resize-none rounded-2xl bg-transparent px-4 pt-3 pb-1 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600"
-							/>
+							{semgrepUnavailable ? (
+								<div className="min-h-[44px] px-4 pt-3 pb-1 text-sm leading-6 text-cyan-200">
+									{secureBlockMessage}
+								</div>
+							) : (
+								<textarea
+									ref={inputRef}
+									value={draft}
+									onChange={(event) => {
+										setDraft(event.currentTarget.value)
+										syncCursor(event.currentTarget)
+										setSuggestionIndex(0)
+									}}
+									onSelect={(event) => syncCursor(event.currentTarget)}
+									onClick={(event) => syncCursor(event.currentTarget)}
+									onKeyUp={(event) => syncCursor(event.currentTarget)}
+									onKeyDown={handleKeyDown}
+									rows={1}
+									placeholder="Message agent..."
+									style={{ fieldSizing: "content" } as CSSProperties}
+									className="block max-h-[220px] min-h-[44px] w-full resize-none rounded-2xl bg-transparent px-4 pt-3 pb-1 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600"
+								/>
+							)}
 							<div className="flex items-center justify-between gap-2 px-2 pb-2">
 								<AgentRunSettings
 									modelOptions={visibleModelOptions}
@@ -447,13 +473,6 @@ export function Chat({
 							</div>
 						</div>
 					</div>
-					{semgrepUnavailable ? (
-						<p className="mt-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
-							Security mode requires Semgrep CLI (`{semgrepStatus?.command ?? "semgrep"}` not
-							found). Install it with `brew install semgrep` or `python3 -m pip install semgrep`,
-							then retry.
-						</p>
-					) : null}
 					<AnimatePresence initial={false}>
 						{error ? (
 							<motion.p
@@ -472,7 +491,7 @@ export function Chat({
 			</footer>
 		</div>
 	)
-}
+})
 
 function buildSuggestions(
 	token: ReturnType<typeof activeComposerToken>,

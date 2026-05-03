@@ -1,4 +1,4 @@
-import AgentCard, { type CreateSide } from "./AgentCard"
+import AgentCard, { type CardTypingHandle, type CreateSide } from "./AgentCard"
 import { GitLaneActions } from "../../GitLaneActions"
 import { AnimatePresence, motion } from "motion/react"
 import {
@@ -33,6 +33,7 @@ interface ControlPanelCanvasProps {
 	onFocus: (idx: number) => void
 	onResizeCard: (id: string, size: CardSize) => void
 	onSnap: (idx: number) => void
+	onTypingRef: (id: string, handle: CardTypingHandle | null) => void
 	smoothPan: boolean
 	workspaces: WorkspaceLane[]
 	zoom: number
@@ -53,6 +54,7 @@ export function ControlPanelCanvas({
 	onFocus,
 	onResizeCard,
 	onSnap,
+	onTypingRef,
 	smoothPan,
 	workspaces,
 	zoom
@@ -150,6 +152,7 @@ export function ControlPanelCanvas({
 							>
 								{card.kind === "agent" ? (
 									<AgentCard
+										ref={(handle) => onTypingRef(card.id, handle)}
 										agent={card}
 										availableCreateSides={sides}
 										isDeleting={deletingCardId === card.id}
@@ -163,6 +166,7 @@ export function ControlPanelCanvas({
 									/>
 								) : (
 									<ToolCard
+										ref={(handle) => onTypingRef(card.id, handle)}
 										card={card}
 										availableCreateSides={sides}
 										isDeleting={deletingCardId === card.id}

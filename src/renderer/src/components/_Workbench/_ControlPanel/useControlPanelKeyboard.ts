@@ -2,6 +2,7 @@ import { useEffect } from "react"
 
 interface UseControlPanelKeyboardProps {
 	centerFocused: () => void
+	enterFocusedTyping: () => void
 	focusedIdx: number
 	moveFocus: (direction: "left" | "right" | "up" | "down") => void
 	moveFocusedWithinRail: (direction: "left" | "right") => void
@@ -14,6 +15,7 @@ interface UseControlPanelKeyboardProps {
 
 export function useControlPanelKeyboard({
 	centerFocused,
+	enterFocusedTyping,
 	focusedIdx,
 	moveFocus,
 	moveFocusedWithinRail,
@@ -66,7 +68,7 @@ export function useControlPanelKeyboard({
 				return
 			}
 			e.preventDefault()
-			if (e.key === "Enter") centerFocused()
+			if (e.key === "Enter") enterFocusedTyping()
 			if (e.key === "ArrowRight" || e.key === "l") moveFocus("right")
 			if (e.key === "ArrowLeft" || e.key === "h") moveFocus("left")
 			if (e.key === "ArrowDown" || e.key === "j") moveFocus("down")
@@ -85,6 +87,7 @@ export function useControlPanelKeyboard({
 		}
 	}, [
 		centerFocused,
+		enterFocusedTyping,
 		focusedIdx,
 		moveFocus,
 		moveFocusedWithinRail,
