@@ -17,6 +17,7 @@ interface Props {
 	viewportHeight: number
 	offset: { x: number; y: number }
 	onNavigate: (center: { x: number; y: number }) => void
+	placement?: "canvas" | "sidebar"
 	scale: number
 	visible: boolean
 }
@@ -30,6 +31,7 @@ export default function NavigationMap({
 	viewportHeight,
 	offset,
 	onNavigate,
+	placement = "canvas",
 	scale,
 	visible
 }: Props) {
@@ -69,11 +71,16 @@ export default function NavigationMap({
 		navigate(event)
 	}
 
+	const containerClass =
+		placement === "canvas"
+			? `nodrag absolute top-3 right-3 cursor-crosshair overflow-hidden rounded border border-white/10 bg-neutral-900/80 backdrop-blur-sm transition-opacity duration-300 hover:opacity-100 ${visible ? "opacity-100" : "opacity-65"}`
+			: "nodrag relative cursor-crosshair overflow-hidden rounded-md border border-white/10 bg-neutral-950/70 shadow-sm shadow-black/30"
+
 	return (
 		<div
 			onPointerDown={startDrag}
 			onPointerMove={drag}
-			className={`nodrag absolute top-3 right-3 cursor-crosshair overflow-hidden rounded border border-white/10 bg-neutral-900/80 backdrop-blur-sm transition-opacity duration-300 hover:opacity-100 ${visible ? "opacity-100" : "opacity-65"}`}
+			className={containerClass}
 			style={{ width: MAP_W, height: MAP_H }}
 		>
 			<div

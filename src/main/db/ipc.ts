@@ -9,6 +9,8 @@ import type {
 	CreateWorkspaceInput,
 	ProjectIdInput,
 	ProjectWorkspaceInput,
+	ReorderProjectsInput,
+	ReorderWorkspacesInput,
 	UpdateProjectInput,
 	UpdateSettingInput,
 	UpdateWorkspaceInput,
@@ -30,6 +32,9 @@ export function registerDatabaseIpc(database: DatabaseService): void {
 	ipcMain.handle("project:update", (_event, input: UpdateProjectInput) =>
 		database.updateProject(input)
 	)
+	ipcMain.handle("project:reorder", (_event, input: ReorderProjectsInput) =>
+		database.reorderProjects(input)
+	)
 	ipcMain.handle("project:touch", (_event, input: ProjectIdInput) => database.touchProject(input))
 	ipcMain.handle("project:delete", (_event, input: ProjectIdInput) => database.deleteProject(input))
 	ipcMain.handle("workspace:list", (_event, input: ProjectWorkspaceInput) =>
@@ -43,6 +48,9 @@ export function registerDatabaseIpc(database: DatabaseService): void {
 	)
 	ipcMain.handle("workspace:update", (_event, input: UpdateWorkspaceInput) =>
 		database.updateWorkspace(input)
+	)
+	ipcMain.handle("workspace:reorder", (_event, input: ReorderWorkspacesInput) =>
+		database.reorderWorkspaces(input)
 	)
 	ipcMain.handle("workspace:activate", (_event, input: WorkspaceIdInput) =>
 		database.activateWorkspace(input)
@@ -86,6 +94,8 @@ export type {
 	ProjectIdInput,
 	ProjectRow,
 	ProjectWorkspaceInput,
+	ReorderProjectsInput,
+	ReorderWorkspacesInput,
 	UpdateProjectInput,
 	UpdateSettingInput,
 	UpdateWorkspaceInput,

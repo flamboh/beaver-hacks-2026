@@ -35,9 +35,11 @@ import type {
 	DeleteWorkspaceResult,
 	ProjectIdInput,
 	ProjectRow,
+	ReorderWorkspacesInput,
 	TaskRow,
 	ToolCardRow,
-	UpdateProjectInput
+	UpdateProjectInput,
+	ReorderProjectsInput
 } from "../main/db/ipc"
 import type {
 	LaunchProjectDevServerInput,
@@ -171,6 +173,8 @@ const api = {
 			ipcRenderer.invoke("project:create", input),
 		update: (input: UpdateProjectInput): Promise<ProjectRow> =>
 			ipcRenderer.invoke("project:update", input),
+		reorder: (input: ReorderProjectsInput): Promise<ProjectRow[]> =>
+			ipcRenderer.invoke("project:reorder", input),
 		touch: (input: ProjectIdInput): Promise<ProjectRow> =>
 			ipcRenderer.invoke("project:touch", input),
 		delete: (input: ProjectIdInput): Promise<void> => ipcRenderer.invoke("project:delete", input)
@@ -185,6 +189,8 @@ const api = {
 			ipcRenderer.invoke("workspace:create", input),
 		update: (input: UpdateWorkspaceInput): Promise<WorkspaceRow> =>
 			ipcRenderer.invoke("workspace:update", input),
+		reorder: (input: ReorderWorkspacesInput): Promise<void> =>
+			ipcRenderer.invoke("workspace:reorder", input),
 		activate: (input: WorkspaceIdInput): Promise<WorkspaceRow> =>
 			ipcRenderer.invoke("workspace:activate", input),
 		touchPrompted: (input: WorkspaceIdInput): Promise<WorkspaceRow> =>

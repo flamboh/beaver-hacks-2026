@@ -1,6 +1,6 @@
 import { DEFAULT_WORKSPACE_TEMPLATE } from "./workspaceUtils"
 
-export const SCHEMA_VERSION = 8
+export const SCHEMA_VERSION = 11
 
 export const INITIALIZE_SCHEMA_SQL = `
 	PRAGMA journal_mode = WAL;
@@ -17,7 +17,8 @@ export const INITIALIZE_SCHEMA_SQL = `
 		path TEXT NOT NULL UNIQUE,
 		enter_dev_action TEXT NOT NULL DEFAULT '',
 		created_at TEXT NOT NULL,
-		accessed TEXT NOT NULL
+		accessed TEXT NOT NULL,
+		sort_order INTEGER NOT NULL DEFAULT 0
 	);
 
 	CREATE TABLE IF NOT EXISTS workspaces (
@@ -30,6 +31,8 @@ export const INITIALIZE_SCHEMA_SQL = `
 		created_at TEXT NOT NULL,
 		accessed TEXT NOT NULL,
 		last_prompted_at TEXT NOT NULL,
+		rail_color TEXT NOT NULL DEFAULT '#737373',
+		sort_order INTEGER NOT NULL DEFAULT 0,
 		FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
 	);
 

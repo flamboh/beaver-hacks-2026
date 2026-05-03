@@ -29,7 +29,6 @@ export type WorkspaceLane = WorkspaceRow & {
 	projectName: string
 	projectPath: string
 	projectEnterDevAction: string
-	railColor?: string
 }
 
 export interface StartAgentInput {

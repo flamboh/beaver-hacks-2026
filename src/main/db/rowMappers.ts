@@ -7,6 +7,7 @@ export interface ProjectTableRow {
 	enter_dev_action: string | null
 	created_at: string
 	accessed: string
+	sort_order: number
 }
 
 export interface WorkspaceTableRow {
@@ -19,6 +20,8 @@ export interface WorkspaceTableRow {
 	created_at: string
 	accessed: string
 	last_prompted_at: string
+	rail_color: string
+	sort_order: number
 }
 
 export function toProjectRow(row: ProjectTableRow): ProjectRow {
@@ -28,7 +31,8 @@ export function toProjectRow(row: ProjectTableRow): ProjectRow {
 		path: row.path,
 		enterDevAction: row.enter_dev_action ?? "",
 		createdAt: row.created_at,
-		accessed: row.accessed
+		accessed: row.accessed,
+		sortOrder: row.sort_order
 	}
 }
 
@@ -42,6 +46,8 @@ export function toWorkspaceRow(row: WorkspaceTableRow): WorkspaceRow {
 		active: row.active === 1,
 		createdAt: row.created_at,
 		accessed: row.accessed,
-		lastPromptedAt: row.last_prompted_at
+		lastPromptedAt: row.last_prompted_at,
+		railColor: row.rail_color,
+		sortOrder: row.sort_order
 	}
 }

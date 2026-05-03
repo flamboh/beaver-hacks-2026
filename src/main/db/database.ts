@@ -10,6 +10,8 @@ import type {
 	ProjectIdInput,
 	ProjectRow,
 	ProjectWorkspaceInput,
+	ReorderProjectsInput,
+	ReorderWorkspacesInput,
 	UpdateSettingInput,
 	UpdateWorkspaceInput,
 	WorkspaceIdInput,
@@ -23,7 +25,7 @@ import { INITIALIZE_SCHEMA_SQL } from "./schema"
 import { assertDirectory, assertWorkspaceTemplate, canonicalPath } from "./workspaceUtils"
 import { WorkspaceService } from "./workspaces"
 
-const SCHEMA_VERSION = 8
+const SCHEMA_VERSION = 11
 
 function nowIso(): string {
 	return new Date().toISOString()
@@ -57,7 +59,10 @@ export class DatabaseService {
 	async initialize(): Promise<void> {
 		await this.exec(INITIALIZE_SCHEMA_SQL)
 		await this.ensureProjectEnterDevActionColumn()
+		await this.ensureProjectSortOrderColumn()
 		await this.ensureWorkspacePromptColumn()
+		await this.ensureWorkspaceRailColorColumn()
+		await this.ensureWorkspaceSortOrderColumn()
 		await this.backfillProjectWorkspaces()
 
 		// Base tables — no FK constraints yet so migration can recreate agents safely
@@ -193,8 +198,11 @@ export class DatabaseService {
 
 		await this.ensureAgentLayoutColumns()
 		await this.ensureProjectEnterDevActionColumn()
+		await this.ensureProjectSortOrderColumn()
 		await this.ensureAgentThreadColumn()
 		await this.ensureWorkspacePromptColumn()
+		await this.ensureWorkspaceRailColorColumn()
+		await this.ensureWorkspaceSortOrderColumn()
 		await this.ensureToolCardsTable()
 		await this.ensureAgentWorkspaceIds()
 		await this.ensureDefaultWorkspaceNames()
@@ -254,6 +262,22 @@ export class DatabaseService {
 		}
 	}
 
+	private async ensureProjectSortOrderColumn(): Promise<void> {
+		const columns = await this.all<{ name: string }>(`PRAGMA table_info(projects)`, [])
+		const columnNames = new Set(columns.map((column) => column.name))
+		if (!columnNames.has("sort_order")) {
+			await this.run(`ALTER TABLE projects ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`, [])
+			await this.exec(`
+				WITH ordered AS (
+					SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC, name ASC) - 1 AS idx
+					FROM projects
+				)
+				UPDATE projects
+				SET sort_order = (SELECT idx FROM ordered WHERE ordered.id = projects.id);
+			`)
+		}
+	}
+
 	private async ensureAgentThreadColumn(): Promise<void> {
 		const columns = await this.all<{ name: string }>(`PRAGMA table_info(agents)`, [])
 		const columnNames = new Set(columns.map((column) => column.name))
@@ -275,6 +299,33 @@ export class DatabaseService {
 			`UPDATE workspaces SET last_prompted_at = created_at WHERE last_prompted_at = ''`,
 			[]
 		)
+	}
+
+	private async ensureWorkspaceRailColorColumn(): Promise<void> {
+		const columns = await this.all<{ name: string }>(`PRAGMA table_info(workspaces)`, [])
+		const columnNames = new Set(columns.map((column) => column.name))
+		if (!columnNames.has("rail_color")) {
+			await this.run(
+				`ALTER TABLE workspaces ADD COLUMN rail_color TEXT NOT NULL DEFAULT '#737373'`,
+				[]
+			)
+		}
+	}
+
+	private async ensureWorkspaceSortOrderColumn(): Promise<void> {
+		const columns = await this.all<{ name: string }>(`PRAGMA table_info(workspaces)`, [])
+		const columnNames = new Set(columns.map((column) => column.name))
+		if (!columnNames.has("sort_order")) {
+			await this.run(`ALTER TABLE workspaces ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`, [])
+			await this.exec(`
+				WITH ordered AS (
+					SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC, name ASC) - 1 AS idx
+					FROM workspaces
+				)
+				UPDATE workspaces
+				SET sort_order = (SELECT idx FROM ordered WHERE ordered.id = workspaces.id);
+			`)
+		}
 	}
 
 	private async ensureToolCardsTable(): Promise<void> {
@@ -333,9 +384,9 @@ export class DatabaseService {
 	async listProjects(): Promise<ProjectRow[]> {
 		const rows = await this.all<ProjectTableRow>(
 			`
-				SELECT id, name, path, enter_dev_action, created_at, accessed
+				SELECT id, name, path, enter_dev_action, created_at, accessed, sort_order
 				FROM projects
-				ORDER BY accessed DESC
+				ORDER BY sort_order ASC, created_at ASC
 			`,
 			[]
 		)
@@ -354,14 +405,15 @@ export class DatabaseService {
 			path,
 			enterDevAction: input.enterDevAction?.trim() ?? "",
 			createdAt: timestamp,
-			accessed: timestamp
+			accessed: timestamp,
+			sortOrder: await this.nextProjectSortOrder()
 		}
 
 		try {
 			await this.run(
 				`
-					INSERT INTO projects (id, name, path, enter_dev_action, created_at, accessed)
-					VALUES (?, ?, ?, ?, ?, ?)
+					INSERT INTO projects (id, name, path, enter_dev_action, created_at, accessed, sort_order)
+					VALUES (?, ?, ?, ?, ?, ?, ?)
 				`,
 				[
 					project.id,
@@ -369,7 +421,8 @@ export class DatabaseService {
 					project.path,
 					project.enterDevAction,
 					project.createdAt,
-					project.accessed
+					project.accessed,
+					project.sortOrder
 				]
 			)
 		} catch (error) {
@@ -405,6 +458,20 @@ export class DatabaseService {
 		return this.getProject(input)
 	}
 
+	async reorderProjects(input: ReorderProjectsInput): Promise<ProjectRow[]> {
+		await this.exec(`BEGIN TRANSACTION`)
+		try {
+			for (const [index, id] of input.ids.entries()) {
+				await this.run(`UPDATE projects SET sort_order = ? WHERE id = ?`, [index, id])
+			}
+			await this.exec(`COMMIT`)
+		} catch (error) {
+			await this.exec(`ROLLBACK`)
+			throw error
+		}
+		return this.listProjects()
+	}
+
 	async touchProject(input: ProjectIdInput): Promise<ProjectRow> {
 		const timestamp = nowIso()
 		await this.run(
@@ -426,7 +493,7 @@ export class DatabaseService {
 	async getProject(input: ProjectIdInput): Promise<ProjectRow> {
 		const row = await this.get<ProjectTableRow>(
 			`
-				SELECT id, name, path, enter_dev_action, created_at, accessed
+				SELECT id, name, path, enter_dev_action, created_at, accessed, sort_order
 				FROM projects
 				WHERE id = ?
 			`,
@@ -454,6 +521,10 @@ export class DatabaseService {
 
 	async updateWorkspace(input: UpdateWorkspaceInput): Promise<WorkspaceRow> {
 		return this.workspaces.update(input)
+	}
+
+	async reorderWorkspaces(input: ReorderWorkspacesInput): Promise<void> {
+		return this.workspaces.reorder(input)
 	}
 
 	async activateWorkspace(input: WorkspaceIdInput): Promise<WorkspaceRow> {
@@ -501,6 +572,14 @@ export class DatabaseService {
 	private async backfillProjectWorkspaces(): Promise<void> {
 		const projects = await this.listProjects()
 		await this.workspaces.backfill(projects)
+	}
+
+	private async nextProjectSortOrder(): Promise<number> {
+		const row = await this.get<{ max_sort_order: number | null }>(
+			`SELECT MAX(sort_order) AS max_sort_order FROM projects`,
+			[]
+		)
+		return (row?.max_sort_order ?? -1) + 1
 	}
 
 	private async exec(sql: string): Promise<void> {

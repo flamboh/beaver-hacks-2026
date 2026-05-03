@@ -6,6 +6,7 @@ interface UseControlPanelKeyboardProps {
 	focusedIdx: number
 	moveFocus: (direction: "left" | "right" | "up" | "down") => void
 	moveFocusedWithinRail: (direction: "left" | "right") => void
+	onSpace: () => boolean
 	onWorkspaceHotkey: (index: number) => void
 	resizeFocused: (direction: "grow" | "shrink") => void
 	setSpacePanActive: (active: boolean) => void
@@ -20,6 +21,7 @@ export function useControlPanelKeyboard({
 	focusedIdx,
 	moveFocus,
 	moveFocusedWithinRail,
+	onSpace,
 	onWorkspaceHotkey,
 	resizeFocused,
 	setSpacePanActive,
@@ -47,6 +49,10 @@ export function useControlPanelKeyboard({
 				return
 			}
 			if (e.code === "Space") {
+				if (onSpace()) {
+					e.preventDefault()
+					return
+				}
 				spacePan.current = true
 				setSpacePanActive(true)
 				return
@@ -98,6 +104,7 @@ export function useControlPanelKeyboard({
 		focusedIdx,
 		moveFocus,
 		moveFocusedWithinRail,
+		onSpace,
 		onWorkspaceHotkey,
 		resizeFocused,
 		setSpacePanActive,

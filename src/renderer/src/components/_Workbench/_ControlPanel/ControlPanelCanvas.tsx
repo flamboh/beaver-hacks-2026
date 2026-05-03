@@ -1,11 +1,14 @@
 import AgentCard, { type CardTypingHandle, type CreateSide } from "./AgentCard"
 import { GitLaneActions } from "../../GitLaneActions"
 import { AnimatePresence, motion } from "motion/react"
+import { useState } from "react"
+import { createPortal } from "react-dom"
 import {
 	CARD_H,
 	CARD_W,
 	LANE_LABEL_GUTTER,
 	PADDING,
+	ROW_GAP,
 	STEP_Y,
 	VERTICAL_PADDING,
 	type CardSize,
@@ -34,10 +37,13 @@ interface ControlPanelCanvasProps {
 	onResizeCard: (id: string, size: CardSize) => void
 	onSnap: (idx: number) => void
 	onTypingRef: (id: string, handle: CardTypingHandle | null) => void
+	onWorkspaceColorChange: (workspaceId: string, railColor: string) => void
 	smoothPan: boolean
 	workspaces: WorkspaceLane[]
 	zoom: number
 }
+
+const RAIL_COLORS = ["#737373", "#60a5fa", "#34d399", "#f59e0b", "#f87171", "#c084fc"]
 
 export function ControlPanelCanvas({
 	activeWorkspaceId,
@@ -55,6 +61,7 @@ export function ControlPanelCanvas({
 	onResizeCard,
 	onSnap,
 	onTypingRef,
+	onWorkspaceColorChange,
 	smoothPan,
 	workspaces,
 	zoom
@@ -76,20 +83,32 @@ export function ControlPanelCanvas({
 				const y = VERTICAL_PADDING + (index - canvas.minY) * STEP_Y
 				const rowTop = canvas.rowTops.get(index) ?? y
 				const rowHeight = canvas.rowHeights.get(index) ?? CARD_H
+				const tintHeight =
+					index === workspaces.length - 1
+						? Math.max(0, canvas.h - rowTop)
+						: rowHeight + LANE_LABEL_GUTTER + ROW_GAP
 				const active = workspace.id === activeWorkspaceId
 				const hasCards = cards.some((card) => card.workspace_id === workspace.id)
 				return (
 					<div
 						key={workspace.id}
 						className="pointer-events-none absolute left-0 right-0 border-t border-white/8"
-						style={{ top: rowTop, height: rowHeight + LANE_LABEL_GUTTER }}
+						style={{
+							top: rowTop,
+							height: tintHeight,
+							backgroundColor: `${workspace.railColor}14`
+						}}
 					>
-						<div className="absolute top-4 left-8 flex max-w-[680px] items-center gap-2">
-							<span className="truncate rounded bg-neutral-950 px-2 py-1 text-[11px] font-medium text-neutral-500">
+						<div className="pointer-events-auto absolute top-4 left-8 flex max-w-[680px] items-center gap-2">
+							<div className="flex min-w-0 items-center gap-1.5 rounded bg-neutral-950 px-2 py-1 text-[11px] font-medium text-neutral-500">
+								<RailColorSelect
+									color={workspace.railColor}
+									onChange={(color) => onWorkspaceColorChange(workspace.id, color)}
+								/>
 								<span className="text-blue-300">{workspace.projectName}</span>
 								<span className="px-1 text-neutral-700">/</span>
-								{workspace.name}
-							</span>
+								<span className="truncate">{workspace.name}</span>
+							</div>
 							<GitLaneActions workspaceId={workspace.id} workspaceName={workspace.name} />
 						</div>
 						{active && !hasCards ? (
@@ -185,6 +204,85 @@ export function ControlPanelCanvas({
 				})}
 			</AnimatePresence>
 		</div>
+	)
+}
+
+function RailColorSelect({
+	color,
+	onChange
+}: {
+	color: string
+	onChange: (color: string) => void
+}) {
+	const [open, setOpen] = useState(false)
+	const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0 })
+
+	return (
+		<span className="nodrag relative flex shrink-0 items-center">
+			<button
+				type="button"
+				onMouseDown={(event) => event.stopPropagation()}
+				onClick={(event) => {
+					event.preventDefault()
+					event.stopPropagation()
+					const rect = event.currentTarget.getBoundingClientRect()
+					setMenuPosition({ left: rect.left, top: rect.bottom + 6 })
+					setOpen((nextOpen) => !nextOpen)
+				}}
+				className="size-3 rounded-full border border-white/20 transition-transform duration-150 hover:scale-110 focus-visible:outline focus-visible:outline-1 focus-visible:outline-white/40"
+				style={{ backgroundColor: color }}
+				aria-label="Rail color"
+				title="Rail color"
+			/>
+			{createPortal(
+				<AnimatePresence>
+					{open ? (
+						<>
+							<button
+								type="button"
+								aria-label="Close rail color menu"
+								className="fixed inset-0 z-40 cursor-default bg-transparent"
+								onClick={() => setOpen(false)}
+							/>
+							<motion.div
+								initial={{ opacity: 0, y: -4, scale: 0.96 }}
+								animate={{ opacity: 1, y: 0, scale: 1 }}
+								exit={{ opacity: 0, y: -3, scale: 0.98 }}
+								transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }}
+								onMouseDown={(event) => event.stopPropagation()}
+								className="fixed z-50 flex flex-col gap-1.5 rounded-lg border border-white/10 bg-neutral-950/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-sm"
+								style={{ left: menuPosition.left, top: menuPosition.top }}
+							>
+								{RAIL_COLORS.map((nextColor) => (
+									<button
+										key={nextColor}
+										type="button"
+										onMouseDown={(event) => event.stopPropagation()}
+										onClick={(event) => {
+											event.preventDefault()
+											event.stopPropagation()
+											onChange(nextColor)
+											setOpen(false)
+										}}
+										className={`flex size-7 items-center justify-center rounded-md border transition-[border-color,background-color,scale] duration-150 hover:scale-105 hover:bg-white/8 ${
+											nextColor === color ? "border-white/65 bg-white/10" : "border-white/10"
+										}`}
+										aria-label={`Set rail color ${nextColor}`}
+										title={nextColor}
+									>
+										<span
+											className="size-3.5 rounded-full border border-white/20"
+											style={{ backgroundColor: nextColor }}
+										/>
+									</button>
+								))}
+							</motion.div>
+						</>
+					) : null}
+				</AnimatePresence>,
+				document.body
+			)}
+		</span>
 	)
 }
 
