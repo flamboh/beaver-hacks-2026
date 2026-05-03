@@ -16,7 +16,7 @@ export class TaskService {
 
 	async listTasks(agentId: string): Promise<TaskRow[]> {
 		return this.all<TaskRow>(
-			`SELECT id, batch_id, agent_id, status, COALESCE(description, '') AS description
+			`SELECT id, batch_id, agent_id, turn_id, status, COALESCE(description, '') AS description
 			 FROM task WHERE agent_id = ? ORDER BY rowid ASC`,
 			[agentId]
 		)

@@ -1,53 +1,51 @@
-import { WorkbenchTab } from "@renderer/types/models"
-
-const navItems: { label: string; tab: WorkbenchTab }[] = [
-	{ label: "Control Panel", tab: "control-panel" },
-	{ label: "Review", tab: "review" },
-	{ label: "Agents", tab: "agents" },
-	{ label: "Settings", tab: "settings" }
-]
+import type { ProjectRow } from "@renderer/types/models"
 
 interface Props {
-	currentPage: WorkbenchTab
-	projectName: string
+	activeProjectId: string | null
+	onProjectSelect: (project: ProjectRow) => void
 	open: boolean
-	setCurrentPage: (tab: WorkbenchTab) => void
+	projects: ProjectRow[]
 }
 
-export default function SideBar({ currentPage, projectName, open, setCurrentPage }: Props) {
+export default function SideBar({ activeProjectId, onProjectSelect, open, projects }: Props) {
 	return (
 		<div
-			className="h-full bg-neutral-900 border-r border-white/5 flex flex-col shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out"
-			style={{ width: open ? 200 : 0 }}
+			className="flex h-full shrink-0 flex-col overflow-hidden border-r border-white/5 bg-neutral-900 transition-[width] duration-200 ease-in-out"
+			style={{ width: open ? 220 : 0 }}
 		>
-			<div className="w-[200px] flex flex-col flex-1">
-				<div className="flex items-center gap-1 px-1.5 border-b border-white/5 h-[60px]">
+			<div className="flex w-[220px] flex-1 flex-col">
+				<div className="flex h-[60px] items-center border-b border-white/5 px-3">
 					<div
-						className="flex-1 min-w-0 transition-opacity duration-150 ease-in-out p-2"
+						className="min-w-0 flex-1 p-1 transition-opacity duration-150 ease-in-out"
 						style={{ opacity: open ? 1 : 0 }}
 					>
-						<p className="text-[10px] uppercase tracking-widest text-neutral-600 font-medium mb-0.5">
-							Project
+						<p className="mb-0.5 text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
+							Projects
 						</p>
-						<p className="text-sm text-blue-300 truncate font-medium">{projectName}</p>
+						<p className="text-sm font-medium text-neutral-300">{projects.length} total</p>
 					</div>
 				</div>
 
 				<div
-					className="flex flex-col flex-1 transition-opacity duration-150 ease-in-out"
+					className="min-h-0 flex-1 overflow-y-auto px-2 py-3 transition-opacity duration-150 ease-in-out"
 					style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }}
 				>
-					<nav className="flex flex-col gap-0.5 px-2 pt-3">
-						{navItems.map(({ label, tab }) => {
-							const active = currentPage === tab
+					<nav className="flex flex-col gap-0.5">
+						{projects.map((project) => {
+							const active = activeProjectId === project.id
 							return (
 								<button
-									key={tab}
-									onClick={() => setCurrentPage(tab)}
-									className={`flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150 whitespace-nowrap
-										${active ? "bg-white/8 text-white" : "text-neutral-500 hover:text-neutral-200 hover:bg-white/5"}`}
+									key={project.id}
+									type="button"
+									onClick={() => onProjectSelect(project)}
+									className={`flex cursor-pointer items-center rounded-md px-3 py-2 text-left text-sm whitespace-nowrap transition-colors duration-150 ${
+										active
+											? "bg-white/8 text-white"
+											: "text-neutral-500 hover:bg-white/5 hover:text-neutral-200"
+									}`}
+									title={project.name}
 								>
-									{label}
+									<span className="min-w-0 truncate">{project.name}</span>
 								</button>
 							)
 						})}

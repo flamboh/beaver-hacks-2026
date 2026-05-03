@@ -1,15 +1,26 @@
 import { useState } from "react"
 import { AlertTriangle, GitBranch, GitFork, PanelLeft, Tally1, Trash2 } from "lucide-react"
 import { checkoutGitBranch, createGitBranch, useGitStatus } from "@renderer/agentStore"
+import logoUrl from "@renderer/assets/logo.png"
 import { GitCommitMenu } from "../GitCommitMenu"
 import type { WorkspaceRow } from "../../../../main/db/ipc"
 import { useNavigate } from "react-router-dom"
+import type { WorkbenchTab } from "@renderer/types/models"
+
+const navItems: { label: string; tab: WorkbenchTab }[] = [
+	{ label: "Control Panel", tab: "control-panel" },
+	{ label: "Review", tab: "review" },
+	{ label: "Agents", tab: "agents" },
+	{ label: "Settings", tab: "settings" }
+]
 
 interface Props {
 	activeAgentCount: number
 	activeWorkspace: WorkspaceRow | null
+	currentPage: WorkbenchTab
 	onWorkspacesChanged: () => Promise<unknown>
 	onToggleSidebar: () => void
+	onTabChange: (tab: WorkbenchTab) => void
 	onWorkspaceChange: (workspaceId: string) => void
 	projectId: string | null
 	workspaces: WorkspaceRow[]
@@ -18,8 +29,10 @@ interface Props {
 export default function TopBar({
 	activeAgentCount,
 	activeWorkspace,
+	currentPage,
 	onWorkspacesChanged,
 	onToggleSidebar,
+	onTabChange,
 	onWorkspaceChange,
 	projectId,
 	workspaces
@@ -89,27 +102,52 @@ export default function TopBar({
 	}
 
 	return (
-		<div className="flex h-11 w-full shrink-0 items-center justify-between border-b border-white/5 bg-neutral-900 px-3">
+		<div className="relative flex h-11 w-full shrink-0 items-center justify-between border-b border-white/5 bg-neutral-900 px-3">
 			<div className="flex items-center gap-2">
 				<div className="flex items-center gap-2 text-sm font-medium">
 					<button
 						type="button"
 						onClick={() => navigate("/")}
-						className="tracking-wide text-white transition-colors duration-150 hover:text-neutral-300"
+						className="group flex cursor-pointer items-center gap-2 tracking-wide text-white transition-colors duration-150 hover:text-neutral-300"
 					>
+						<img
+							src={logoUrl}
+							alt=""
+							className="size-10 transition-opacity duration-150 group-hover:opacity-70"
+						/>
 						NULLOTH
 					</button>
 					<Tally1 size={14} className="text-neutral-600" />
 					<span className="text-neutral-400">Workbench</span>
 				</div>
 				<button
+					type="button"
 					onClick={onToggleSidebar}
-					className="rounded-md p-1.5 text-neutral-500 transition-colors duration-150 hover:bg-white/5 hover:text-white"
+					className="cursor-pointer rounded-md p-1.5 text-neutral-500 transition-colors duration-150 hover:bg-white/5 hover:text-white"
 					title="Toggle sidebar"
 				>
 					<PanelLeft size={15} />
 				</button>
 			</div>
+			<nav className="absolute left-1/2 flex -translate-x-1/2 items-center gap-0.5">
+				{navItems.map(({ label, tab }) => {
+					const active = currentPage === tab
+					return (
+						<button
+							key={tab}
+							type="button"
+							onClick={() => onTabChange(tab)}
+							className={`cursor-pointer rounded-md px-2.5 py-1.5 text-sm transition-colors duration-150 ${
+								active
+									? "bg-white/8 text-white"
+									: "text-neutral-500 hover:bg-white/5 hover:text-neutral-200"
+							}`}
+						>
+							{label}
+						</button>
+					)
+				})}
+			</nav>
 			<div className="flex min-w-0 items-center gap-2">
 				{activeAgentCount > 0 ? (
 					<span
