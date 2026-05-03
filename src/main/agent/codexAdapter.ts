@@ -254,6 +254,7 @@ export class CodexAdapter implements ProviderAdapter {
 			void this.startSession({
 				threadId,
 				cwd: input.cwd,
+				provider: "codex",
 				model: input.model,
 				runtimeMode: input.runtimeMode
 			})

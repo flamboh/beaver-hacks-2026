@@ -1,29 +1,45 @@
 import { useState } from "react"
-import { AlertTriangle, GitBranch, PanelLeft, Tally1 } from "lucide-react"
+import { AlertTriangle, GitBranch, GitFork, PanelLeft, Tally1, Trash2 } from "lucide-react"
 import { checkoutGitBranch, createGitBranch, useGitStatus } from "@renderer/agentStore"
 import { GitCommitMenu } from "../GitCommitMenu"
 import type { WorkspaceRow } from "../../../../main/db/ipc"
+import { useNavigate } from "react-router-dom"
 
 interface Props {
 	activeAgentCount: number
 	activeWorkspace: WorkspaceRow | null
+	onWorkspacesChanged: () => Promise<unknown>
 	onToggleSidebar: () => void
 	onWorkspaceChange: (workspaceId: string) => void
+	projectId: string | null
 	workspaces: WorkspaceRow[]
 }
 
 export default function TopBar({
 	activeAgentCount,
 	activeWorkspace,
+	onWorkspacesChanged,
 	onToggleSidebar,
 	onWorkspaceChange,
+	projectId,
 	workspaces
 }: Props) {
+	const navigate = useNavigate()
 	const workspaceId = activeWorkspace?.id ?? null
 	const status = useGitStatus(workspaceId ?? "")
 	const [branchDraft, setBranchDraft] = useState("")
 	const [isBusy, setIsBusy] = useState(false)
 	const [error, setError] = useState<string | null>(null)
+
+	function slugify(value: string): string {
+		return (
+			value
+				.trim()
+				.toLowerCase()
+				.replace(/[^a-z0-9._/-]+/g, "-")
+				.replace(/^[-/]+|[-/]+$/g, "") || "worktree"
+		)
+	}
 
 	function run(task: () => Promise<void>): void {
 		if (!workspaceId || isBusy) return
@@ -34,9 +50,58 @@ export default function TopBar({
 			.finally(() => setIsBusy(false))
 	}
 
+	function createWorktree(): void {
+		if (!projectId || !workspaceId || isBusy) return
+		const baseSlug = slugify(status?.branch ?? activeWorkspace?.name ?? "worktree")
+		const slug = `${baseSlug}-${Date.now().toString(36).slice(-5)}`
+		setError(null)
+		setIsBusy(true)
+		void window.api.workspaces
+			.create({
+				projectId,
+				name: slug,
+				branch: slug,
+				sourceWorkspaceId: workspaceId
+			})
+			.then((workspace) => window.api.workspaces.activate({ id: workspace.id }))
+			.then((workspace) => {
+				void onWorkspacesChanged()
+				onWorkspaceChange(workspace.id)
+			})
+			.catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
+			.finally(() => setIsBusy(false))
+	}
+
+	function deleteWorkspace(): void {
+		if (!workspaceId || workspaces.length <= 1 || isBusy) return
+		const confirmed = window.confirm(`Delete workspace "${activeWorkspace?.name ?? "current"}"?`)
+		if (!confirmed) return
+		setError(null)
+		setIsBusy(true)
+		void window.api.workspaces
+			.delete({ id: workspaceId })
+			.then((result) => {
+				void onWorkspacesChanged()
+				onWorkspaceChange(result.activeWorkspace.id)
+			})
+			.catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
+			.finally(() => setIsBusy(false))
+	}
+
 	return (
 		<div className="flex h-11 w-full shrink-0 items-center justify-between border-b border-white/5 bg-neutral-900 px-3">
 			<div className="flex items-center gap-2">
+				<div className="flex items-center gap-2 text-sm font-medium">
+					<button
+						type="button"
+						onClick={() => navigate("/")}
+						className="tracking-wide text-white transition-colors duration-150 hover:text-neutral-300"
+					>
+						NULLOTH
+					</button>
+					<Tally1 size={14} className="text-neutral-600" />
+					<span className="text-neutral-400">Workbench</span>
+				</div>
 				<button
 					onClick={onToggleSidebar}
 					className="rounded-md p-1.5 text-neutral-500 transition-colors duration-150 hover:bg-white/5 hover:text-white"
@@ -44,11 +109,6 @@ export default function TopBar({
 				>
 					<PanelLeft size={15} />
 				</button>
-				<div className="ml-1 flex items-center gap-2 text-sm font-medium">
-					<span className="tracking-wide text-white">NULLOTH</span>
-					<Tally1 size={14} className="text-neutral-600" />
-					<span className="text-neutral-400">Workbench</span>
-				</div>
 			</div>
 			<div className="flex min-w-0 items-center gap-2">
 				{activeAgentCount > 0 ? (
@@ -116,6 +176,26 @@ export default function TopBar({
 						New
 					</button>
 				</div>
+				<button
+					type="button"
+					disabled={!projectId || !workspaceId || isBusy}
+					onClick={createWorktree}
+					className="inline-flex size-7 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] text-zinc-400 transition hover:border-white/20 hover:bg-white/[0.07] hover:text-zinc-200 disabled:cursor-not-allowed disabled:text-zinc-700"
+					aria-label="Create worktree"
+					title="Create worktree"
+				>
+					<GitFork size={14} />
+				</button>
+				<button
+					type="button"
+					disabled={!workspaceId || workspaces.length <= 1 || isBusy}
+					onClick={deleteWorkspace}
+					className="inline-flex size-7 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] text-zinc-500 transition hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:text-zinc-700"
+					aria-label="Delete workspace"
+					title="Delete workspace"
+				>
+					<Trash2 size={14} />
+				</button>
 				<GitCommitMenu workspaceId={workspaceId} />
 				<span className="text-xs tabular-nums text-neutral-600">v1.1.0</span>
 			</div>

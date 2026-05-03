@@ -45,6 +45,9 @@ export function registerDatabaseIpc(database: DatabaseService): void {
 	ipcMain.handle("workspace:activate", (_event, input: WorkspaceIdInput) =>
 		database.activateWorkspace(input)
 	)
+	ipcMain.handle("workspace:delete", (_event, input: WorkspaceIdInput) =>
+		database.deleteWorkspace(input)
+	)
 	ipcMain.handle("setting:get", (_event, key: string) => database.getSetting(key))
 	ipcMain.handle("setting:update", (_event, input: UpdateSettingInput) =>
 		database.updateSetting(input)
@@ -64,6 +67,7 @@ export type {
 	CreateProjectInput,
 	CreateWorkspaceInput,
 	DatabaseInfo,
+	DeleteWorkspaceResult,
 	ProjectIdInput,
 	ProjectRow,
 	ProjectWorkspaceInput,

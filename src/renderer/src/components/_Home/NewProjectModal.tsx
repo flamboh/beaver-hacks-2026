@@ -13,6 +13,10 @@ function errorMessage(error: unknown): string {
 	return remoteError?.[1] ?? message
 }
 
+function nameFromPath(path: string): string {
+	return path.split(/[\\/]/g).filter(Boolean).at(-1) ?? ""
+}
+
 export default function NewProjectModal({
 	initialProject,
 	onCancel,
@@ -28,6 +32,7 @@ export default function NewProjectModal({
 		const selectedPath = await window.api.dialog.selectDirectory()
 		if (selectedPath) {
 			setPath(selectedPath)
+			if (!name.trim()) setName(nameFromPath(selectedPath))
 			setError("")
 		}
 	}
@@ -35,8 +40,8 @@ export default function NewProjectModal({
 	async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
 		event.preventDefault()
 
-		const trimmedName = name.trim()
 		const trimmedPath = path.trim()
+		const trimmedName = name.trim() || nameFromPath(trimmedPath)
 
 		if (!trimmedName || !trimmedPath) {
 			setError("Project name and path are required.")

@@ -26,10 +26,17 @@ export interface CreateWorkspaceInput {
 	projectId: string
 	name: string
 	path?: string
+	sourceWorkspaceId?: string
+	branch?: string
 }
 
 export interface WorkspaceIdInput {
 	id: string
+}
+
+export interface DeleteWorkspaceResult {
+	activeWorkspace: WorkspaceRow
+	deletedWorkspaceId: string
 }
 
 export interface UpdateWorkspaceInput {
@@ -64,10 +71,23 @@ export interface WorkspaceRow {
 	accessed: string
 }
 
+export type WorkspaceCreationMode = "existing-directory" | "new-directory" | "git-worktree"
+
+export interface WorkspaceCreationResult {
+	workspace: WorkspaceRow
+	mode: WorkspaceCreationMode
+	gitRoot: string | null
+	branch: string | null
+}
+
+export type AgentProvider = "codex" | "claude"
+
 export type AgentRow = {
 	id: string
 	name: string
 	project_id: string
+	workspace_id: string | null
+	provider: AgentProvider
 	model: string
 	scope_path: string
 	effort: string
@@ -75,7 +95,9 @@ export type AgentRow = {
 
 export type TaskRow = {
 	id: string
+	batch_id: string
 	agent_id: string
+	turn_id: string | null
 	status: string
 	description: string
 }

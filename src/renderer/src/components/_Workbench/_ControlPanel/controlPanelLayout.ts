@@ -13,6 +13,8 @@ export const PLACEHOLDER_AGENTS: AgentRow[] = [
 		id: "1",
 		name: "Auth Refactor",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "claude",
 		model: "claude-opus-4-7",
 		scope_path: "@Pipeline.md",
 		effort: "high"
@@ -21,6 +23,8 @@ export const PLACEHOLDER_AGENTS: AgentRow[] = [
 		id: "2",
 		name: "Test Coverage",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "codex",
 		model: "gpt-4o-mini",
 		scope_path: "@tests/README.md",
 		effort: "medium"
@@ -29,6 +33,8 @@ export const PLACEHOLDER_AGENTS: AgentRow[] = [
 		id: "3",
 		name: "Docs Generator",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "claude",
 		model: "claude-sonnet-4-6",
 		scope_path: "",
 		effort: "low"
@@ -37,6 +43,8 @@ export const PLACEHOLDER_AGENTS: AgentRow[] = [
 		id: "4",
 		name: "Lint Fixer",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "codex",
 		model: "gpt-4o",
 		scope_path: "@.eslintrc.md",
 		effort: "low"
@@ -45,6 +53,8 @@ export const PLACEHOLDER_AGENTS: AgentRow[] = [
 		id: "5",
 		name: "Schema Migrator",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "claude",
 		model: "claude-haiku-4-5",
 		scope_path: "@schema.md",
 		effort: "medium"
@@ -53,6 +63,8 @@ export const PLACEHOLDER_AGENTS: AgentRow[] = [
 		id: "6",
 		name: "CI Optimizer",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "codex",
 		model: "o3",
 		scope_path: "",
 		effort: "high"
