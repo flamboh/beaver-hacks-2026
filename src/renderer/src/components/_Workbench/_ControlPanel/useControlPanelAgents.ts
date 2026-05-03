@@ -1,33 +1,20 @@
-import { useMemo } from "react"
-import { useAgentSnapshot } from "@renderer/agentStore"
+import { useQuery } from "@tanstack/react-query"
+import { useSessionData } from "@renderer/hooks/useSessionData"
 import type { AgentRow } from "@renderer/types/models"
-import type { AgentSnapshot } from "../../../../../main/agent/ipc"
-import { PLACEHOLDER_AGENTS } from "./controlPanelLayout"
 
-type AgentThread = AgentSnapshot["threads"][number]
-
-export function useControlPanelAgents(workspacePath: string): {
+export function useControlPanelAgents(
+	workspaceId: string,
+	workspacePath: string
+): {
 	agents: AgentRow[]
-	threads: AgentThread[]
+	refetch: () => void
 } {
-	const snapshot = useAgentSnapshot()
-	const threads = useMemo(
-		() => snapshot.threads.filter((thread) => thread.cwd === workspacePath),
-		[snapshot.threads, workspacePath]
-	)
-	const agents = useMemo<AgentRow[]>(
-		() =>
-			threads.length > 0
-				? threads.map((thread) => ({
-						id: thread.id,
-						name: thread.title,
-						project_id: "",
-						model: thread.model ?? "codex",
-						scope_path: thread.cwd,
-						effort: "medium"
-					}))
-				: PLACEHOLDER_AGENTS,
-		[threads]
-	)
-	return { agents, threads }
+	const { project } = useSessionData()
+	const projectId = project?.id ?? ""
+	const { data: agents = [], refetch } = useQuery({
+		queryKey: ["agents", projectId, workspaceId, workspacePath],
+		queryFn: () => window.api.agents.list(projectId),
+		enabled: Boolean(projectId)
+	})
+	return { agents, refetch: () => void refetch() }
 }

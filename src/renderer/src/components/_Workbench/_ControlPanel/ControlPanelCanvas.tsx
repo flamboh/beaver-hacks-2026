@@ -1,22 +1,19 @@
 import AgentCard from "./AgentCard"
-import type { AgentSnapshot } from "../../../../../main/agent/ipc"
 import type { AgentRow } from "@renderer/types/models"
 import { cardPos } from "./controlPanelLayout"
 
-type AgentThread = AgentSnapshot["threads"][number]
-
 interface ControlPanelCanvasProps {
 	agents: AgentRow[]
+	canvas: { w: number; h: number }
 	draggedDuringPan: { current: boolean }
 	focusedIdx: number
 	offset: { x: number; y: number }
 	onFocus: (idx: number) => void
 	onSnap: (idx: number) => void
 	smoothPan: boolean
-	threads: AgentThread[]
+	workspaceId: string
 	workspacePath: string
 	zoom: number
-	canvas: { w: number; h: number }
 }
 
 export function ControlPanelCanvas({
@@ -28,7 +25,7 @@ export function ControlPanelCanvas({
 	onFocus,
 	onSnap,
 	smoothPan,
-	threads,
+	workspaceId,
 	workspacePath,
 	zoom
 }: ControlPanelCanvasProps) {
@@ -71,11 +68,7 @@ export function ControlPanelCanvas({
 								focused ? "ring-2 ring-white/20 ring-offset-4 ring-offset-neutral-950" : ""
 							}`}
 						>
-							<AgentCard
-								agent={agent}
-								thread={threads.find((thread) => thread.id === agent.id) ?? null}
-								workspacePath={workspacePath}
-							/>
+							<AgentCard agent={agent} workspaceId={workspaceId} workspacePath={workspacePath} />
 						</div>
 					</div>
 				)

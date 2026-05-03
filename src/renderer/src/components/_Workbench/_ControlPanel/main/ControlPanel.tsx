@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from "react"
+import { LucideSquareArrowOutUpRight, RefreshCw } from "lucide-react"
 import NavigationMap from "../NavigationMap"
 import { CanvasControls } from "../CanvasControls"
 import { ControlPanelCanvas } from "../ControlPanelCanvas"
@@ -19,10 +20,11 @@ import {
 } from "../controlPanelLayout"
 
 interface ControlPanelProps {
+	workspaceId: string
 	workspacePath: string
 }
 
-export default function ControlPanel({ workspacePath }: ControlPanelProps) {
+export default function ControlPanel({ workspaceId, workspacePath }: ControlPanelProps) {
 	const viewportRef = useRef<HTMLDivElement>(null)
 	const resizeObserver = useRef<ResizeObserver | null>(null)
 	const hideMapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -44,8 +46,9 @@ export default function ControlPanel({ workspacePath }: ControlPanelProps) {
 	const [focusedIdx, setFocusedIdx] = useState(0)
 	const [smoothPan, setSmoothPan] = useState(false)
 	const [spacePanActive, setSpacePanActive] = useState(false)
-	const { agents, threads } = useControlPanelAgents(workspacePath)
+	const { agents, refetch } = useControlPanelAgents(workspaceId, workspacePath)
 	const canvas = useMemo(() => canvasSize(agents.length), [agents.length])
+	const hasAgents = agents.length > 0
 
 	const viewportCenter = useCallback(
 		(nextOffset: { x: number; y: number }, nextZoom: number) => ({
@@ -131,19 +134,16 @@ export default function ControlPanel({ workspacePath }: ControlPanelProps) {
 	)
 
 	const snapToCard = useCallback(
-		(idx: number) => {
-			const clamped = Math.max(0, Math.min(idx, agents.length - 1))
-			centerCard(clamped)
-		},
+		(idx: number) => centerCard(Math.max(0, Math.min(idx, agents.length - 1))),
 		[agents.length, centerCard]
 	)
 
 	const moveFocus = useCallback(
 		(direction: "left" | "right" | "up" | "down") => {
-			if (agents.length === 0) return
+			if (!hasAgents) return
 			centerCard(nearestCardInDirection(viewportCenter(offset, zoom), agents.length, direction))
 		},
-		[agents.length, centerCard, offset, viewportCenter, zoom]
+		[agents.length, centerCard, hasAgents, offset, viewportCenter, zoom]
 	)
 
 	useControlPanelKeyboard({
@@ -174,10 +174,7 @@ export default function ControlPanel({ workspacePath }: ControlPanelProps) {
 	const smoothWheelPanBy = useCallback(
 		(dx: number, dy: number) => {
 			wheelTargetOffset.current = clampOffset(
-				{
-					x: wheelTargetOffset.current.x + dx,
-					y: wheelTargetOffset.current.y + dy
-				},
+				{ x: wheelTargetOffset.current.x + dx, y: wheelTargetOffset.current.y + dy },
 				vpSize,
 				canvas,
 				zoom
@@ -328,17 +325,17 @@ export default function ControlPanel({ workspacePath }: ControlPanelProps) {
 
 	return (
 		<div
-			ref={setViewportRef}
+			ref={hasAgents ? setViewportRef : undefined}
 			className={`relative h-full w-full overflow-hidden select-none bg-neutral-950 focus:outline-none ${
-				spacePanActive ? "cursor-grabbing" : "cursor-grab active:cursor-grabbing"
+				hasAgents ? (spacePanActive ? "cursor-grabbing" : "cursor-grab active:cursor-grabbing") : ""
 			}`}
-			onMouseDownCapture={onMouseDown}
-			onMouseMoveCapture={onMouseMove}
-			onMouseUpCapture={onMouseUp}
-			onMouseLeave={onMouseUp}
+			onMouseDownCapture={hasAgents ? onMouseDown : undefined}
+			onMouseMoveCapture={hasAgents ? onMouseMove : undefined}
+			onMouseUpCapture={hasAgents ? onMouseUp : undefined}
+			onMouseLeave={hasAgents ? onMouseUp : undefined}
 		>
 			<div
-				className="absolute inset-0 pointer-events-none"
+				className="pointer-events-none absolute inset-0"
 				style={{
 					backgroundImage: "radial-gradient(circle, #ffffff18 1px, transparent 1px)",
 					backgroundSize: "24px 24px",
@@ -346,40 +343,57 @@ export default function ControlPanel({ workspacePath }: ControlPanelProps) {
 				}}
 			/>
 
-			<ControlPanelCanvas
-				agents={agents}
-				canvas={canvas}
-				draggedDuringPan={draggedDuringPan}
-				focusedIdx={focusedIdx}
-				offset={offset}
-				onFocus={setFocusedIdx}
-				onSnap={snapToCard}
-				smoothPan={smoothPan}
-				threads={threads}
-				workspacePath={workspacePath}
-				zoom={zoom}
-			/>
+			<button
+				onClick={refetch}
+				className="nodrag absolute top-3 right-3 z-10 rounded-md p-1.5 text-neutral-600 transition-colors duration-150 hover:bg-white/5 hover:text-neutral-300"
+				title="Refresh agents"
+			>
+				<RefreshCw size={13} />
+			</button>
 
-			<NavigationMap
-				canvasWidth={canvas.w}
-				canvasHeight={canvas.h}
-				viewportWidth={vpSize.w}
-				viewportHeight={vpSize.h}
-				offset={offset}
-				scale={zoom}
-				visible={showMap}
-				onNavigate={navigateToCanvasPoint}
-			/>
-
-			<CanvasControls
-				onCenterFocused={() => centerCard(focusedIdx)}
-				onToggleFit={isActualSize ? fitAll : actualSize}
-				showFitAll={isActualSize}
-			/>
-
-			<div className="pointer-events-none absolute right-3 bottom-3 select-none text-xs text-neutral-600">
-				{agents.length} agents
-			</div>
+			{hasAgents ? (
+				<>
+					<ControlPanelCanvas
+						agents={agents}
+						canvas={canvas}
+						draggedDuringPan={draggedDuringPan}
+						focusedIdx={focusedIdx}
+						offset={offset}
+						onFocus={setFocusedIdx}
+						onSnap={snapToCard}
+						smoothPan={smoothPan}
+						workspaceId={workspaceId}
+						workspacePath={workspacePath}
+						zoom={zoom}
+					/>
+					<NavigationMap
+						canvasWidth={canvas.w}
+						canvasHeight={canvas.h}
+						viewportWidth={vpSize.w}
+						viewportHeight={vpSize.h}
+						offset={offset}
+						scale={zoom}
+						visible={showMap}
+						onNavigate={navigateToCanvasPoint}
+					/>
+					<CanvasControls
+						onCenterFocused={() => centerCard(focusedIdx)}
+						onToggleFit={isActualSize ? fitAll : actualSize}
+						showFitAll={isActualSize}
+					/>
+					<div className="pointer-events-none absolute right-3 bottom-3 select-none text-xs text-neutral-600">
+						{agents.length} agents
+					</div>
+				</>
+			) : (
+				<div className="pointer-events-none flex h-full flex-col items-center justify-center gap-y-2">
+					<span className="text-[1.5rem] text-sm text-neutral-600">No Agents Yet</span>
+					<div className="flex gap-x-2 text-blue-200">
+						<h1 className="text-center">Get started now</h1>
+						<LucideSquareArrowOutUpRight />
+					</div>
+				</div>
+			)}
 		</div>
 	)
 }
