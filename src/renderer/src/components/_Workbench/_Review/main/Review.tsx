@@ -78,12 +78,19 @@ export default function Review({ projectCwd, projectName }: ReviewProps) {
 		placeholderData: keepPreviousData
 	})
 	const currentPatch = diffQuery.data?.patch ?? ""
+	const stablePatch = diffQuery.isPlaceholderData && diffQuery.isFetching ? undefined : currentPatch
 	const renderablePatch = useMemo(() => getRenderablePatch(currentPatch, "review"), [currentPatch])
-	const currentDiffKey = useMemo(
-		() => (currentPatch ? buildPatchCacheKey(currentPatch, "review-tour") : ""),
-		[currentPatch]
+	const stableRenderablePatch = useMemo(
+		() => getRenderablePatch(stablePatch, "review"),
+		[stablePatch]
 	)
-	const tourStale = Boolean(savedTour.tour && savedTour.diffKey !== currentDiffKey)
+	const currentDiffKey = useMemo(
+		() => (stablePatch ? buildPatchCacheKey(stablePatch, "review-tour") : ""),
+		[stablePatch]
+	)
+	const tourStale = Boolean(
+		savedTour.tour && currentDiffKey && savedTour.diffKey !== currentDiffKey
+	)
 
 	const launchDevServer = async () => {
 		if (devServerRunning && devServerQuery.data?.url) {
@@ -226,7 +233,7 @@ export default function Review({ projectCwd, projectName }: ReviewProps) {
 			)}
 
 			<ReviewTourPanel
-				canGenerate={Boolean(renderablePatch)}
+				canGenerate={Boolean(stableRenderablePatch)}
 				error={savedTour.error}
 				generating={savedTour.generating}
 				height={tourPanelHeight}
