@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, PanelLeft } from "lucide-react"
 import logoURLSVG from "@renderer/assets/logo.svg"
 import { AnimatePresence, LayoutGroup, motion } from "motion/react"
 import { useNavigate } from "react-router-dom"
@@ -15,10 +15,18 @@ const navItems: { label: string; tab: WorkbenchTab }[] = [
 interface Props {
 	activeAgentCount: number
 	currentPage: WorkbenchTab
+	onToggleSidebar: () => void
 	onTabChange: (tab: WorkbenchTab) => void
+	sidebarOpen: boolean
 }
 
-export default function TopBar({ activeAgentCount, currentPage, onTabChange }: Props) {
+export default function TopBar({
+	activeAgentCount,
+	currentPage,
+	onToggleSidebar,
+	onTabChange,
+	sidebarOpen
+}: Props) {
 	const navigate = useNavigate()
 
 	return (
@@ -36,6 +44,15 @@ export default function TopBar({ activeAgentCount, currentPage, onTabChange }: P
 							className="size-8 transition-opacity duration-150 group-hover:opacity-70"
 						/>
 						<h1 className="text-sm font-bold">NULLOTH</h1>
+					</button>
+					<button
+						type="button"
+						onClick={onToggleSidebar}
+						className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-neutral-500 transition-colors duration-150 hover:bg-white/5 hover:text-white"
+						aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+						title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+					>
+						<PanelLeft size={16} />
 					</button>
 				</div>
 			</div>
