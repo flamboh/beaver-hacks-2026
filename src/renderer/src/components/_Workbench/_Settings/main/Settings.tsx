@@ -3,6 +3,7 @@ import { FolderPlus, Save } from "lucide-react"
 import { useState } from "react"
 
 const WORKSPACE_TEMPLATE_KEY = "workspace.default_template"
+const DEFAULT_WORKSPACE_TEMPLATE = "~/.nulloth/worktrees/{projectSlug}/{workspaceSlug}"
 
 interface SettingsProps {
 	onWorkspacesChanged: () => void
@@ -18,8 +19,7 @@ export default function Settings({ onWorkspacesChanged, projectId }: SettingsPro
 		queryKey: ["setting", WORKSPACE_TEMPLATE_KEY],
 		queryFn: () => window.api.settings.get(WORKSPACE_TEMPLATE_KEY)
 	})
-	const template =
-		templateDraft || templateQuery.data || "../nulloth-workspaces/{projectSlug}/{workspaceSlug}"
+	const template = templateDraft || templateQuery.data || DEFAULT_WORKSPACE_TEMPLATE
 
 	function saveTemplate(): void {
 		setBusy("setting")
@@ -80,7 +80,7 @@ export default function Settings({ onWorkspacesChanged, projectId }: SettingsPro
 					</button>
 				</div>
 				<p className="text-xs text-neutral-500">
-					Default: ../nulloth-workspaces/{"{projectSlug}"}/{"{workspaceSlug}"}
+					Default: ~/.nulloth/worktrees/{"{projectSlug}"}/{"{workspaceSlug}"}
 				</p>
 			</section>
 
