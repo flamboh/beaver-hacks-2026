@@ -301,7 +301,9 @@ export default function Workbench() {
 			<TopBar
 				activeAgentCount={activeAgentCount}
 				currentPage={currentPage}
+				onToggleSidebar={() => setSidebarOpen((open) => !open)}
 				onTabChange={setProjectPage}
+				sidebarOpen={sidebarOpen}
 			/>
 			<div className="flex flex-1 overflow-hidden">
 				<SideBar
@@ -309,10 +311,10 @@ export default function Workbench() {
 					activeWorkspaceId={selectedWorkspace?.id ?? null}
 					onNewProject={() => setNewProjectOpen(true)}
 					onProjectSelect={selectProject}
-					onToggleSidebar={() => setSidebarOpen((open) => !open)}
 					onWorkspaceCreate={createWorkspace}
 					onWorkspaceDelete={deleteWorkspace}
 					onWorkspaceSelect={selectWorkspace}
+					onToggleSidebar={() => setSidebarOpen((open) => !open)}
 					open={sidebarOpen}
 					projects={projects}
 					workspacesByProjectId={workspacesByProjectId}

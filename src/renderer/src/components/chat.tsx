@@ -1,8 +1,15 @@
 import type { CSSProperties, FormEvent, JSX, KeyboardEvent, RefObject, UIEvent } from "react"
-import { useCallback, useRef, useState, useSyncExternalStore } from "react"
+import {
+	forwardRef,
+	useCallback,
+	useImperativeHandle,
+	useRef,
+	useState,
+	useSyncExternalStore
+} from "react"
 import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "motion/react"
-import { ArrowUp, Annoyed } from "lucide-react"
+import { ArrowUp, Annoyed, X } from "lucide-react"
 import {
 	getSemgrepStatus,
 	listAgentModels,
@@ -120,22 +127,29 @@ interface ChatProps {
 	provider?: AgentThread["provider"]
 }
 
-export function Chat({
-	thread,
-	threadId,
-	isRunning,
-	cwd,
-	model,
-	runtimeModel,
-	effort,
-	speedTier,
-	onModelChange,
-	onMessageSent,
-	onEffortChange,
-	onSpeedTierChange,
-	onFirstMessage,
-	provider
-}: ChatProps): JSX.Element {
+export interface ChatHandle {
+	focusComposer: () => void
+}
+
+export const Chat = forwardRef<ChatHandle, ChatProps>(function Chat(
+	{
+		thread,
+		threadId,
+		isRunning,
+		cwd,
+		model,
+		runtimeModel,
+		effort,
+		speedTier,
+		onModelChange,
+		onMessageSent,
+		onEffortChange,
+		onSpeedTierChange,
+		onFirstMessage,
+		provider
+	}: ChatProps,
+	ref
+): JSX.Element {
 	const [draft, setDraft] = useState("")
 	const [isSending, setIsSending] = useState(false)
 	const [isCancelling, setIsCancelling] = useState(false)
@@ -148,7 +162,13 @@ export function Chat({
 	const transcriptViewportRef = useRef<HTMLDivElement | null>(null)
 	const inputRef = useRef<HTMLTextAreaElement | null>(null)
 	const transcriptScrollRef = useRef<HTMLElement | null>(null)
-	const canCancel = isRunning && !isCancelling
+	useImperativeHandle(
+		ref,
+		() => ({
+			focusComposer: () => inputRef.current?.focus()
+		}),
+		[]
+	)
 	const transcript = thread ? buildTranscript(thread) : []
 	const transcriptVersion = thread
 		? `${thread.updatedAt}:${thread.messages.length}:${thread.activities.length}`
@@ -184,9 +204,6 @@ export function Chat({
 		queryFn: () => window.api.composer.listMentions(cwd),
 		staleTime: 30_000
 	})
-	const suggestions = buildSuggestions(activeToken, fileSuggestions, mentionSuggestions)
-	const selectedSuggestionIndex =
-		suggestions.length === 0 ? 0 : suggestionIndex % suggestions.length
 	const visibleModelOptions =
 		modelOptions.length > 0 ? modelOptions : FALLBACK_MODELS[provider ?? "codex"]
 	const defaultModel =
@@ -207,6 +224,12 @@ export function Chat({
 		: null
 	const semgrepUnavailable =
 		securityMode && semgrepStatus !== undefined && semgrepStatus.available === false
+	const suggestions = semgrepUnavailable
+		? []
+		: buildSuggestions(activeToken, fileSuggestions, mentionSuggestions)
+	const selectedSuggestionIndex =
+		suggestions.length === 0 ? 0 : suggestionIndex % suggestions.length
+	const canCancel = isRunning && !isCancelling
 	const autoScrollKey = thread?.updatedAt ?? "idle"
 	const latestRuntimeError =
 		thread?.activities.filter((activity) => activity.kind === "runtime.error").at(-1)?.summary ??
@@ -470,7 +493,7 @@ export function Chat({
 									onClick={isRunning ? handleCancel : undefined}
 									disabled={isRunning ? !canCancel : !canSend}
 									aria-label={isRunning ? "Cancel message" : "Send message"}
-									title={isRunning ? "Cancel" : "Send message"}
+									title={isRunning ? "Cancel message" : "Send message"}
 									whileHover={isRunning ? { scale: 1.02 } : canSend ? { scale: 1.06 } : undefined}
 									whileTap={isRunning || canSend ? { scale: 0.92 } : undefined}
 									animate={{
@@ -486,20 +509,17 @@ export function Chat({
 												: "rgb(113 113 122)"
 									}}
 									transition={{ type: "spring", stiffness: 500, damping: 32, mass: 0.6 }}
-									className="flex h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center rounded-full px-2 text-xs font-medium shadow-[0_4px_14px_-4px_rgba(59,130,246,0.55)] outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed disabled:shadow-none"
+									className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-xs font-medium shadow-[0_4px_14px_-4px_rgba(59,130,246,0.55)] outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed disabled:shadow-none"
 								>
-									{isRunning ? "Cancel" : <ArrowUp size={15} strokeWidth={2.75} />}
+									{isRunning ? (
+										<X size={16} strokeWidth={2.75} />
+									) : (
+										<ArrowUp size={15} strokeWidth={2.75} />
+									)}
 								</motion.button>
 							</div>
 						</div>
 					</div>
-					{semgrepUnavailable ? (
-						<p className="mt-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
-							Security mode requires Semgrep CLI (`{semgrepStatus?.command ?? "semgrep"}` not
-							found). Install it with `brew install semgrep` or `python3 -m pip install semgrep`,
-							then retry.
-						</p>
-					) : null}
 					<AnimatePresence initial={false}>
 						{error ? (
 							<motion.p
@@ -518,7 +538,7 @@ export function Chat({
 			</footer>
 		</div>
 	)
-}
+})
 
 function providerForNotice(
 	thread: AgentThread | null,

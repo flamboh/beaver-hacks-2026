@@ -4,8 +4,8 @@ import {
 	FolderPlus,
 	GitBranch,
 	GitBranchPlus,
-	PanelLeft,
-	Trash2
+	Trash2,
+	PanelLeft
 } from "lucide-react"
 import type { ProjectRow } from "@renderer/types/models"
 import { useRef, useState, type PointerEvent } from "react"
@@ -16,17 +16,17 @@ interface Props {
 	activeWorkspaceId: string | null
 	onNewProject: () => void
 	onProjectSelect: (project: ProjectRow) => void
-	onToggleSidebar: () => void
 	onWorkspaceCreate: (project: ProjectRow) => void
 	onWorkspaceDelete: (workspace: WorkspaceRow) => void
 	onWorkspaceSelect: (project: ProjectRow, workspace: WorkspaceRow) => void
+	onToggleSidebar: () => void
 	open: boolean
 	projects: ProjectRow[]
 	workspacesByProjectId: Map<string, WorkspaceRow[]>
 }
 
 const DEFAULT_SIDEBAR_WIDTH = 300
-const COLLAPSED_SIDEBAR_WIDTH = 40
+const COLLAPSED_SIDEBAR_WIDTH = 0
 const MIN_SIDEBAR_WIDTH = 220
 const MAX_SIDEBAR_WIDTH = 420
 
@@ -51,10 +51,10 @@ export default function SideBar({
 	activeWorkspaceId,
 	onNewProject,
 	onProjectSelect,
-	onToggleSidebar,
 	onWorkspaceCreate,
 	onWorkspaceDelete,
 	onWorkspaceSelect,
+	onToggleSidebar,
 	open,
 	projects,
 	workspacesByProjectId
@@ -85,9 +85,9 @@ export default function SideBar({
 
 	return (
 		<div
-			className={`relative flex h-full shrink-0 flex-col overflow-hidden border-r border-white/5 bg-neutral-900 transition-[width] ease-in-out ${
-				resizing ? "duration-0" : "duration-200"
-			}`}
+			className={`relative flex h-full shrink-0 flex-col overflow-hidden bg-neutral-900 transition-[width] ease-in-out ${
+				open ? "border-r border-white/5" : "border-r-0"
+			} ${resizing ? "duration-0" : "duration-200"}`}
 			style={{ width: open ? sidebarWidth : COLLAPSED_SIDEBAR_WIDTH }}
 		>
 			<div className="flex min-h-0 flex-1 flex-col" style={{ width: sidebarWidth }}>

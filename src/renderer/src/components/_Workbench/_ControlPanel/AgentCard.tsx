@@ -1,8 +1,8 @@
-import { type MouseEvent, useRef, useState } from "react"
+import { forwardRef, type MouseEvent, useImperativeHandle, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { motion } from "motion/react"
 import { useAgentSnapshot } from "@renderer/agentStore"
-import { Chat } from "@renderer/components/chat"
+import { Chat, type ChatHandle } from "@renderer/components/chat"
 import type { AgentRow } from "@renderer/types/models"
 import AgentCardSideCreateButton, { type CreateSide } from "./AgentCardSideCreateButton"
 import TaskList from "./TaskList"
@@ -24,18 +24,25 @@ interface Props {
 	workspacePath: string
 }
 
-export default function AgentCard({
-	agent,
-	availableCreateSides,
-	isDeleting,
-	onCreateCard,
-	onCreateWorkspace,
-	onDeleteCard,
-	size,
-	workspaceId,
-	workspaceName,
-	workspacePath
-}: Props) {
+export interface CardTypingHandle {
+	focusTyping: () => void
+}
+
+const AgentCard = forwardRef<CardTypingHandle, Props>(function AgentCard(
+	{
+		agent,
+		availableCreateSides,
+		isDeleting,
+		onCreateCard,
+		onCreateWorkspace,
+		onDeleteCard,
+		size,
+		workspaceId,
+		workspaceName,
+		workspacePath
+	}: Props,
+	ref
+) {
 	const [activeCreateSide, setActiveCreateSide] = useState<CreateSide | null>(null)
 	const [isEditingName, setIsEditingName] = useState(false)
 	const [nameDraft, setNameDraft] = useState(agent.name)
@@ -46,6 +53,7 @@ export default function AgentCard({
 	const [deleteArmed, setDeleteArmed] = useState(false)
 	const [deleting, setDeleting] = useState(false)
 	const skipNameCommitRef = useRef(false)
+	const chatRef = useRef<ChatHandle | null>(null)
 	const queryClient = useQueryClient()
 	const snapshot = useAgentSnapshot()
 	const agentThreadId = agent.thread_id ?? `thread:${agent.id}`
@@ -93,6 +101,13 @@ export default function AgentCard({
 		if (target?.closest("[data-selectable-text], input, textarea, select, button")) return
 		window.getSelection()?.removeAllRanges()
 	}
+	useImperativeHandle(
+		ref,
+		() => ({
+			focusTyping: () => chatRef.current?.focusComposer()
+		}),
+		[]
+	)
 
 	async function handleFirstMessage(prompt: string): Promise<void> {
 		if (agent.name === "New Agent") {
@@ -221,6 +236,7 @@ export default function AgentCard({
 					<div className="flex min-w-0 flex-1 flex-col overflow-hidden">
 						<div className="min-h-0 flex-1">
 							<Chat
+								ref={chatRef}
 								thread={thread}
 								threadId={agentThreadId}
 								isRunning={isRunning}
@@ -254,7 +270,9 @@ export default function AgentCard({
 			))}
 		</div>
 	)
-}
+})
+
+export default AgentCard
 
 const WORKSPACE_NAME_STOP_WORDS = new Set([
 	"a",

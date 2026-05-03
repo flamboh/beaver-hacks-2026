@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useMemo } from "react"
 import { RefreshCw } from "lucide-react"
 import type { CreateSide } from "../AgentCardSideCreateButton"
+import type { CardTypingHandle } from "../AgentCard"
 import NavigationMap from "../NavigationMap"
 import { CanvasControls } from "../CanvasControls"
 import { ControlPanelCanvas } from "../ControlPanelCanvas"
@@ -58,6 +59,7 @@ export default function ControlPanel({
 	const draggedDuringPan = useRef(false)
 	const lastPos = useRef({ x: 0, y: 0 })
 	const edgePointer = useRef({ x: 0, y: 0 })
+	const typingHandles = useRef<Record<string, CardTypingHandle | null>>({})
 
 	const [offset, setOffset] = useState({ x: PADDING, y: PADDING })
 	const [zoom, setZoom] = useState(1)
@@ -565,9 +567,18 @@ export default function ControlPanel({
 		}
 		actualSize()
 	}, [actualSize, fitAll, zoom])
+	const setTypingHandle = useCallback((id: string, handle: CardTypingHandle | null) => {
+		typingHandles.current[id] = handle
+	}, [])
+	const enterFocusedTyping = useCallback(() => {
+		const card = sizedCards[Math.max(0, Math.min(focusedIdx, sizedCards.length - 1))]
+		if (!card) return
+		typingHandles.current[card.id]?.focusTyping()
+	}, [focusedIdx, sizedCards])
 
 	useControlPanelKeyboard({
 		centerFocused: () => centerCard(focusedIdx),
+		enterFocusedTyping,
 		focusedIdx,
 		moveFocus,
 		moveFocusedWithinRail,
@@ -768,6 +779,7 @@ export default function ControlPanel({
 						onFocus={focusCard}
 						onResizeCard={resizeCard}
 						onSnap={snapToCard}
+						onTypingRef={setTypingHandle}
 						smoothPan={smoothPan}
 						workspaces={workspaces}
 						zoom={zoom}
