@@ -12,6 +12,7 @@ interface AgentTableRow {
 	model: string
 	scope_path: string
 	effort: string
+	thread_id: string | null
 	layout_x: number
 	layout_y: number
 }
@@ -24,13 +25,18 @@ export interface CreateAgentInput {
 	model: string
 	scope_path: string
 	effort: string
+	thread_id?: string | null
 	layout_x?: number
 	layout_y?: number
 }
 
 export interface UpdateAgentInput {
 	id: string
-	name: string
+	name?: string
+	model?: string
+	scope_path?: string
+	effort?: string
+	thread_id?: string | null
 	expectedName?: string
 }
 
@@ -45,6 +51,7 @@ function toAgentRow(row: AgentTableRow): AgentRow {
 		model: row.model,
 		scope_path: row.scope_path,
 		effort: row.effort,
+		thread_id: row.thread_id,
 		layout_x: row.layout_x,
 		layout_y: row.layout_y
 	}
@@ -56,7 +63,7 @@ export class AgentService {
 
 	async listAgents(projectId: string): Promise<AgentRow[]> {
 		const rows = await this.all<AgentTableRow>(
-			`SELECT id, name, project_id, workspace_id, provider, model, scope_path, effort, layout_x, layout_y
+			`SELECT id, name, project_id, workspace_id, provider, model, scope_path, effort, thread_id, layout_x, layout_y
 			 FROM agents
 			 WHERE project_id = ?
 			 ORDER BY layout_y ASC, layout_x ASC, rowid ASC`,
@@ -75,12 +82,13 @@ export class AgentService {
 			model: input.model,
 			scope_path: input.scope_path.trim(),
 			effort: input.effort,
+			thread_id: input.thread_id ?? null,
 			layout_x: input.layout_x ?? 0,
 			layout_y: input.layout_y ?? 0
 		}
 		await this.run(
-			`INSERT INTO agents (id, name, project_id, workspace_id, provider, model, scope_path, effort, layout_x, layout_y)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO agents (id, name, project_id, workspace_id, provider, model, scope_path, effort, thread_id, layout_x, layout_y)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			[
 				agent.id,
 				agent.name,
@@ -90,6 +98,7 @@ export class AgentService {
 				agent.model,
 				agent.scope_path,
 				agent.effort,
+				agent.thread_id,
 				agent.layout_x,
 				agent.layout_y
 			]
@@ -97,28 +106,54 @@ export class AgentService {
 		return agent
 	}
 
+	async deleteAgent(id: string): Promise<void> {
+		await this.run(`DELETE FROM agents WHERE id = ?`, [id])
+	}
+
 	async updateAgent(input: UpdateAgentInput): Promise<AgentRow> {
-		const name = input.name.trim()
 		if (input.expectedName === undefined) {
-			await this.run(`UPDATE agents SET name = ? WHERE id = ?`, [name, input.id])
+			await this.run(
+				`
+					UPDATE agents
+					SET name = COALESCE(?, name),
+						model = COALESCE(?, model),
+						scope_path = COALESCE(?, scope_path),
+						effort = COALESCE(?, effort),
+						thread_id = COALESCE(?, thread_id)
+					WHERE id = ?
+				`,
+				[input.name?.trim(), input.model, input.scope_path, input.effort, input.thread_id, input.id]
+			)
 		} else {
-			await this.run(`UPDATE agents SET name = ? WHERE id = ? AND name = ?`, [
-				name,
-				input.id,
-				input.expectedName
-			])
+			await this.run(
+				`
+					UPDATE agents
+					SET name = COALESCE(?, name),
+						model = COALESCE(?, model),
+						scope_path = COALESCE(?, scope_path),
+						effort = COALESCE(?, effort),
+						thread_id = COALESCE(?, thread_id)
+					WHERE id = ? AND name = ?
+				`,
+				[
+					input.name?.trim(),
+					input.model,
+					input.scope_path,
+					input.effort,
+					input.thread_id,
+					input.id,
+					input.expectedName
+				]
+			)
 		}
 		const row = await this.get<AgentTableRow>(
-			`SELECT id, name, project_id, workspace_id, provider, model, scope_path, effort, layout_x, layout_y
+			`SELECT id, name, project_id, workspace_id, provider, model, scope_path, effort, thread_id, layout_x, layout_y
 			 FROM agents
 			 WHERE id = ?`,
 			[input.id]
 		)
+		if (!row) throw new Error("Agent not found.")
 		return toAgentRow(row)
-	}
-
-	async deleteAgent(id: string): Promise<void> {
-		await this.run(`DELETE FROM agents WHERE id = ?`, [id])
 	}
 
 	// ── helpers ───────────────────────────────────────────────────
@@ -128,15 +163,15 @@ export class AgentService {
 		})
 	}
 
-	private async all<T>(sql: string, params: unknown[]): Promise<T[]> {
+	private async get<T>(sql: string, params: unknown[]): Promise<T | undefined> {
 		return new Promise((resolve, reject) => {
-			this.db.all<T>(sql, params, (err, rows) => (err ? reject(err) : resolve(rows)))
+			this.db.get<T>(sql, params, (err, row) => (err ? reject(err) : resolve(row)))
 		})
 	}
 
-	private async get<T>(sql: string, params: unknown[]): Promise<T> {
+	private async all<T>(sql: string, params: unknown[]): Promise<T[]> {
 		return new Promise((resolve, reject) => {
-			this.db.get<T>(sql, params, (err, row) => (err ? reject(err) : resolve(row)))
+			this.db.all<T>(sql, params, (err, rows) => (err ? reject(err) : resolve(rows)))
 		})
 	}
 }

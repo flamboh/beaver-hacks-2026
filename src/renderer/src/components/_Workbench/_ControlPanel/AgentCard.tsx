@@ -1,24 +1,39 @@
-import { useCallback, useRef, useState } from "react"
-import { Chat } from "@renderer/components/chat"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { type MouseEvent, useRef, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useAgentSnapshot } from "@renderer/agentStore"
-import { Plus } from "lucide-react"
+import { Chat } from "@renderer/components/chat"
+import { ChevronDown } from "lucide-react"
 import type { AgentRow } from "@renderer/types/models"
+import AgentCardScopeModal from "./AgentCardScopeModal"
+import AgentCardSideCreateButton, { type CreateSide } from "./AgentCardSideCreateButton"
+import { parseScopePath } from "./agentCardScopePath"
+import TaskList from "./TaskList"
 import { CARD_H, CARD_W } from "./controlPanelLayout"
-import { ProviderIcon } from "./ControlPanelAgentLauncher"
 import { agentNameForPrompt, type StartAgentInput } from "./useControlPanelAgents"
 
-function parseScopePath(path: string): string {
-	if (!path) return ""
-	const parts = path.replace(/\\/g, "/").split("/")
-	return (
-		parts.findLast((segment) => segment.endsWith(".md") || segment.endsWith(".txt")) ??
-		parts.at(-1) ??
-		""
-	)
-}
+export type { CreateSide }
 
 const PRIORITY_LEVELS = ["low", "medium", "high"] as const
+const MODEL_OPTIONS: { group: string; models: { value: string; label: string }[] }[] = [
+	{
+		group: "Anthropic",
+		models: [
+			{ value: "claude-opus-4-7", label: "Claude Opus 4.7" },
+			{ value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+			{ value: "claude-haiku-4-5", label: "Claude Haiku 4.5" }
+		]
+	},
+	{
+		group: "OpenAI",
+		models: [
+			{ value: "gpt-5.5", label: "GPT-5.5" },
+			{ value: "gpt-4o", label: "GPT-4o" },
+			{ value: "gpt-4o-mini", label: "GPT-4o mini" },
+			{ value: "o3", label: "o3" },
+			{ value: "o4-mini", label: "o4-mini" }
+		]
+	}
+]
 
 const EFFORT_STYLES: Record<string, string> = {
 	low: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
@@ -49,25 +64,73 @@ export default function AgentCard({
 	const [isEditingName, setIsEditingName] = useState(false)
 	const [nameDraft, setNameDraft] = useState(agent.name)
 	const [isSavingName, setIsSavingName] = useState(false)
+	const [effort, setEffort] = useState(agent.effort)
+	const [model, setModel] = useState(agent.model)
+	const [scopePath, setScopePath] = useState(agent.scope_path)
+	const [scopeModalOpen, setScopeModalOpen] = useState(false)
+	const [deleteArmed, setDeleteArmed] = useState(false)
+	const [deleting, setDeleting] = useState(false)
 	const skipNameCommitRef = useRef(false)
 	const queryClient = useQueryClient()
 	const snapshot = useAgentSnapshot()
-	const thread = snapshot.threads.find((agentThread) => agentThread.id === agent.id) ?? null
+	const agentThreadId = agent.thread_id ?? `thread:${agent.id}`
+	const thread = snapshot.threads.find((agentThread) => agentThread.id === agentThreadId) ?? null
 	const session = thread?.session ?? null
 	const runtimeModel = session?.model ?? null
 	const isRunning =
 		session !== null &&
 		(session.status === "starting" || session.status === "running" || session.activeTurnId !== null)
-	const { data: tasks = [] } = useQuery({
-		queryKey: ["tasks", agent.id],
-		queryFn: () => window.api.tasks.list(agent.id),
-		enabled: Boolean(agent.id)
-	})
-	const scopeDisplay = parseScopePath(agent.scope_path)
+
+	const scopeDisplay = parseScopePath(scopePath)
+	const updateEffort = (nextEffort: string) => {
+		setEffort(nextEffort)
+		void window.api.agents
+			.update({ id: agent.id, effort: nextEffort })
+			.then((updatedAgent) => {
+				setEffort(updatedAgent.effort)
+				void queryClient.invalidateQueries({ queryKey: ["agents"] })
+			})
+			.catch(() => setEffort(agent.effort))
+	}
+	const updateModel = (nextModel: string) => {
+		setModel(nextModel)
+		void window.api.agents
+			.update({ id: agent.id, model: nextModel })
+			.then((updatedAgent) => {
+				setModel(updatedAgent.model)
+				void queryClient.invalidateQueries({ queryKey: ["agents"] })
+			})
+			.catch(() => setModel(agent.model))
+	}
+	const updateScope = async (nextScopePath: string) => {
+		const updatedAgent = await window.api.agents.update({
+			id: agent.id,
+			scope_path: nextScopePath
+		})
+		setScopePath(updatedAgent.scope_path)
+		await queryClient.invalidateQueries({ queryKey: ["agents"] })
+	}
+	const deleteAgent = () => {
+		setDeleting(true)
+		void onDeleteAgent(agent.id).finally(() => setDeleting(false))
+	}
+	const requestDelete = () => {
+		if (deleteArmed) {
+			deleteAgent()
+			return
+		}
+		setDeleteArmed(true)
+	}
+	const clearSelectionOutsideText = (event: MouseEvent<HTMLDivElement>) => {
+		const target = event.target as Element | null
+		if (target?.closest("[data-selectable-text], input, textarea, select, button")) return
+		window.getSelection()?.removeAllRanges()
+	}
 
 	async function handleFirstMessage(prompt: string): Promise<void> {
 		await window.api.tasks.create({
 			agent_id: agent.id,
+			turn_id: null,
 			status: "working",
 			description: prompt
 		})
@@ -75,7 +138,8 @@ export default function AgentCard({
 			const seedName = agentNameForPrompt(prompt)
 			await window.api.agents.update({
 				id: agent.id,
-				name: seedName
+				name: seedName,
+				thread_id: agentThreadId
 			})
 			await queryClient.invalidateQueries({ queryKey: ["agents"] })
 			void window.api.agent
@@ -85,11 +149,18 @@ export default function AgentCard({
 					await window.api.agents.update({
 						id: agent.id,
 						name,
+						thread_id: agentThreadId,
 						expectedName: seedName
 					})
 					await queryClient.invalidateQueries({ queryKey: ["agents"] })
 				})
 				.catch(() => undefined)
+		} else if (!agent.thread_id) {
+			await window.api.agents.update({
+				id: agent.id,
+				thread_id: agentThreadId
+			})
+			await queryClient.invalidateQueries({ queryKey: ["agents"] })
 		}
 		await queryClient.invalidateQueries({ queryKey: ["tasks", agent.id] })
 	}
@@ -117,12 +188,13 @@ export default function AgentCard({
 
 	return (
 		<div
-			className="group/card relative text-white"
+			className="group/card nodrag relative cursor-default text-white"
 			style={{ width: CARD_W, height: CARD_H }}
+			onMouseDown={clearSelectionOutsideText}
 			onWheel={(event) => event.stopPropagation()}
 		>
 			{availableCreateSides.map((side) => (
-				<SideCreateButton
+				<AgentCardSideCreateButton
 					key={side}
 					active={activeCreateSide === side}
 					onClose={() => setActiveCreateSide(null)}
@@ -132,6 +204,7 @@ export default function AgentCard({
 					sourceAgentId={agent.id}
 				/>
 			))}
+
 			<div className="flex h-full flex-col overflow-hidden rounded-xl border border-white/8 bg-neutral-900 shadow-2xl shadow-black/40">
 				<div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-white/5 bg-neutral-800/60 px-5">
 					{isEditingName ? (
@@ -163,7 +236,7 @@ export default function AgentCard({
 								setNameDraft(agent.name)
 								setIsEditingName(true)
 							}}
-							className="min-w-0 max-w-full truncate text-left text-sm font-semibold tracking-wide text-neutral-100"
+							className="min-w-0 max-w-full cursor-text truncate text-left text-sm font-semibold tracking-wide text-neutral-100"
 							title="Rename agent"
 						>
 							{agent.name}
@@ -171,52 +244,52 @@ export default function AgentCard({
 					)}
 					<button
 						type="button"
-						disabled={isDeleting}
-						onClick={(event) => {
-							event.preventDefault()
-							event.stopPropagation()
-							void onDeleteAgent(agent.id)
-						}}
-						className="rounded-md border border-red-500/40 px-2.5 py-1 text-xs text-red-400 transition-all duration-150 hover:border-red-500/60 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+						onClick={requestDelete}
+						onBlur={() => setDeleteArmed(false)}
+						onMouseLeave={() => setDeleteArmed(false)}
+						disabled={deleting || isDeleting}
+						className={`min-w-20 cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${
+							deleteArmed
+								? "border-red-500/60 bg-red-500/10 text-red-300"
+								: "border-red-500/40 text-red-400 hover:border-red-500/60 hover:bg-red-500/10"
+						}`}
 					>
-						Delete
+						{deleting || isDeleting ? "Deleting..." : deleteArmed ? "Confirm" : "Delete"}
 					</button>
 				</div>
 
 				<div className="flex flex-1 overflow-hidden">
-					<div className="flex w-[35%] shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
-						<div className="flex min-w-0 flex-1 flex-col gap-1.5">
-							<span className="text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
-								Task List
-							</span>
-							<div className="nowheel nodrag min-h-0 flex-1 overflow-y-auto pr-1">
-								{tasks.length === 0 ? (
-									<p className="text-xs text-neutral-700">No tasks yet</p>
-								) : (
-									<ol className="flex flex-col gap-1.5">
-										{tasks.map((task, i) => (
-											<li key={task.id} className="flex items-start gap-2 text-sm text-neutral-400">
-												<span className="mt-px shrink-0 tabular-nums text-neutral-700">
-													{i + 1}.
-												</span>
-												<span className="min-w-0 break-words leading-snug">{task.description}</span>
-											</li>
-										))}
-									</ol>
-								)}
-							</div>
-						</div>
+					<div className="flex w-[28%] shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
+						<TaskList />
 
 						<div className="flex flex-col gap-1">
 							<span className="text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
 								Model
 							</span>
-							<span className="break-words font-mono text-xs text-neutral-400">
-								{runtimeModel ?? agent.model}
-							</span>
+							<div className="relative">
+								<select
+									value={model}
+									onChange={(event) => updateModel(event.currentTarget.value)}
+									className="w-full cursor-pointer appearance-none rounded-md border border-white/5 bg-white/[0.03] px-2 py-1.5 pr-7 font-mono text-xs text-neutral-400 outline-none transition-colors duration-150 hover:border-white/10 hover:text-neutral-200 focus:border-white/20"
+								>
+									{MODEL_OPTIONS.map((group) => (
+										<optgroup key={group.group} label={group.group}>
+											{group.models.map((option) => (
+												<option key={option.value} value={option.value}>
+													{option.label}
+												</option>
+											))}
+										</optgroup>
+									))}
+								</select>
+								<ChevronDown
+									size={12}
+									className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-neutral-600"
+								/>
+							</div>
 							{runtimeModel && runtimeModel !== agent.model ? (
 								<span className="break-words font-mono text-[10px] text-neutral-600">
-									requested {agent.model}
+									running {runtimeModel}
 								</span>
 							) : null}
 						</div>
@@ -226,21 +299,31 @@ export default function AgentCard({
 						<div className="flex shrink-0 items-center gap-3 border-b border-white/5 px-4 py-3">
 							<div className="flex items-center gap-1">
 								{PRIORITY_LEVELS.map((level) => (
-									<span
+									<button
+										type="button"
 										key={level}
-										className={`rounded-md border px-2 py-0.5 text-[11px] capitalize transition-colors ${
-											agent.effort === level
+										onClick={() => updateEffort(level)}
+										className={`cursor-pointer rounded-md border px-2 py-0.5 text-[11px] capitalize transition-colors ${
+											effort === level
 												? EFFORT_STYLES[level]
-												: "border-white/5 bg-transparent text-neutral-700"
+												: "border-white/5 bg-transparent text-neutral-700 hover:border-white/10 hover:text-neutral-500"
 										}`}
 									>
 										{level}
-									</span>
+									</button>
 								))}
 							</div>
 							{scopeDisplay ? (
 								<span className="min-w-0 truncate text-xs text-neutral-600">
-									Scope: <span className="font-mono text-blue-400/80">{scopeDisplay}</span>
+									Scope:{" "}
+									<button
+										type="button"
+										onClick={() => setScopeModalOpen(true)}
+										className="max-w-[260px] cursor-pointer truncate align-bottom font-mono text-blue-400/80 transition-colors duration-150 hover:text-blue-300"
+										title={scopePath}
+									>
+										{scopeDisplay}
+									</button>
 								</span>
 							) : null}
 						</div>
@@ -248,10 +331,10 @@ export default function AgentCard({
 						<div className="min-h-0 flex-1">
 							<Chat
 								thread={thread}
-								threadId={agent.id}
+								threadId={agentThreadId}
 								isRunning={isRunning}
 								cwd={workspacePath}
-								model={agent.model}
+								model={model}
 								onFirstMessage={handleFirstMessage}
 								provider={agent.provider}
 								workspaceId={workspaceId}
@@ -260,107 +343,15 @@ export default function AgentCard({
 					</div>
 				</div>
 			</div>
-		</div>
-	)
-}
 
-export type CreateSide = "left" | "right" | "top" | "bottom"
-
-const PROVIDERS: StartAgentInput[] = [{ provider: "codex" }, { provider: "claude" }]
-
-function SideCreateButton({
-	active,
-	onClose,
-	onCreateAgent,
-	onOpen,
-	side,
-	sourceAgentId
-}: {
-	active: boolean
-	onClose: () => void
-	onCreateAgent: (input: StartAgentInput) => Promise<void>
-	onOpen: () => void
-	side: CreateSide
-	sourceAgentId: string
-}) {
-	const lightDismissCleanup = useRef<(() => void) | null>(null)
-	const sideClass: Record<CreateSide, string> = {
-		left: "left-[-62px] top-1/2 -translate-y-1/2",
-		right: "right-[-62px] top-1/2 -translate-y-1/2",
-		top: "left-1/2 top-[-62px] -translate-x-1/2",
-		bottom: "bottom-[-62px] left-1/2 -translate-x-1/2"
-	}
-	const setPopoverRef = useCallback(
-		(node: HTMLDivElement | null) => {
-			lightDismissCleanup.current?.()
-			lightDismissCleanup.current = null
-			if (!node) return
-			const popover = node
-
-			function handlePointerDown(event: PointerEvent): void {
-				if (popover.contains(event.target as Node | null)) return
-				lightDismissCleanup.current?.()
-				lightDismissCleanup.current = null
-				onClose()
-			}
-
-			const timer = window.setTimeout(() => {
-				document.addEventListener("pointerdown", handlePointerDown, true)
-			}, 0)
-			lightDismissCleanup.current = () => {
-				window.clearTimeout(timer)
-				document.removeEventListener("pointerdown", handlePointerDown, true)
-			}
-		},
-		[onClose]
-	)
-
-	return (
-		<div className={`nodrag absolute z-40 ${sideClass[side]}`}>
-			<button
-				type="button"
-				onClick={(event) => {
-					event.preventDefault()
-					event.stopPropagation()
-					if (active) {
-						onClose()
-						return
-					}
-					onOpen()
-				}}
-				className="flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-neutral-400 opacity-35 transition-all duration-150 hover:scale-110 hover:text-white hover:opacity-100 group-hover/card:opacity-70"
-				aria-label="Start another agent"
-				title="Start another agent"
-			>
-				<Plus size={17} />
-			</button>
-			{active ? (
-				<div
-					ref={setPopoverRef}
-					className="agent-create-popover absolute top-1/2 left-1/2 z-50 flex w-[120px] items-center gap-2 rounded-lg border border-white/10 bg-neutral-900 p-2 shadow-2xl shadow-black/50"
-					onClick={(event) => event.stopPropagation()}
-				>
-					{PROVIDERS.map((provider) => (
-						<button
-							key={provider.provider}
-							type="button"
-							onClick={(event) => {
-								event.preventDefault()
-								event.stopPropagation()
-								void onCreateAgent({
-									...provider,
-									sourceAgentId,
-									side
-								}).then(onClose)
-							}}
-							className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-white/8 bg-neutral-950 text-neutral-400 transition-colors duration-150 hover:border-white/15 hover:bg-white/8 hover:text-white"
-							aria-label={`Start ${provider.provider} agent`}
-							title={provider.provider}
-						>
-							<ProviderIcon provider={provider.provider} />
-						</button>
-					))}
-				</div>
+			{scopeModalOpen ? (
+				<AgentCardScopeModal
+					agentName={agent.name}
+					initialScopePath={scopePath}
+					onCancel={() => setScopeModalOpen(false)}
+					onSave={updateScope}
+					projectPath={workspacePath}
+				/>
 			) : null}
 		</div>
 	)

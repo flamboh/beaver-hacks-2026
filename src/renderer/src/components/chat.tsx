@@ -107,7 +107,7 @@ export function Chat({
 				</div>
 			</section>
 
-			<footer className="shrink-0 border-t border-white/10 bg-[#0c0c0f] p-4">
+			<footer className="nodrag shrink-0 cursor-default border-t border-white/10 bg-[#0c0c0f] p-4">
 				<form onSubmit={handleSubmit} className="mx-auto flex max-w-3xl gap-2">
 					<textarea
 						value={draft}
@@ -118,14 +118,14 @@ export function Chat({
 								event.preventDefault()
 							}
 						}}
-						rows={2}
+						rows={1}
 						placeholder="Message Codex..."
-						className="min-h-12 flex-1 resize-none rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-white/20"
+						className="h-12 flex-1 resize-none rounded-lg border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-white/20"
 					/>
 					<button
 						type="submit"
 						disabled={!canSend}
-						className="h-12 rounded-lg bg-zinc-100 px-4 text-sm font-medium text-zinc-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+						className="h-12 cursor-pointer rounded-lg bg-zinc-100 px-4 text-sm font-medium text-zinc-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
 					>
 						Send
 					</button>

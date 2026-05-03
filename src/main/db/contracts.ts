@@ -91,6 +91,7 @@ export type AgentRow = {
 	model: string
 	scope_path: string
 	effort: string
+	thread_id: string | null
 	layout_x: number
 	layout_y: number
 }
