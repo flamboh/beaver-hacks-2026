@@ -6,12 +6,16 @@ import type {
 	StartTurnInput
 } from "../main/agent/ipc"
 import type {
+	AgentRow,
+	CreateAgentInput,
 	CreateProjectInput,
+	CreateTaskInput,
 	CreateWorkspaceInput,
 	DatabaseInfo,
 	ProjectIdInput,
 	ProjectRow,
 	ProjectWorkspaceInput,
+	TaskRow,
 	UpdateProjectInput,
 	UpdateSettingInput,
 	UpdateWorkspaceInput,
@@ -79,6 +83,7 @@ interface BeaverApi {
 		touch: (input: ProjectIdInput) => Promise<ProjectRow>
 		delete: (input: ProjectIdInput) => Promise<void>
 	}
+
 	workspaces: {
 		list: (input: ProjectWorkspaceInput) => Promise<WorkspaceRow[]>
 		active: (input: ProjectWorkspaceInput) => Promise<WorkspaceRow>
@@ -89,6 +94,15 @@ interface BeaverApi {
 	settings: {
 		get: (key: string) => Promise<string>
 		update: (input: UpdateSettingInput) => Promise<string>
+	}
+	agents: {
+		list: (projectId: string) => Promise<AgentRow[]>
+		create: (input: CreateAgentInput) => Promise<AgentRow>
+		delete: (id: string) => Promise<void>
+	}
+	tasks: {
+		list: (agentId: string) => Promise<TaskRow[]>
+		create: (input: CreateTaskInput) => Promise<TaskRow>
 	}
 }
 

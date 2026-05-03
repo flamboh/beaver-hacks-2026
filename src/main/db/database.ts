@@ -15,6 +15,7 @@ import type {
 	WorkspaceRow,
 	UpdateProjectInput
 } from "./contracts"
+
 import type { ProjectTableRow, WorkspaceTableRow } from "./rowMappers"
 import { toProjectRow, toWorkspaceRow } from "./rowMappers"
 import { INITIALIZE_SCHEMA_SQL } from "./schema"
@@ -27,6 +28,8 @@ import {
 	slugify
 } from "./workspaceUtils"
 
+const SCHEMA_VERSION = 2
+
 function nowIso(): string {
 	return new Date().toISOString()
 }
@@ -37,7 +40,7 @@ function isUniqueProjectPathError(error: unknown): boolean {
 }
 
 export class DatabaseService {
-	private readonly db: sqlite3.Database
+	readonly db: sqlite3.Database
 
 	constructor(private readonly path: string) {
 		mkdirSync(dirname(path), { recursive: true })
@@ -48,6 +51,88 @@ export class DatabaseService {
 	async initialize(): Promise<void> {
 		await this.exec(INITIALIZE_SCHEMA_SQL)
 		await this.backfillProjectWorkspaces()
+
+		// Base tables — no FK constraints yet so migration can recreate agents safely
+		await this.exec(`
+			PRAGMA journal_mode = WAL;
+			PRAGMA foreign_keys = OFF;
+
+			CREATE TABLE IF NOT EXISTS app_meta (
+				key TEXT PRIMARY KEY,
+				value TEXT NOT NULL
+			);
+
+			CREATE TABLE IF NOT EXISTS projects (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL,
+				path TEXT NOT NULL UNIQUE,
+				created_at TEXT NOT NULL,
+				accessed TEXT NOT NULL
+			);
+
+			CREATE TABLE IF NOT EXISTS agents (
+				id TEXT PRIMARY KEY,
+				project_id TEXT NOT NULL,
+				name TEXT NOT NULL DEFAULT '',
+				model TEXT NOT NULL,
+				scope_path TEXT,
+				effort TEXT NOT NULL
+			);
+
+			CREATE TABLE IF NOT EXISTS task (
+				id TEXT PRIMARY KEY,
+				batch_id TEXT NOT NULL,
+				agent_id TEXT NOT NULL,
+				status TEXT NOT NULL,
+				description TEXT
+			);
+
+			CREATE TABLE IF NOT EXISTS batch (
+				id TEXT PRIMARY KEY,
+				agent_id TEXT NOT NULL,
+				summary TEXT NOT NULL
+			);
+
+			INSERT INTO app_meta (key, value)
+			VALUES ('schema_version', '1')
+			ON CONFLICT(key) DO NOTHING;
+		`)
+
+		const versionRow = await this.get<{ value: string } | undefined>(
+			`SELECT value FROM app_meta WHERE key = 'schema_version'`,
+			[]
+		)
+		const storedVersion = versionRow ? Number(versionRow.value) : 0
+
+		if (storedVersion < 2) {
+			// Recreate agents with FK + name column — must disable FK enforcement during DDL
+			await this.exec(`
+				BEGIN TRANSACTION;
+				CREATE TABLE agents_new (
+					id TEXT PRIMARY KEY,
+					project_id TEXT NOT NULL,
+					name TEXT NOT NULL DEFAULT '',
+					model TEXT NOT NULL,
+					scope_path TEXT,
+					effort TEXT NOT NULL,
+					FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+				);
+				INSERT INTO agents_new (id, project_id, name, model, scope_path, effort)
+					SELECT id, project_id, '', model, scope_path, effort FROM agents;
+				DROP TABLE agents;
+				ALTER TABLE agents_new RENAME TO agents;
+				COMMIT;
+			`)
+		}
+
+		await this.run(
+			`INSERT INTO app_meta (key, value) VALUES ('schema_version', ?)
+			 ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+			[String(SCHEMA_VERSION)]
+		)
+
+		// Re-enable FK enforcement for the lifetime of this connection
+		await this.exec(`PRAGMA foreign_keys = ON`)
 	}
 
 	async getInfo(): Promise<DatabaseInfo> {
