@@ -1,23 +1,32 @@
 import type { JSX } from "react"
+import { motion } from "motion/react"
 import { AlertTriangle, FileText, ListChecks, Terminal, Wrench } from "lucide-react"
 import type { TranscriptActivity, TranscriptBlock } from "./chatTranscriptModel"
+
+const blockEnter = {
+	initial: { opacity: 0, y: 4 },
+	animate: { opacity: 1, y: 0 },
+	transition: { duration: 0.18, ease: [0.2, 0, 0, 1] as [number, number, number, number] }
+}
 
 export function TranscriptBlockView({ block }: { block: TranscriptBlock }): JSX.Element {
 	if (block.kind === "user") {
 		return (
-			<article
+			<motion.article
+				{...blockEnter}
 				data-selectable-text
-				className="ml-auto max-w-[78%] select-text rounded-lg bg-white px-3 py-2 text-sm text-zinc-950"
+				className="ml-auto max-w-[78%] select-text rounded-2xl bg-zinc-100 px-3.5 py-2 text-sm leading-6 text-zinc-950 shadow-[0_1px_0_0_rgba(255,255,255,0.04)]"
 			>
 				<p className="whitespace-pre-wrap">{block.message.text}</p>
-			</article>
+			</motion.article>
 		)
 	}
 
 	return (
-		<article
+		<motion.article
+			{...blockEnter}
 			data-selectable-text
-			className="mr-auto flex max-w-[86%] select-text flex-col gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm leading-6 text-zinc-100"
+			className="mr-auto flex max-w-[86%] select-text flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-2 text-sm leading-6 text-zinc-100"
 		>
 			{block.items.map((item) => {
 				if (item.kind === "text") {
@@ -30,7 +39,7 @@ export function TranscriptBlockView({ block }: { block: TranscriptBlock }): JSX.
 				return <ActivityInline key={item.activity.id} activity={item.activity} />
 			})}
 			{block.streaming ? <StreamingDots /> : null}
-		</article>
+		</motion.article>
 	)
 }
 
@@ -100,12 +109,22 @@ function activityMeta(kind: string): {
 	}
 }
 
-function StreamingDots(): JSX.Element {
+export function StreamingDots(): JSX.Element {
 	return (
 		<span className="mt-1 flex items-center gap-1">
-			<span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:0ms]" />
-			<span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:150ms]" />
-			<span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:300ms]" />
+			{[0, 0.15, 0.3].map((delay) => (
+				<motion.span
+					key={delay}
+					className="inline-block h-1.5 w-1.5 rounded-full bg-zinc-400"
+					animate={{ opacity: [0.25, 1, 0.25], y: [0, -2, 0] }}
+					transition={{
+						duration: 1.05,
+						repeat: Infinity,
+						ease: "easeInOut",
+						delay
+					}}
+				/>
+			))}
 		</span>
 	)
 }

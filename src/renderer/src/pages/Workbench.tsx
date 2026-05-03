@@ -298,8 +298,6 @@ export default function Workbench() {
 		<div className="flex h-screen flex-col bg-neutral-950 text-white">
 			<TopBar
 				activeAgentCount={activeAgentCount}
-				activeProject={selectedProject}
-				activeWorkspace={selectedWorkspace}
 				currentPage={currentPage}
 				onTabChange={setProjectPage}
 				onToggleSidebar={() => setSidebarOpen((open) => !open)}

@@ -49,6 +49,9 @@ import type {
 	GitDiffTour,
 	GitPushInput,
 	GitPushResult,
+	GitRunStackedActionInput,
+	GitRunStackedActionResult,
+	GitStackedActionProgressEvent,
 	GitStatusSnapshot,
 	GitWorkingTreeDiffSnapshot
 } from "../main/git/ipc"
@@ -86,6 +89,10 @@ interface BeaverApi {
 		generateDiffTour: (workspaceId: string) => Promise<GitDiffTour>
 		commitAll: (input: GitCommitAllInput) => Promise<GitCommitResult>
 		push: (input: GitPushInput) => Promise<GitPushResult>
+		runStackedAction: (input: GitRunStackedActionInput) => Promise<GitRunStackedActionResult>
+		onStackedActionProgress: (
+			listener: (event: GitStackedActionProgressEvent) => void
+		) => () => void
 	}
 	db: {
 		getInfo: () => Promise<DatabaseInfo>

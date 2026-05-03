@@ -1,4 +1,5 @@
 import AgentCard, { type CreateSide } from "./AgentCard"
+import { GitLaneActions } from "../../GitLaneActions"
 import {
 	CARD_H,
 	CARD_W,
@@ -72,11 +73,14 @@ export function ControlPanelCanvas({
 						className="pointer-events-none absolute left-0 right-0 border-t border-white/8"
 						style={{ top: y, height: CARD_H + LANE_LABEL_GUTTER }}
 					>
-						<span className="absolute top-3 left-8 max-w-96 truncate rounded bg-neutral-950 px-2 py-1 text-[11px] font-medium text-neutral-500">
-							<span className="text-neutral-400">{workspace.projectName}</span>
-							<span className="px-1 text-neutral-700">/</span>
-							{workspace.name}
-						</span>
+						<div className="absolute top-4 left-8 flex max-w-[680px] items-center gap-2">
+							<span className="truncate rounded bg-neutral-950 px-2 py-1 text-[11px] font-medium text-neutral-500">
+								<span className="text-neutral-400">{workspace.projectName}</span>
+								<span className="px-1 text-neutral-700">/</span>
+								{workspace.name}
+							</span>
+							<GitLaneActions workspaceId={workspace.id} workspaceName={workspace.name} />
+						</div>
 						{active && !hasCards ? (
 							<div
 								className="pointer-events-auto absolute"

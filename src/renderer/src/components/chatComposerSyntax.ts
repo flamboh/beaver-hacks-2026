@@ -30,7 +30,7 @@ export function activeComposerToken(text: string, cursor: number): ComposerToken
 
 	const firstLineEnd = text.indexOf("\n")
 	const firstLine = firstLineEnd === -1 ? text : text.slice(0, firstLineEnd)
-	if (bounds.start === 0 && token.startsWith("/") && !firstLine.startsWith("/ ")) {
+	if (token.startsWith("/") && !firstLine.startsWith("/ ")) {
 		return { kind: "skill", query: token.slice(1), ...bounds }
 	}
 

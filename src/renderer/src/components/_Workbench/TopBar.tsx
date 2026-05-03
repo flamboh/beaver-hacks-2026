@@ -1,10 +1,7 @@
-import { AlertTriangle, GitBranch, PanelLeft } from "lucide-react"
+import { AlertTriangle, PanelLeft } from "lucide-react"
 import logoUrl from "@renderer/assets/logo.png"
-import { useGitStatus } from "@renderer/agentStore"
-import { GitCommitMenu } from "../GitCommitMenu"
-import type { WorkspaceRow } from "src/main/db/contracts"
 import { useNavigate } from "react-router-dom"
-import type { ProjectRow, WorkbenchTab } from "@renderer/types/models"
+import type { WorkbenchTab } from "@renderer/types/models"
 
 const navItems: { label: string; tab: WorkbenchTab }[] = [
 	{ label: "Control Panel", tab: "control-panel" },
@@ -16,8 +13,6 @@ const navItems: { label: string; tab: WorkbenchTab }[] = [
 
 interface Props {
 	activeAgentCount: number
-	activeProject: Pick<ProjectRow, "name"> | null
-	activeWorkspace: WorkspaceRow | null
 	currentPage: WorkbenchTab
 	onToggleSidebar: () => void
 	onTabChange: (tab: WorkbenchTab) => void
@@ -25,15 +20,11 @@ interface Props {
 
 export default function TopBar({
 	activeAgentCount,
-	activeProject,
-	activeWorkspace,
 	currentPage,
 	onToggleSidebar,
 	onTabChange
 }: Props) {
 	const navigate = useNavigate()
-	const workspaceId = activeWorkspace?.id ?? null
-	const status = useGitStatus(workspaceId ?? "")
 
 	return (
 		<div className="relative flex h-11 w-full shrink-0 items-center gap-3 border-b border-white/5 bg-neutral-900 px-3">
@@ -89,25 +80,7 @@ export default function TopBar({
 						<AlertTriangle size={14} />
 					</span>
 				) : null}
-				<div className="flex min-w-0 items-center gap-1.5 rounded-md border border-white/8 bg-white/[0.03] px-2 py-1">
-					<span className="max-w-48 truncate text-xs text-neutral-300">
-						{activeProject?.name ?? "No project"}
-					</span>
-					<span className="text-xs text-neutral-700">/</span>
-					<span className="max-w-44 truncate text-xs text-neutral-500">
-						{activeWorkspace?.name ?? "No workspace"}
-					</span>
-				</div>
-				<div className="flex min-w-0 items-center gap-1.5 rounded-md border border-white/8 bg-white/[0.03] px-2 py-1 text-xs text-neutral-500">
-					<GitBranch size={13} className="shrink-0 text-neutral-600" />
-					<span className="max-w-32 truncate">{status?.branch ?? "no branch"}</span>
-					{status?.files.length ? (
-						<span className="shrink-0 text-amber-300">{status.files.length} changed</span>
-					) : null}
-				</div>
-				<GitCommitMenu workspaceId={workspaceId} />
 			</div>
-			<span className="shrink-0 text-xs tabular-nums text-neutral-600">v1.1.0</span>
 		</div>
 	)
 }
