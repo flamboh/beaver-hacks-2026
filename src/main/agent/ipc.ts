@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain } from "electron"
 import { AgentEngine } from "./agentEngine"
+import type { GenerateAgentNameInput, GenerateAgentNameResult } from "./agentNaming"
 import type { AgentSnapshot, FindSkillsInput, InstallSkillInput, StartTurnInput } from "./contracts"
 
 const SNAPSHOT_EVENT = "agent:snapshot"
@@ -11,6 +12,11 @@ export function registerAgentIpc(engine: AgentEngine): void {
 	ipcMain.handle("agent:install-skill", (_event, input: InstallSkillInput) =>
 		engine.installSkill(input)
 	)
+	ipcMain.handle(
+		"agent:generate-name",
+		(_event, input: GenerateAgentNameInput): Promise<GenerateAgentNameResult> =>
+			engine.generateAgentName(input)
+	)
 
 	engine.onSnapshot((snapshot) => {
 		for (const window of BrowserWindow.getAllWindows()) {
@@ -19,5 +25,12 @@ export function registerAgentIpc(engine: AgentEngine): void {
 	})
 }
 
-export type { AgentSnapshot, FindSkillsInput, InstallSkillInput, StartTurnInput }
+export type {
+	AgentSnapshot,
+	FindSkillsInput,
+	GenerateAgentNameInput,
+	GenerateAgentNameResult,
+	InstallSkillInput,
+	StartTurnInput
+}
 export { SNAPSHOT_EVENT }

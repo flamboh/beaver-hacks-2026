@@ -3,6 +3,8 @@ import { electronAPI } from "@electron-toolkit/preload"
 import type {
 	AgentSnapshot,
 	FindSkillsInput,
+	GenerateAgentNameInput,
+	GenerateAgentNameResult,
 	InstallSkillInput,
 	StartTurnInput
 } from "../main/agent/ipc"
@@ -55,6 +57,8 @@ const api = {
 			ipcRenderer.invoke("agent:find-skills", input),
 		installSkill: (input: InstallSkillInput): Promise<AgentSnapshot> =>
 			ipcRenderer.invoke("agent:install-skill", input),
+		generateName: (input: GenerateAgentNameInput): Promise<GenerateAgentNameResult> =>
+			ipcRenderer.invoke("agent:generate-name", input),
 		onSnapshot: (listener: (snapshot: AgentSnapshot) => void): (() => void) => {
 			const handler = (_event: Electron.IpcRendererEvent, snapshot: AgentSnapshot): void => {
 				listener(snapshot)

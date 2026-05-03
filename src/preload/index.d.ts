@@ -2,6 +2,8 @@ import { ElectronAPI } from "@electron-toolkit/preload"
 import type {
 	AgentSnapshot,
 	FindSkillsInput,
+	GenerateAgentNameInput,
+	GenerateAgentNameResult,
 	InstallSkillInput,
 	StartTurnInput
 } from "../main/agent/ipc"
@@ -50,6 +52,7 @@ interface BeaverApi {
 		startTurn: (input: StartTurnInput) => Promise<AgentSnapshot>
 		findSkills: (input: FindSkillsInput) => Promise<AgentSnapshot>
 		installSkill: (input: InstallSkillInput) => Promise<AgentSnapshot>
+		generateName: (input: GenerateAgentNameInput) => Promise<GenerateAgentNameResult>
 		onSnapshot: (listener: (snapshot: AgentSnapshot) => void) => () => void
 	}
 	git: {
