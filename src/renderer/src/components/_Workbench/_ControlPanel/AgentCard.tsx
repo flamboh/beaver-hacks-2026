@@ -247,7 +247,6 @@ export default function AgentCard({
 								onSpeedTierChange={setSpeedTier}
 								onFirstMessage={handleFirstMessage}
 								provider={agent.provider}
-								workspaceId={workspaceId}
 							/>
 						</div>
 					</div>

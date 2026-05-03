@@ -8,7 +8,8 @@ import type {
 	GitDiffTour,
 	GitCommitMessage,
 	GitCreateBranchInput,
-	GitPushInput
+	GitPushInput,
+	GitRunStackedActionInput
 } from "./contracts"
 
 async function resolveWorkspaceCwd(
@@ -70,6 +71,38 @@ export function registerGitIpc(
 			}
 		}
 	})
+	ipcMain.handle("git:run-stacked-action", async (_event, input: GitRunStackedActionInput) => {
+		const workspace = await resolveWorkspaceCwd(database, input.workspaceId)
+		const result = await git.runStackedAction({
+			...input,
+			cwd: workspace.cwd,
+			onProgress: (progress) => {
+				_event.sender.send("git:stacked-action-progress", {
+					...progress,
+					workspaceId: workspace.workspaceId
+				})
+			},
+			createPrContent: async (cwd) => {
+				const prompt = await git.buildPullRequestPrompt(cwd)
+				const raw = await agentEngine.runOneShot({
+					cwd,
+					prompt,
+					model: MINI_MODEL,
+					runtimeMode: "approval-required",
+					timeoutMs: 60_000
+				})
+				return git.parsePullRequestContent(raw)
+			}
+		})
+		return {
+			...result,
+			status: {
+				...result.status,
+				workspaceId: workspace.workspaceId,
+				workspacePath: workspace.workspacePath
+			}
+		}
+	})
 	ipcMain.handle(
 		"git:generate-commit-message",
 		async (_event, workspaceId: string): Promise<GitCommitMessage> => {
@@ -111,6 +144,10 @@ export type {
 	GitCreateBranchInput,
 	GitPushInput,
 	GitPushResult,
+	GitRunStackedActionInput,
+	GitRunStackedActionResult,
+	GitStackedActionProgressEvent,
+	GitStackedAction,
 	GitStatusSnapshot,
 	GitWorkingTreeDiffSnapshot
 } from "./contracts"

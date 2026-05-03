@@ -1,22 +1,22 @@
-import { execFile } from "node:child_process"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import type {
-	GitBranch,
 	GitCommitMessage,
 	GitCommitResult,
 	GitDiffTour,
-	GitFileChange,
+	GitPullRequestContent,
 	GitPushResult,
+	GitRunStackedActionInput,
+	GitRunStackedActionResult,
+	GitStackedActionProgressEvent,
 	GitStatusSnapshot,
+	GitStackedAction,
 	GitWorkingTreeDiffSnapshot
 } from "./contracts"
+import { DEFAULT_MAX_BUFFER, runGh, runGit, runGitAllowExit } from "./gitCommands"
+import { parseBranches, parseNumstat, parseStatus } from "./gitParsers"
 
-interface GitResult {
-	stdout: string
-	stderr: string
-}
-
-const DEFAULT_TIMEOUT_MS = 30_000
-const DEFAULT_MAX_BUFFER = 2 * 1024 * 1024
 const COMMIT_CONTEXT_MAX_BUFFER = 256 * 1024
 const MINI_MODEL = "gpt-5.4-mini"
 const TOUR_MODEL = "gpt-5.5"
@@ -39,161 +39,13 @@ interface GitCwdCommitInput extends GitCwdInput {
 	body?: string
 }
 
+interface GitRunStackedActionServiceInput extends GitCwdInput, GitRunStackedActionInput {
+	onProgress?: (event: Omit<GitStackedActionProgressEvent, "workspaceId">) => void
+	createPrContent?: (cwd: string) => Promise<GitPullRequestContent>
+}
+
 function nowIso(): string {
 	return new Date().toISOString()
-}
-
-function runGit(
-	cwd: string,
-	args: readonly string[],
-	maxBuffer = DEFAULT_MAX_BUFFER
-): Promise<GitResult> {
-	return new Promise((resolve, reject) => {
-		execFile(
-			"git",
-			[...args],
-			{ cwd, timeout: DEFAULT_TIMEOUT_MS, maxBuffer },
-			(error, stdout, stderr) => {
-				if (error) {
-					reject(new Error((stderr || error.message).trim()))
-					return
-				}
-				resolve({ stdout, stderr })
-			}
-		)
-	})
-}
-
-function runGitAllowExit(
-	cwd: string,
-	args: readonly string[],
-	allowedCodes: readonly string[],
-	maxBuffer = DEFAULT_MAX_BUFFER
-): Promise<GitResult> {
-	return new Promise((resolve, reject) => {
-		execFile(
-			"git",
-			[...args],
-			{ cwd, timeout: DEFAULT_TIMEOUT_MS, maxBuffer },
-			(error, stdout, stderr) => {
-				if (error && !allowedCodes.includes(String((error as { code?: unknown }).code))) {
-					reject(new Error((stderr || error.message).trim()))
-					return
-				}
-				resolve({ stdout, stderr })
-			}
-		)
-	})
-}
-
-function parseBranchAb(line: string): { ahead: number; behind: number } {
-	const match = /^# branch\.ab \+(\d+) -(\d+)$/.exec(line.trim())
-	return {
-		ahead: Number(match?.[1] ?? "0"),
-		behind: Number(match?.[2] ?? "0")
-	}
-}
-
-function parseStatusPath(line: string): string | null {
-	if (line.startsWith("? ") || line.startsWith("! ")) {
-		const path = line.slice(2).trim()
-		return path.length > 0 ? path : null
-	}
-
-	if (line.startsWith("1 ")) {
-		const fields = line.trim().split(/\s+/g)
-		const path = fields.slice(8).join(" ").trim()
-		return path.length > 0 ? path : null
-	}
-
-	if (line.startsWith("u ")) {
-		const fields = line.trim().split(/\s+/g)
-		const path = fields.slice(10).join(" ").trim()
-		return path.length > 0 ? path : null
-	}
-
-	if (line.startsWith("2 ")) {
-		const fields = line.split("\t")[0]?.trim().split(/\s+/g) ?? []
-		const path = fields.slice(9).join(" ").trim()
-		return path.length > 0 ? path : null
-	}
-
-	const tabParts = line.split("\t")
-	const fromTab = tabParts.at(-1)?.trim() ?? ""
-	if (fromTab.length > 0 && tabParts.length > 1) return fromTab
-
-	const spaceParts = line.trim().split(/\s+/g)
-	const path = spaceParts.at(-1)?.trim() ?? ""
-	return path.length > 0 ? path : null
-}
-
-function parseFileStatus(line: string): string {
-	if (line.startsWith("? ")) return "untracked"
-	if (line.startsWith("! ")) return "ignored"
-	if (line.startsWith("u ")) return "conflict"
-	if (line.startsWith("2 ")) return "renamed"
-	if (line.startsWith("1 ")) return line.slice(2, 4).trim() || "modified"
-	return "modified"
-}
-
-function parseStatus(stdout: string): {
-	branch: string | null
-	upstream: string | null
-	ahead: number
-	behind: number
-	files: GitFileChange[]
-} {
-	let branch: string | null = null
-	let upstream: string | null = null
-	let ahead = 0
-	let behind = 0
-	const files: GitFileChange[] = []
-
-	for (const line of stdout.split(/\r?\n/g)) {
-		if (line.startsWith("# branch.head ")) {
-			const value = line.slice("# branch.head ".length).trim()
-			branch = value === "(detached)" ? null : value
-			continue
-		}
-		if (line.startsWith("# branch.upstream ")) {
-			upstream = line.slice("# branch.upstream ".length).trim() || null
-			continue
-		}
-		if (line.startsWith("# branch.ab ")) {
-			const parsed = parseBranchAb(line)
-			ahead = parsed.ahead
-			behind = parsed.behind
-			continue
-		}
-		if (line.length === 0 || line.startsWith("# ")) continue
-
-		const path = parseStatusPath(line)
-		if (path) files.push({ path, status: parseFileStatus(line) })
-	}
-
-	return { branch, upstream, ahead, behind, files }
-}
-
-function parseBranches(stdout: string, currentBranch: string | null): GitBranch[] {
-	return stdout
-		.split(/\r?\n/g)
-		.map((name) => name.trim())
-		.filter(Boolean)
-		.slice(0, 200)
-		.map((name) => ({ name, current: name === currentBranch }))
-}
-
-function parseNumstat(stdout: string): { insertions: number; deletions: number } {
-	let insertions = 0
-	let deletions = 0
-	for (const line of stdout.split(/\r?\n/g)) {
-		const [addedRaw, deletedRaw] = line.split("\t")
-		const added = Number.parseInt(addedRaw ?? "0", 10)
-		const deleted = Number.parseInt(deletedRaw ?? "0", 10)
-		insertions += Number.isFinite(added) ? added : 0
-		deletions += Number.isFinite(deleted) ? deleted : 0
-	}
-	return { insertions, deletions }
 }
 
 function normalizeBranchName(branch: string): string {
@@ -201,6 +53,23 @@ function normalizeBranchName(branch: string): string {
 		.trim()
 		.replace(/[^A-Za-z0-9._/-]+/g, "-")
 		.replace(/^[-/]+|[-/]+$/g, "")
+}
+
+function actionNeedsCommit(action: GitStackedAction): boolean {
+	return action === "commit" || action === "commit_push" || action === "commit_push_pr"
+}
+
+function actionNeedsPush(action: GitStackedAction): boolean {
+	return (
+		action === "push" ||
+		action === "create_pr" ||
+		action === "commit_push" ||
+		action === "commit_push_pr"
+	)
+}
+
+function actionNeedsPr(action: GitStackedAction): boolean {
+	return action === "create_pr" || action === "commit_push_pr"
 }
 
 async function buildUntrackedPatch(cwd: string): Promise<string> {
@@ -314,6 +183,82 @@ export class GitService {
 		return { status: await this.status(input.cwd) }
 	}
 
+	async createPullRequest(input: GitCwdInput & GitPullRequestContent): Promise<string | null> {
+		const dir = await mkdtemp(path.join(tmpdir(), "beaver-pr-"))
+		const bodyFile = path.join(dir, "body.md")
+		try {
+			await writeFile(bodyFile, input.body, "utf8")
+			const result = await runGh(input.cwd, [
+				"pr",
+				"create",
+				"--title",
+				input.title,
+				"--body-file",
+				bodyFile
+			])
+			const url = result.stdout
+				.split(/\r?\n/g)
+				.map((line) => line.trim())
+				.find((line) => /^https?:\/\//.test(line))
+			return url ?? null
+		} finally {
+			await rm(dir, { recursive: true, force: true })
+		}
+	}
+
+	async runStackedAction(
+		input: GitRunStackedActionServiceInput
+	): Promise<GitRunStackedActionResult> {
+		let commitSha: string | null = null
+		let prUrl: string | null = null
+		let prContent: GitPullRequestContent | null = null
+		const actionId = input.actionId ?? ""
+		const progress = (
+			phase: GitStackedActionProgressEvent["phase"],
+			status: GitStackedActionProgressEvent["status"],
+			command: string,
+			message: string
+		) => input.onProgress?.({ actionId, phase, status, command, message })
+
+		if (actionNeedsCommit(input.action)) {
+			progress("commit", "started", "git add -A && git commit", "Committing changes.")
+			const commit = await this.commitAll({
+				cwd: input.cwd,
+				subject: input.subject ?? "",
+				body: input.body
+			})
+			commitSha = commit.commitSha
+			progress("commit", "finished", "git commit", `Created commit ${commitSha}.`)
+		}
+
+		if (actionNeedsPr(input.action)) {
+			progress("pr", "started", "mini one-shot", "Generating PR title and description.")
+			if (!input.createPrContent) throw new Error("PR content generator unavailable.")
+			prContent = await input.createPrContent(input.cwd)
+			progress("pr", "finished", "mini one-shot", "PR content generated.")
+		}
+
+		if (actionNeedsPush(input.action)) {
+			progress("push", "started", "git push", "Pushing branch.")
+			await this.push({ cwd: input.cwd })
+			progress("push", "finished", "git push", "Push finished.")
+		}
+
+		if (actionNeedsPr(input.action)) {
+			progress("pr", "started", "gh pr create", "Creating pull request.")
+			if (!prContent) throw new Error("PR content unavailable.")
+			prUrl = await this.createPullRequest({ cwd: input.cwd, ...prContent })
+			progress("pr", "finished", "gh pr create", prUrl ? `Created ${prUrl}.` : "PR created.")
+		}
+
+		return {
+			action: input.action,
+			commitSha,
+			prUrl,
+			status: await this.status(input.cwd)
+		}
+	}
+
 	async workingTreeDiff(
 		cwd = process.cwd(),
 		meta: GitWorkspaceMeta = {}
@@ -396,6 +341,42 @@ export class GitService {
 		].join("\n")
 	}
 
+	async buildPullRequestPrompt(cwd: string): Promise<string> {
+		const status = await this.status(cwd)
+		const originHead = await runGit(cwd, ["symbolic-ref", "refs/remotes/origin/HEAD", "--short"])
+			.then((result) => result.stdout.trim())
+			.catch(() => "")
+		const base = originHead || status.upstream || "HEAD~10"
+		const [commits, stat, patch] = await Promise.all([
+			runGit(cwd, ["log", "--oneline", `${base}..HEAD`], COMMIT_CONTEXT_MAX_BUFFER).catch(() => ({
+				stdout: "",
+				stderr: ""
+			})),
+			runGit(cwd, ["diff", "--stat", base, "HEAD", "--"], COMMIT_CONTEXT_MAX_BUFFER).catch(() => ({
+				stdout: "",
+				stderr: ""
+			})),
+			runGit(
+				cwd,
+				["diff", "--patch", "--minimal", "--no-color", base, "HEAD", "--"],
+				COMMIT_CONTEXT_MAX_BUFFER
+			).catch(() => ({ stdout: "", stderr: "" }))
+		])
+		return [
+			"Write GitHub pull request content for these branch changes.",
+			'Return only JSON: {"title":"concise PR title","body":"markdown PR description"}.',
+			"Title should be under 72 chars. Body should be useful to a maintainer.",
+			"Body must include a short summary and validation/testing notes when inferable.",
+			"Do not invent tests or implementation details absent from context.",
+			"",
+			`Branch: ${status.branch ?? "detached"}`,
+			`Base: ${base}`,
+			`Commits:\n${commits.stdout.trim() || "(none)"}`,
+			`Stat:\n${stat.stdout.trim() || "(none)"}`,
+			`Patch:\n${patch.stdout.slice(0, 60_000).trim() || "(not available)"}`
+		].join("\n")
+	}
+
 	parseDiffTour(raw: string): GitDiffTour {
 		return {
 			tour: raw.trim(),
@@ -410,6 +391,16 @@ export class GitService {
 		return {
 			subject: parsed.subject.trim(),
 			body: parsed.body?.trim() ?? ""
+		}
+	}
+
+	parsePullRequestContent(raw: string): GitPullRequestContent {
+		const match = /\{[\s\S]*\}/.exec(raw.trim())
+		if (!match) throw new Error("Mini model did not return JSON.")
+		const parsed = JSON.parse(match[0]) as GitPullRequestContent
+		return {
+			title: parsed.title.trim(),
+			body: parsed.body.trim()
 		}
 	}
 }

@@ -1,5 +1,11 @@
-import { useState } from "react"
-import { ChevronRight, FolderKanban, GitBranch, Plus, Trash2 } from "lucide-react"
+import {
+	ChevronRight,
+	FolderKanban,
+	FolderPlus,
+	GitBranch,
+	GitBranchPlus,
+	Trash2
+} from "lucide-react"
 import type { ProjectRow } from "@renderer/types/models"
 import type { WorkspaceRow } from "src/main/db/contracts"
 
@@ -46,20 +52,7 @@ export default function SideBar({
 	projects,
 	workspacesByProjectId
 }: Props) {
-	const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set())
-	const toggleProject = (projectId: string) => {
-		setExpandedProjectIds((current) => {
-			const next = new Set(current)
-			if (current.has(projectId)) {
-				next.delete(projectId)
-			} else {
-				next.add(projectId)
-			}
-			return next
-		})
-	}
 	const selectProject = (project: ProjectRow) => {
-		toggleProject(project.id)
 		onProjectSelect(project)
 	}
 
@@ -69,17 +62,14 @@ export default function SideBar({
 			style={{ width: open ? SIDEBAR_WIDTH : 0 }}
 		>
 			<div className="flex min-h-0 flex-1 flex-col" style={{ width: SIDEBAR_WIDTH }}>
-				<div className="flex h-[60px] items-center border-b border-white/5 px-3">
+				<div className="flex h-10 items-center border-b border-white/5 px-3">
 					<div
 						className="flex min-w-0 flex-1 items-center gap-2 p-1 transition-opacity duration-150 ease-in-out"
 						style={{ opacity: open ? 1 : 0 }}
 					>
-						<div className="min-w-0 flex-1">
-							<p className="mb-0.5 text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
-								Projects
-							</p>
-							<p className="text-sm font-medium text-neutral-300">{projects.length} total</p>
-						</div>
+						<p className="min-w-0 flex-1 text-[10px] font-medium tracking-widest text-neutral-500 uppercase">
+							Projects
+						</p>
 						<button
 							type="button"
 							onClick={onNewProject}
@@ -87,7 +77,7 @@ export default function SideBar({
 							aria-label="Create project"
 							title="Create project"
 						>
-							<Plus size={15} />
+							<FolderPlus size={15} />
 						</button>
 					</div>
 				</div>
@@ -99,7 +89,6 @@ export default function SideBar({
 					<nav className="flex flex-col gap-0.5">
 						{sortProjects(projects).map((project) => {
 							const active = activeProjectId === project.id
-							const expanded = active || expandedProjectIds.has(project.id)
 							const workspaces = sortWorkspaces(workspacesByProjectId.get(project.id) ?? [])
 							return (
 								<div key={project.id} className="flex flex-col">
@@ -112,17 +101,12 @@ export default function SideBar({
 									>
 										<button
 											type="button"
-											onClick={() => toggleProject(project.id)}
+											onClick={() => selectProject(project)}
 											className="flex size-8 shrink-0 cursor-pointer items-center justify-center text-neutral-500 transition-colors duration-150 hover:text-neutral-200"
-											aria-label={
-												expanded ? "Collapse project workspaces" : "Expand project workspaces"
-											}
-											title={expanded ? "Collapse" : "Expand"}
+											aria-label={`Select ${project.name}`}
+											title={project.name}
 										>
-											<ChevronRight
-												size={14}
-												className={`transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
-											/>
+											<ChevronRight size={14} className="rotate-90" />
 										</button>
 										<button
 											type="button"
@@ -144,50 +128,48 @@ export default function SideBar({
 											aria-label={`Create worktree for ${project.name}`}
 											title="Create worktree"
 										>
-											<Plus size={14} />
+											<GitBranchPlus size={14} />
 										</button>
 									</div>
-									{expanded ? (
-										<div className="ml-5 flex flex-col gap-0.5 py-0.5">
-											{workspaces.map((workspace) => {
-												const workspaceActive =
-													activeProjectId === project.id && activeWorkspaceId === workspace.id
-												return (
-													<div
-														key={workspace.id}
-														className={`group/workspace flex items-center rounded-md text-xs whitespace-nowrap transition-colors duration-150 ${
-															workspaceActive
-																? "bg-white/8 text-neutral-100"
-																: "text-neutral-600 hover:bg-white/5 hover:text-neutral-300"
-														}`}
+									<div className="ml-5 flex flex-col gap-0.5 py-0.5">
+										{workspaces.map((workspace) => {
+											const workspaceActive =
+												activeProjectId === project.id && activeWorkspaceId === workspace.id
+											return (
+												<div
+													key={workspace.id}
+													className={`group/workspace flex items-center rounded-md text-xs whitespace-nowrap transition-colors duration-150 ${
+														workspaceActive
+															? "bg-white/8 text-neutral-100"
+															: "text-neutral-600 hover:bg-white/5 hover:text-neutral-300"
+													}`}
+												>
+													<button
+														type="button"
+														onClick={() => onWorkspaceSelect(project, workspace)}
+														className="flex min-w-0 flex-1 cursor-pointer items-center px-4 py-2.5 text-left"
+														title={workspace.name}
 													>
-														<button
-															type="button"
-															onClick={() => onWorkspaceSelect(project, workspace)}
-															className="flex min-w-0 flex-1 cursor-pointer items-center px-4 py-2.5 text-left"
-															title={workspace.name}
-														>
-															<GitBranch
-																size={13}
-																className="mr-2 shrink-0 text-neutral-600"
-																aria-hidden="true"
-															/>
-															<span className="min-w-0 truncate">{workspace.name}</span>
-														</button>
-														<button
-															type="button"
-															onClick={() => onWorkspaceDelete(workspace)}
-															className="mr-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-neutral-700 opacity-0 transition-all duration-150 group-hover/workspace:opacity-100 hover:bg-red-500/10 hover:text-red-300"
-															aria-label={`Delete workspace ${workspace.name}`}
-															title="Delete workspace"
-														>
-															<Trash2 size={13} />
-														</button>
-													</div>
-												)
-											})}
-										</div>
-									) : null}
+														<GitBranch
+															size={13}
+															className="mr-2 shrink-0 text-neutral-600"
+															aria-hidden="true"
+														/>
+														<span className="min-w-0 truncate">{workspace.name}</span>
+													</button>
+													<button
+														type="button"
+														onClick={() => onWorkspaceDelete(workspace)}
+														className="mr-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-neutral-700 opacity-0 transition-all duration-150 group-hover/workspace:opacity-100 hover:bg-red-500/10 hover:text-red-300"
+														aria-label={`Delete workspace ${workspace.name}`}
+														title="Delete workspace"
+													>
+														<Trash2 size={13} />
+													</button>
+												</div>
+											)
+										})}
+									</div>
 								</div>
 							)
 						})}

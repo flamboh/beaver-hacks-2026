@@ -50,6 +50,9 @@ import type {
 	GitDiffTour,
 	GitPushInput,
 	GitPushResult,
+	GitRunStackedActionInput,
+	GitRunStackedActionResult,
+	GitStackedActionProgressEvent,
 	GitStatusSnapshot,
 	GitWorkingTreeDiffSnapshot
 } from "../main/git/ipc"
@@ -107,7 +110,19 @@ const api = {
 			ipcRenderer.invoke("git:generate-diff-tour", workspaceId),
 		commitAll: (input: GitCommitAllInput): Promise<GitCommitResult> =>
 			ipcRenderer.invoke("git:commit-all", input),
-		push: (input: GitPushInput): Promise<GitPushResult> => ipcRenderer.invoke("git:push", input)
+		push: (input: GitPushInput): Promise<GitPushResult> => ipcRenderer.invoke("git:push", input),
+		runStackedAction: (input: GitRunStackedActionInput): Promise<GitRunStackedActionResult> =>
+			ipcRenderer.invoke("git:run-stacked-action", input),
+		onStackedActionProgress: (
+			listener: (event: GitStackedActionProgressEvent) => void
+		): (() => void) => {
+			const handler = (
+				_event: Electron.IpcRendererEvent,
+				progress: GitStackedActionProgressEvent
+			): void => listener(progress)
+			ipcRenderer.on("git:stacked-action-progress", handler)
+			return () => ipcRenderer.off("git:stacked-action-progress", handler)
+		}
 	},
 	db: {
 		getInfo: (): Promise<DatabaseInfo> => ipcRenderer.invoke("db:get-info")

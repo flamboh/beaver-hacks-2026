@@ -44,6 +44,11 @@ export interface GitDiffTour {
 	updatedAt: string
 }
 
+export interface GitPullRequestContent {
+	title: string
+	body: string
+}
+
 export interface GitCheckoutInput {
 	workspaceId: string
 	branch: string
@@ -71,4 +76,30 @@ export interface GitPushInput {
 
 export interface GitPushResult {
 	status: GitStatusSnapshot
+}
+
+export type GitStackedAction = "commit" | "push" | "create_pr" | "commit_push" | "commit_push_pr"
+
+export interface GitRunStackedActionInput {
+	workspaceId: string
+	actionId?: string
+	action: GitStackedAction
+	subject?: string
+	body?: string
+}
+
+export interface GitRunStackedActionResult {
+	action: GitStackedAction
+	commitSha: string | null
+	prUrl: string | null
+	status: GitStatusSnapshot
+}
+
+export interface GitStackedActionProgressEvent {
+	workspaceId: string
+	actionId: string
+	phase: "commit" | "push" | "pr"
+	status: "started" | "finished"
+	command: string
+	message: string
 }
