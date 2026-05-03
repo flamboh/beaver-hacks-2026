@@ -360,6 +360,7 @@ export default function ControlPanel({ workspaceId, workspacePath }: ControlPane
 						focusedIdx={focusedIdx}
 						offset={offset}
 						onFocus={setFocusedIdx}
+						onAgentDeleted={refetch}
 						onSnap={snapToCard}
 						smoothPan={smoothPan}
 						workspaceId={workspaceId}

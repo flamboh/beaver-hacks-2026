@@ -44,18 +44,19 @@ export function Chat({ thread, isRunning, cwd, workspaceId }: ChatProps): JSX.El
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<section className="nowheel nodrag min-h-0 flex-1 overflow-y-auto px-4 py-5">
-				<div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-					{thread ? (
-						thread.messages.map((message) => (
+				{thread ? (
+					<div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+						{thread.messages.map((message) => (
 							<article
 								key={message.id}
+								data-selectable-text
 								className={
 									message.role === "user"
-										? "ml-auto max-w-[78%] rounded-lg bg-white px-3 py-2 text-sm text-zinc-950"
-										: "mr-auto max-w-[86%] rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm leading-6 text-zinc-100"
+										? "ml-auto max-w-[78%] cursor-text select-text rounded-lg bg-white px-3 py-2 text-sm text-zinc-950"
+										: "mr-auto max-w-[86%] cursor-text select-text rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm leading-6 text-zinc-100"
 								}
 							>
-								<p className="whitespace-pre-wrap">{message.text}</p>
+								<p className="cursor-text select-text whitespace-pre-wrap">{message.text}</p>
 								{message.streaming ? (
 									<span className="mt-2 flex items-center gap-1">
 										<span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:0ms]" />
@@ -64,17 +65,19 @@ export function Chat({ thread, isRunning, cwd, workspaceId }: ChatProps): JSX.El
 									</span>
 								) : null}
 							</article>
-						))
-					) : (
-						<div className="mt-24 text-center">
+						))}
+					</div>
+				) : (
+					<div className="flex min-h-full items-center justify-center text-center">
+						<div>
 							<h2 className="text-lg font-medium text-zinc-100">Ask Codex</h2>
 							<p className="mt-2 text-sm text-zinc-500">Send a message to start the loop.</p>
 						</div>
-					)}
-				</div>
+					</div>
+				)}
 			</section>
 
-			<footer className="shrink-0 border-t border-white/10 bg-[#0c0c0f] p-4">
+			<footer className="nodrag shrink-0 cursor-default border-t border-white/10 bg-[#0c0c0f] p-4">
 				<form onSubmit={handleSubmit} className="mx-auto flex max-w-3xl gap-2">
 					<textarea
 						value={draft}
@@ -85,14 +88,14 @@ export function Chat({ thread, isRunning, cwd, workspaceId }: ChatProps): JSX.El
 								event.preventDefault()
 							}
 						}}
-						rows={2}
+						rows={1}
 						placeholder="Message Codex..."
-						className="min-h-12 flex-1 resize-none rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-white/20"
+						className="h-12 flex-1 resize-none rounded-lg border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-white/20"
 					/>
 					<button
 						type="submit"
 						disabled={!canSend}
-						className="h-12 rounded-lg bg-zinc-100 px-4 text-sm font-medium text-zinc-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+						className="h-12 cursor-pointer rounded-lg bg-zinc-100 px-4 text-sm font-medium text-zinc-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
 					>
 						Send
 					</button>

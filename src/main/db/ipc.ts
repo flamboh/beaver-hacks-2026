@@ -1,6 +1,6 @@
 import { ipcMain } from "electron"
 import { DatabaseService } from "./database"
-import { AgentService, CreateAgentInput } from "./agents"
+import { AgentService, CreateAgentInput, UpdateAgentInput } from "./agents"
 import { TaskService, CreateTaskInput } from "./tasks"
 
 import type {
@@ -53,6 +53,7 @@ export function registerDatabaseIpc(database: DatabaseService): void {
 	// agent handlers
 	ipcMain.handle("agent:list", (_event, projectId: string) => agents.listAgents(projectId))
 	ipcMain.handle("agent:create", (_event, input: CreateAgentInput) => agents.createAgent(input))
+	ipcMain.handle("agent:update", (_event, input: UpdateAgentInput) => agents.updateAgent(input))
 	ipcMain.handle("agent:delete", (_event, id: string) => agents.deleteAgent(id))
 
 	// task handlers
@@ -75,5 +76,5 @@ export type {
 } from "./contracts"
 
 export type { AgentRow, TaskRow } from "./contracts"
-export type { CreateAgentInput } from "./agents"
+export type { CreateAgentInput, UpdateAgentInput } from "./agents"
 export type { CreateTaskInput } from "./tasks"

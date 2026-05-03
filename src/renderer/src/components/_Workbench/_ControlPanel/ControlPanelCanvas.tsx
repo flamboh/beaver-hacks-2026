@@ -9,6 +9,7 @@ interface ControlPanelCanvasProps {
 	focusedIdx: number
 	offset: { x: number; y: number }
 	onFocus: (idx: number) => void
+	onAgentDeleted: () => void
 	onSnap: (idx: number) => void
 	smoothPan: boolean
 	workspaceId: string
@@ -23,6 +24,7 @@ export function ControlPanelCanvas({
 	focusedIdx,
 	offset,
 	onFocus,
+	onAgentDeleted,
 	onSnap,
 	smoothPan,
 	workspaceId,
@@ -68,7 +70,12 @@ export function ControlPanelCanvas({
 								focused ? "ring-2 ring-white/20 ring-offset-4 ring-offset-neutral-950" : ""
 							}`}
 						>
-							<AgentCard agent={agent} workspaceId={workspaceId} workspacePath={workspacePath} />
+							<AgentCard
+								agent={agent}
+								onDeleted={onAgentDeleted}
+								workspaceId={workspaceId}
+								workspacePath={workspacePath}
+							/>
 						</div>
 					</div>
 				)

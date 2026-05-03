@@ -1,4 +1,4 @@
-import { Check, CircleDot } from "lucide-react"
+import { CircleCheckBig } from "lucide-react"
 
 type TaskStatus = "done" | "active" | "pending"
 
@@ -18,18 +18,12 @@ const PLACEHOLDER_TASKS: PlaceholderTask[] = [
 
 function TaskMarker({ status }: { status: TaskStatus }) {
 	if (status === "done") {
-		return (
-			<span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
-				<Check size={11} strokeWidth={2.5} />
-			</span>
-		)
+		return <CircleCheckBig className="mt-0.5 shrink-0 text-emerald-400" size={16} />
 	}
 
 	if (status === "active") {
 		return (
-			<span className="mt-0.5 flex size-4 shrink-0 items-center justify-center text-yellow-400">
-				<CircleDot size={14} strokeWidth={2.3} />
-			</span>
+			<span className="mt-0.5 size-4 shrink-0 animate-spin rounded-full border border-yellow-300/40 border-t-yellow-300" />
 		)
 	}
 
@@ -38,7 +32,7 @@ function TaskMarker({ status }: { status: TaskStatus }) {
 
 export default function TaskList() {
 	return (
-		<div className="flex flex-1 flex-col gap-2">
+		<div className="flex flex-1 select-none flex-col gap-2">
 			<span className="text-[10px] font-medium uppercase tracking-widest text-neutral-600">
 				Task List
 			</span>

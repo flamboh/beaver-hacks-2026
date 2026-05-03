@@ -20,6 +20,14 @@ export interface CreateAgentInput {
 	effort: string
 }
 
+export interface UpdateAgentInput {
+	id: string
+	name?: string
+	model?: string
+	scope_path?: string
+	effort?: string
+}
+
 // ── mapper ────────────────────────────────────────────────────────
 function toAgentRow(row: AgentTableRow): AgentRow {
 	return {
@@ -68,10 +76,38 @@ export class AgentService {
 		await this.run(`DELETE FROM agents WHERE id = ?`, [id])
 	}
 
+	async updateAgent(input: UpdateAgentInput): Promise<AgentRow> {
+		await this.run(
+			`
+				UPDATE agents
+				SET name = COALESCE(?, name),
+					model = COALESCE(?, model),
+					scope_path = COALESCE(?, scope_path),
+					effort = COALESCE(?, effort)
+				WHERE id = ?
+			`,
+			[input.name, input.model, input.scope_path, input.effort, input.id]
+		)
+		const row = await this.get<AgentTableRow>(
+			`SELECT id, name, project_id, model, scope_path, effort
+			 FROM agents
+			 WHERE id = ?`,
+			[input.id]
+		)
+		if (!row) throw new Error("Agent not found.")
+		return toAgentRow(row)
+	}
+
 	// ── helpers ───────────────────────────────────────────────────
 	private async run(sql: string, params: unknown[]): Promise<void> {
 		return new Promise((resolve, reject) => {
 			this.db.run(sql, params, (err) => (err ? reject(err) : resolve()))
+		})
+	}
+
+	private async get<T>(sql: string, params: unknown[]): Promise<T | undefined> {
+		return new Promise((resolve, reject) => {
+			this.db.get<T>(sql, params, (err, row) => (err ? reject(err) : resolve(row)))
 		})
 	}
 

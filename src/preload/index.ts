@@ -9,6 +9,7 @@ import type {
 import type {
 	AgentRow,
 	CreateAgentInput,
+	UpdateAgentInput,
 	CreateProjectInput,
 	CreateWorkspaceInput,
 	ProjectWorkspaceInput,
@@ -130,6 +131,8 @@ const api = {
 		list: (projectId: string): Promise<AgentRow[]> => ipcRenderer.invoke("agent:list", projectId),
 		create: (input: CreateAgentInput): Promise<AgentRow> =>
 			ipcRenderer.invoke("agent:create", input),
+		update: (input: UpdateAgentInput): Promise<AgentRow> =>
+			ipcRenderer.invoke("agent:update", input),
 		delete: (id: string): Promise<void> => ipcRenderer.invoke("agent:delete", id)
 	},
 	tasks: {

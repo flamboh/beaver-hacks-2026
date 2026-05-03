@@ -3,6 +3,8 @@ import { useAgentSnapshot } from "@renderer/agentStore"
 import type { AgentRow } from "@renderer/types/models"
 import TaskList from "./TaskList"
 import { CARD_H, CARD_W } from "./controlPanelLayout"
+import { type FormEvent, type MouseEvent, useState } from "react"
+import { ChevronDown } from "lucide-react"
 
 function parseScopePath(path: string): string {
 	if (!path) return ""
@@ -15,6 +17,25 @@ function parseScopePath(path: string): string {
 }
 
 const PRIORITY_LEVELS = ["low", "medium", "high"] as const
+const MODEL_OPTIONS: { group: string; models: { value: string; label: string }[] }[] = [
+	{
+		group: "Anthropic",
+		models: [
+			{ value: "claude-opus-4-7", label: "Claude Opus 4.7" },
+			{ value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+			{ value: "claude-haiku-4-5", label: "Claude Haiku 4.5" }
+		]
+	},
+	{
+		group: "OpenAI",
+		models: [
+			{ value: "gpt-4o", label: "GPT-4o" },
+			{ value: "gpt-4o-mini", label: "GPT-4o mini" },
+			{ value: "o3", label: "o3" },
+			{ value: "o4-mini", label: "o4-mini" }
+		]
+	}
+]
 
 const EFFORT_STYLES: Record<string, string> = {
 	low: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
@@ -24,11 +45,19 @@ const EFFORT_STYLES: Record<string, string> = {
 
 interface Props {
 	agent: AgentRow
+	onDeleted: () => void
 	workspaceId: string
 	workspacePath: string
 }
 
-export default function AgentCard({ agent, workspaceId, workspacePath }: Props) {
+export default function AgentCard({ agent, onDeleted, workspaceId, workspacePath }: Props) {
+	const [name, setName] = useState(agent.name)
+	const [effort, setEffort] = useState(agent.effort)
+	const [model, setModel] = useState(agent.model)
+	const [scopePath, setScopePath] = useState(agent.scope_path)
+	const [scopeModalOpen, setScopeModalOpen] = useState(false)
+	const [terminateArmed, setTerminateArmed] = useState(false)
+	const [terminating, setTerminating] = useState(false)
 	const snapshot = useAgentSnapshot()
 	const activeThread =
 		snapshot.threads.find((thread) => thread.id === snapshot.activeThreadId) ?? null
@@ -37,32 +66,122 @@ export default function AgentCard({ agent, workspaceId, workspacePath }: Props) 
 		session !== null &&
 		(session.status === "starting" || session.status === "running" || session.activeTurnId !== null)
 
-	const scopeDisplay = parseScopePath(agent.scope_path)
+	const scopeDisplay = parseScopePath(scopePath)
+	const updateEffort = (nextEffort: string) => {
+		setEffort(nextEffort)
+		void window.api.agents
+			.update({ id: agent.id, effort: nextEffort })
+			.then((updatedAgent) => {
+				setEffort(updatedAgent.effort)
+			})
+			.catch(() => setEffort(agent.effort))
+	}
+	const updateModel = (nextModel: string) => {
+		setModel(nextModel)
+		void window.api.agents
+			.update({ id: agent.id, model: nextModel })
+			.then((updatedAgent) => {
+				setModel(updatedAgent.model)
+			})
+			.catch(() => setModel(agent.model))
+	}
+	const updateName = () => {
+		const nextName = name.trim() || agent.name
+		setName(nextName)
+		void window.api.agents
+			.update({ id: agent.id, name: nextName })
+			.then((updatedAgent) => {
+				setName(updatedAgent.name)
+			})
+			.catch(() => setName(agent.name))
+	}
+	const updateScope = async (nextScopePath: string) => {
+		const updatedAgent = await window.api.agents.update({
+			id: agent.id,
+			scope_path: nextScopePath
+		})
+		setScopePath(updatedAgent.scope_path)
+	}
+	const terminateAgent = () => {
+		setTerminating(true)
+		void window.api.agents.delete(agent.id).then(onDeleted)
+	}
+	const requestTerminate = () => {
+		if (terminateArmed) {
+			terminateAgent()
+			return
+		}
+		setTerminateArmed(true)
+	}
+	const clearSelectionOutsideText = (event: MouseEvent<HTMLDivElement>) => {
+		const target = event.target as Element | null
+		if (target?.closest("[data-selectable-text], input, textarea, select, button")) return
+		window.getSelection()?.removeAllRanges()
+	}
 
 	return (
 		<div
-			className="flex flex-col overflow-hidden rounded-xl border border-white/8 bg-neutral-900 text-white shadow-2xl shadow-black/40"
+			className="nodrag relative flex cursor-default flex-col overflow-hidden rounded-xl border border-white/8 bg-neutral-900 text-white shadow-2xl shadow-black/40"
 			style={{ width: CARD_W, height: CARD_H }}
+			onMouseDown={clearSelectionOutsideText}
 			onWheel={(event) => event.stopPropagation()}
 		>
 			<div className="flex h-11 shrink-0 items-center justify-between border-b border-white/5 bg-neutral-800/60 px-5">
-				<span className="min-w-0 truncate text-sm font-semibold tracking-wide text-neutral-100">
-					{agent.name}
-				</span>
-				<button className="rounded-md border border-red-500/40 px-2.5 py-1 text-xs text-red-400 transition-all duration-150 hover:border-red-500/60 hover:bg-red-500/10">
-					Terminate
+				<input
+					type="text"
+					value={name}
+					onChange={(event) => setName(event.currentTarget.value)}
+					onBlur={updateName}
+					onKeyDown={(event) => {
+						if (event.key === "Enter") event.currentTarget.blur()
+					}}
+					className="min-w-0 flex-1 cursor-text truncate bg-transparent pr-4 text-sm font-semibold tracking-wide text-neutral-100 outline-none transition-colors duration-150 hover:text-white focus:text-white"
+				/>
+				<button
+					type="button"
+					onClick={requestTerminate}
+					onBlur={() => setTerminateArmed(false)}
+					onMouseLeave={() => setTerminateArmed(false)}
+					disabled={terminating}
+					className={`min-w-20 cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${
+						terminateArmed
+							? "border-red-500/60 bg-red-500/10 text-red-300"
+							: "border-red-500/40 text-red-400 hover:border-red-500/60 hover:bg-red-500/10"
+					}`}
+				>
+					{terminating ? "Terminating..." : terminateArmed ? "Confirm" : "Terminate"}
 				</button>
 			</div>
 
 			<div className="flex flex-1 overflow-hidden">
-				<div className="flex w-[35%] shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
+				<div className="flex w-[28%] shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
 					<TaskList />
 
 					<div className="flex flex-col gap-1">
 						<span className="text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
 							Model
 						</span>
-						<span className="break-words font-mono text-xs text-neutral-400">{agent.model}</span>
+						<div className="relative">
+							<select
+								value={model}
+								onChange={(event) => updateModel(event.currentTarget.value)}
+								className="w-full cursor-pointer appearance-none rounded-md border border-white/5 bg-white/[0.03] px-2 py-1.5 pr-7 font-mono text-xs text-neutral-400 outline-none transition-colors duration-150 hover:border-white/10 hover:text-neutral-200 focus:border-white/20"
+							>
+								{MODEL_OPTIONS.map((group) => (
+									<optgroup key={group.group} label={group.group}>
+										{group.models.map((option) => (
+											<option key={option.value} value={option.value}>
+												{option.label}
+											</option>
+										))}
+									</optgroup>
+								))}
+							</select>
+							<ChevronDown
+								size={12}
+								className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-neutral-600"
+							/>
+						</div>
 					</div>
 				</div>
 
@@ -70,21 +189,31 @@ export default function AgentCard({ agent, workspaceId, workspacePath }: Props) 
 					<div className="flex shrink-0 items-center gap-3 border-b border-white/5 px-4 py-3">
 						<div className="flex items-center gap-1">
 							{PRIORITY_LEVELS.map((level) => (
-								<span
+								<button
+									type="button"
 									key={level}
-									className={`rounded-md border px-2 py-0.5 text-[11px] capitalize transition-colors ${
-										agent.effort === level
+									onClick={() => updateEffort(level)}
+									className={`cursor-pointer rounded-md border px-2 py-0.5 text-[11px] capitalize transition-colors ${
+										effort === level
 											? EFFORT_STYLES[level]
-											: "border-white/5 bg-transparent text-neutral-700"
+											: "border-white/5 bg-transparent text-neutral-700 hover:border-white/10 hover:text-neutral-500"
 									}`}
 								>
 									{level}
-								</span>
+								</button>
 							))}
 						</div>
 						{scopeDisplay ? (
 							<span className="min-w-0 truncate text-xs text-neutral-600">
-								Scope: <span className="font-mono text-blue-400/80">{scopeDisplay}</span>
+								Scope:{" "}
+								<button
+									type="button"
+									onClick={() => setScopeModalOpen(true)}
+									className="max-w-[260px] cursor-pointer truncate align-bottom font-mono text-blue-400/80 transition-colors duration-150 hover:text-blue-300"
+									title={scopePath}
+								>
+									{scopeDisplay}
+								</button>
 							</span>
 						) : null}
 					</div>
@@ -99,6 +228,145 @@ export default function AgentCard({ agent, workspaceId, workspacePath }: Props) 
 					</div>
 				</div>
 			</div>
+			{scopeModalOpen ? (
+				<ScopeModal
+					agentName={name}
+					initialScopePath={scopePath}
+					onCancel={() => setScopeModalOpen(false)}
+					onSave={updateScope}
+					projectPath={workspacePath}
+				/>
+			) : null}
+		</div>
+	)
+}
+
+type ScopeModalProps = {
+	agentName: string
+	initialScopePath: string
+	onCancel: () => void
+	onSave: (scopePath: string) => Promise<void>
+	projectPath: string
+}
+
+function ScopeModal({
+	agentName,
+	initialScopePath,
+	onCancel,
+	onSave,
+	projectPath
+}: ScopeModalProps) {
+	const [mode, setMode] = useState<"describe" | "path">("path")
+	const [description, setDescription] = useState("")
+	const [path, setPath] = useState(initialScopePath)
+	const [saving, setSaving] = useState(false)
+
+	const fallbackFileName =
+		parseScopePath(path) || `${agentName.trim().replace(/[^A-Za-z0-9._-]+/g, "-") || "agent"}-scope`
+
+	const handleBrowse = async () => {
+		const selectedPath = await window.api.dialog.selectFile()
+		if (selectedPath) setPath(selectedPath)
+	}
+
+	const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+		event.preventDefault()
+		setSaving(true)
+		const nextScopePath =
+			mode === "describe"
+				? (
+						await window.api.files.saveScopeFile({
+							projectPath,
+							fileName: fallbackFileName,
+							contents: description
+						})
+					).relativePath
+				: path
+		await onSave(nextScopePath)
+		setSaving(false)
+		onCancel()
+	}
+
+	return (
+		<div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-6">
+			<form
+				onSubmit={handleSubmit}
+				className="w-full max-w-md rounded-lg border border-white/10 bg-neutral-900 shadow-2xl"
+			>
+				<div className="flex h-12 items-center justify-between border-b border-white/5 px-4">
+					<h2 className="text-sm font-medium text-white">Edit Scope</h2>
+				</div>
+				<div className="flex flex-col gap-4 p-4">
+					<div className="grid grid-cols-2 overflow-hidden rounded-md border border-white/5 text-xs">
+						<button
+							type="button"
+							onClick={() => setMode("describe")}
+							className={`cursor-pointer py-2 transition-colors ${
+								mode === "describe"
+									? "bg-white/8 text-white"
+									: "text-neutral-500 hover:text-neutral-300"
+							}`}
+						>
+							Describe
+						</button>
+						<button
+							type="button"
+							onClick={() => setMode("path")}
+							className={`cursor-pointer py-2 transition-colors ${
+								mode === "path"
+									? "bg-white/8 text-white"
+									: "text-neutral-500 hover:text-neutral-300"
+							}`}
+						>
+							File Path
+						</button>
+					</div>
+
+					{mode === "describe" ? (
+						<textarea
+							value={description}
+							onChange={(event) => setDescription(event.currentTarget.value)}
+							rows={5}
+							placeholder="Describe what this agent should accomplish..."
+							className="resize-none rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/20"
+						/>
+					) : null}
+
+					<div className="flex gap-2">
+						<input
+							type="text"
+							value={path}
+							onChange={(event) => setPath(event.currentTarget.value)}
+							placeholder="./scopes/test-coverage.md"
+							className="min-w-0 flex-1 rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 font-mono text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/20"
+						/>
+						<button
+							type="button"
+							onClick={handleBrowse}
+							className="cursor-pointer rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm text-white transition-colors hover:bg-white/15"
+						>
+							Browse
+						</button>
+					</div>
+				</div>
+				<div className="flex justify-end gap-2 border-t border-white/5 p-4">
+					<button
+						type="button"
+						onClick={onCancel}
+						disabled={saving}
+						className="cursor-pointer rounded-md border border-white/8 px-4 py-2 text-sm text-neutral-300 transition-colors hover:border-white/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						Cancel
+					</button>
+					<button
+						type="submit"
+						disabled={saving}
+						className="cursor-pointer rounded-md border border-white/10 bg-white/10 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						{saving ? "Saving..." : "Save"}
+					</button>
+				</div>
+			</form>
 		</div>
 	)
 }
