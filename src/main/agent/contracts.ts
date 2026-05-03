@@ -85,6 +85,13 @@ export interface InstallSkillInput {
 	skillId: string
 }
 
+export interface SpawnThreadInput {
+	threadId: string
+	cwd: string
+	name?: string
+	model?: string
+}
+
 export interface ProviderSessionStartInput {
 	threadId: string
 	cwd: string

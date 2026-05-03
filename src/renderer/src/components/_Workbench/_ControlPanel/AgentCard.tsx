@@ -25,8 +25,8 @@ interface Props {
 
 export default function AgentCard({ agent, workspaceId, workspacePath }: Props) {
 	const snapshot = useAgentSnapshot()
-	const activeThread = snapshot.threads.find((t) => t.id === snapshot.activeThreadId) ?? null
-	const session = activeThread?.session ?? null
+	const thread = snapshot.threads.find((t) => t.id === agent.id) ?? null
+	const session = thread?.session ?? null
 	const isRunning =
 		session !== null &&
 		(session.status === "starting" || session.status === "running" || session.activeTurnId !== null)
@@ -108,7 +108,7 @@ export default function AgentCard({ agent, workspaceId, workspacePath }: Props) 
 
 					<div className="min-h-0 flex-1">
 						<Chat
-							thread={activeThread}
+							thread={thread}
 							isRunning={isRunning}
 							cwd={workspacePath}
 							workspaceId={workspaceId}

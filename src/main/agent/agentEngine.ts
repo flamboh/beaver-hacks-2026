@@ -14,6 +14,7 @@ import type {
 	ProviderRuntimeEvent,
 	FindSkillsInput,
 	InstallSkillInput,
+	SpawnThreadInput,
 	StartTurnInput
 } from "./contracts"
 
@@ -149,6 +150,28 @@ export class AgentEngine {
 		})
 		thread.updatedAt = nowIso()
 		this.emitSnapshot()
+		return this.getSnapshot()
+	}
+
+	spawnThread(input: SpawnThreadInput): AgentSnapshot {
+		if (!this.threads.has(input.threadId)) {
+			const createdAt = nowIso()
+			const thread: AgentThread = {
+				id: input.threadId,
+				title: input.name ?? "Agent",
+				cwd: input.cwd,
+				model: input.model ?? null,
+				runtimeMode: "full-access",
+				messages: [],
+				activities: [],
+				suggestedSkills: [],
+				session: null,
+				createdAt,
+				updatedAt: createdAt
+			}
+			this.threads.set(thread.id, thread)
+			this.emitSnapshot()
+		}
 		return this.getSnapshot()
 	}
 

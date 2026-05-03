@@ -77,6 +77,16 @@ export async function sendAgentMessage(input: {
 	setSnapshot(nextSnapshot)
 }
 
+export async function spawnAgentThread(input: {
+	threadId: string
+	cwd: string
+	name?: string
+	model?: string
+}): Promise<void> {
+	const nextSnapshot = await window.api.agent.spawnThread(input)
+	setSnapshot(nextSnapshot)
+}
+
 export async function findProjectSkills(input: {
 	threadId?: string
 	prompt?: string

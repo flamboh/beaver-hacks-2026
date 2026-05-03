@@ -4,6 +4,7 @@ import type {
 	AgentSnapshot,
 	FindSkillsInput,
 	InstallSkillInput,
+	SpawnThreadInput,
 	StartTurnInput
 } from "../main/agent/ipc"
 import type {
@@ -53,6 +54,8 @@ const api = {
 			ipcRenderer.invoke("agent:find-skills", input),
 		installSkill: (input: InstallSkillInput): Promise<AgentSnapshot> =>
 			ipcRenderer.invoke("agent:install-skill", input),
+		spawnThread: (input: SpawnThreadInput): Promise<AgentSnapshot> =>
+			ipcRenderer.invoke("agent:spawn-thread", input),
 		onSnapshot: (listener: (snapshot: AgentSnapshot) => void): (() => void) => {
 			const handler = (_event: Electron.IpcRendererEvent, snapshot: AgentSnapshot): void => {
 				listener(snapshot)

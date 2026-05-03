@@ -1,74 +1,29 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Plus } from "lucide-react"
 import { motion } from "motion/react"
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useSessionData } from "@renderer/hooks/useSessionData"
+import { spawnAgentThread } from "@renderer/agentStore"
 import type { AgentRow } from "@renderer/types/models"
 import AgentsSidebar, { type AgentStatus } from "../AgentsSidebar"
 import NewAgentModal, { type NewAgentInput } from "../NewAgentModal"
+import AgentTaskTooltip from "./AgentTaskTooltip"
+import { summarizeTasks, type AgentTaskSummary } from "./agentTaskSummary"
 
 type AgentCardRow = AgentRow & {
 	current_task: string
 	status: AgentStatus
+	taskSummary: AgentTaskSummary
 }
 
 type AgentProvider = "claudeCode" | "codex"
 
-// ── placeholder data ──────────────────────────────────────────────
-const PLACEHOLDER_AGENTS: AgentCardRow[] = [
-	{
-		id: "1",
-		name: "Auth Refactor",
-		project_id: "proj-1",
-		model: "claude-opus-4-7",
-		scope_path: "@Pipeline.md",
-		effort: "high",
-		status: "working",
-		current_task: "Extracting auth middleware boundaries"
-	},
-	{
-		id: "2",
-		name: "Test Coverage",
-		project_id: "proj-1",
-		model: "gpt-4o-mini",
-		scope_path: "@tests/README.md",
-		effort: "medium",
-		status: "pending",
-		current_task: "Writing renderer smoke tests"
-	},
-	{
-		id: "3",
-		name: "Docs Generator",
-		project_id: "proj-1",
-		model: "claude-sonnet-4-6",
-		scope_path: "@docs",
-		effort: "low",
-		status: "idle",
-		current_task: "Summarizing review workflow"
-	},
-	{
-		id: "4",
-		name: "Merge Steward",
-		project_id: "proj-1",
-		model: "o4-mini",
-		scope_path: "@src/main/git",
-		effort: "medium",
-		status: "failure",
-		current_task: "Checking branch isolation rules"
-	},
-	{
-		id: "5",
-		name: "UI Polish",
-		project_id: "proj-1",
-		model: "claude-haiku-4-5",
-		scope_path: "@src/renderer",
-		effort: "low",
-		status: "working",
-		current_task: "Tightening sidebar spacing"
-	}
-]
-
-// const PLACEHOLDER_TASK =
-// 	"Refactoring the authentication middleware to meet the new compliance requirements..."
+const STATUS_ORDER: Record<AgentStatus, number> = {
+	failure: 0,
+	working: 1,
+	pending: 2,
+	idle: 3
+}
 
 const EFFORT_STYLES: Record<string, string> = {
 	low: "border-white/10 bg-white/8 text-neutral-200",
@@ -136,11 +91,41 @@ function AgentLogo({ label, provider }: { label: string; provider: AgentProvider
 	)
 }
 
-// ─────────────────────────────────────────────────────────────────
-
 export default function Agents({ projectPath }: { projectPath: string }) {
 	const { project } = useSessionData()
-	const [agents, setAgents] = useState<AgentCardRow[]>(PLACEHOLDER_AGENTS)
+	const projectId = project?.id ?? ""
+	const queryClient = useQueryClient()
+
+	const { data: dbAgents = [] } = useQuery({
+		queryKey: ["agents", projectId],
+		queryFn: () => window.api.agents.list(projectId),
+		enabled: !!projectId
+	})
+
+	const taskQueries = useQueries({
+		queries: dbAgents.map((agent) => ({
+			queryKey: ["tasks", agent.id],
+			queryFn: () => window.api.tasks.list(agent.id),
+			enabled: !!projectId && !!agent.id
+		}))
+	})
+
+	const agents = useMemo<AgentCardRow[]>(
+		() =>
+			[...dbAgents]
+				.map((agent, index) => {
+					const summary = summarizeTasks(taskQueries[index]?.data ?? [])
+					return {
+						...agent,
+						status: summary.status,
+						current_task: summary.current_task,
+						taskSummary: summary
+					}
+				})
+				.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]),
+		[dbAgents, taskQueries]
+	)
+
 	const [isNewAgentModalOpen, setIsNewAgentModalOpen] = useState(false)
 	const [editingAgent, setEditingAgent] = useState<AgentCardRow | null>(null)
 	const [hoveredStatus, setHoveredStatus] = useState<AgentStatus | null>(null)
@@ -154,51 +139,35 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 	)
 
 	const handleCreateAgent = async (input: NewAgentInput) => {
-		// simulate DB write
-		await new Promise((res) => setTimeout(res, 900))
-		const newAgent: AgentCardRow = {
-			id: crypto.randomUUID(),
+		const created = await window.api.agents.create({
 			name: input.name || "Unnamed Agent",
-			project_id: project?.id ?? "",
+			project_id: projectId,
 			model: input.model,
 			scope_path: input.scopePath,
-			effort: input.effort,
-			status: "idle",
-			current_task: "Waiting for task"
-		}
-		setAgents((prev) => [newAgent, ...prev])
+			effort: input.effort
+		})
+		void queryClient.invalidateQueries({ queryKey: ["agents", projectId] })
+		void spawnAgentThread({
+			threadId: created.id,
+			cwd: project?.path ?? projectPath,
+			name: created.name,
+			model: created.model
+		})
 	}
 
-	const handleUpdateAgent = async (input: NewAgentInput) => {
-		if (!editingAgent) return
-		// simulate DB write
-		await new Promise((res) => setTimeout(res, 900))
-		setAgents((prev) =>
-			prev.map((agent) =>
-				agent.id === editingAgent.id
-					? {
-							...agent,
-							name: input.name || "Unnamed Agent",
-							model: input.model,
-							scope_path: input.scopePath,
-							effort: input.effort
-						}
-					: agent
-			)
-		)
+	const handleUpdateAgent = async (): Promise<void> => {
+		// TODO: wire DB update once agent update API is implemented
 	}
 
 	return (
 		<div className="flex h-full overflow-hidden">
 			<AgentsSidebar total={agents.length} counts={statusCounts} onStatusHover={setHoveredStatus} />
 
-			{/* main list */}
 			<div className="flex flex-1 flex-col overflow-auto pl-6">
-				{/* header */}
-				<div className="flex items-center justify-between mb-6">
+				<div className="mb-6 flex items-center justify-between">
 					<div>
 						<h2 className="text-base font-semibold text-white">Agents</h2>
-						<p className="text-xs text-neutral-500 mt-0.5">{agents.length} configured</p>
+						<p className="mt-0.5 text-xs text-neutral-500">{agents.length} configured</p>
 					</div>
 					<button
 						onClick={() => setIsNewAgentModalOpen(true)}
@@ -209,9 +178,8 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 					</button>
 				</div>
 
-				{/* agent cards */}
 				{agents.length === 0 ? (
-					<div className="flex-1 flex items-center justify-center text-neutral-600 text-sm">
+					<div className="flex flex-1 items-center justify-center text-sm text-neutral-600">
 						No agents yet. Create one to get started.
 					</div>
 				) : (
@@ -230,7 +198,7 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 										ease: [0.22, 1, 0.36, 1]
 									}}
 									onClick={() => setEditingAgent(agent)}
-									className={`min-w-0 cursor-pointer rounded-lg border bg-neutral-900 p-4 text-left transition-colors duration-300 hover:border-white/20 ${
+									className={`group relative min-w-0 cursor-pointer rounded-lg border bg-neutral-900 p-4 text-left transition-colors duration-300 hover:border-white/20 ${
 										hoveredStatus === agent.status
 											? STATUS_BORDER_STYLES[agent.status]
 											: "border-white/5"
@@ -261,8 +229,14 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 										<span className="truncate font-mono text-xs text-blue-400/70">
 											{agent.scope_path}
 										</span>
-										<span className="truncate text-xs text-neutral-400">{agent.current_task}</span>
+										{agent.current_task ? (
+											<span className="truncate text-xs text-neutral-400">
+												{agent.current_task}
+											</span>
+										) : null}
 									</div>
+
+									<AgentTaskTooltip summary={agent.taskSummary} />
 								</motion.button>
 							)
 						})}
@@ -270,22 +244,22 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 				)}
 			</div>
 
-			{isNewAgentModalOpen && (
+			{isNewAgentModalOpen ? (
 				<NewAgentModal
 					onCancel={() => setIsNewAgentModalOpen(false)}
 					onSubmit={handleCreateAgent}
 					projectPath={projectPath}
 				/>
-			)}
+			) : null}
 
-			{editingAgent && (
+			{editingAgent ? (
 				<NewAgentModal
 					initialAgent={editingAgent}
 					onCancel={() => setEditingAgent(null)}
 					onSubmit={handleUpdateAgent}
 					projectPath={projectPath}
 				/>
-			)}
+			) : null}
 		</div>
 	)
 }

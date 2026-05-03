@@ -222,7 +222,7 @@ export default function NewAgentModal({
 										className="w-full resize-none rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 text-sm leading-relaxed text-white transition-colors duration-300 placeholder:text-neutral-600 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
 									/>
 									<div className="flex items-center gap-2">
-										<span className="shrink-0 font-mono text-xs text-neutral-600">./scopes/</span>
+										<span className="shrink-0 font-mono text-xs text-neutral-600">scopes/</span>
 										<input
 											type="text"
 											placeholder="agent-scope"
@@ -238,7 +238,7 @@ export default function NewAgentModal({
 								<div className="flex gap-2">
 									<input
 										type="text"
-										placeholder="./scopes/agent-scope.md"
+										placeholder="scopes/agent-scope.md"
 										value={form.scopePath}
 										onChange={(event) => set("scopePath", event.target.value)}
 										disabled={isSubmitting}

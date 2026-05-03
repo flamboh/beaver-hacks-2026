@@ -3,6 +3,7 @@ import type {
 	AgentSnapshot,
 	FindSkillsInput,
 	InstallSkillInput,
+	SpawnThreadInput,
 	StartTurnInput
 } from "../main/agent/ipc"
 import type {
@@ -48,6 +49,7 @@ interface BeaverApi {
 		startTurn: (input: StartTurnInput) => Promise<AgentSnapshot>
 		findSkills: (input: FindSkillsInput) => Promise<AgentSnapshot>
 		installSkill: (input: InstallSkillInput) => Promise<AgentSnapshot>
+		spawnThread: (input: SpawnThreadInput) => Promise<AgentSnapshot>
 		onSnapshot: (listener: (snapshot: AgentSnapshot) => void) => () => void
 	}
 	git: {
