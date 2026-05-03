@@ -20,7 +20,11 @@ function clamp(offset: { x: number; y: number }, vpW: number, vpH: number, scale
 	}
 }
 
-export default function ControlPanel() {
+interface ControlPanelProps {
+	projectCwd: string
+}
+
+export default function ControlPanel({ projectCwd }: ControlPanelProps) {
 	const viewportRef = useRef<HTMLDivElement>(null)
 	const [offset, setOffset] = useState({ x: 0, y: 0 })
 	const [scale, setScale] = useState(1)
@@ -140,7 +144,7 @@ export default function ControlPanel() {
 			>
 				<div className="absolute inset-0 border border-white/10 pointer-events-none" />
 				<div className="absolute" style={{ left: 80, top: 80 }}>
-					<AgentCard />
+					<AgentCard projectCwd={projectCwd} />
 				</div>
 			</div>
 

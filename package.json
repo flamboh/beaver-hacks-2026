@@ -16,7 +16,6 @@
 		"start": "electron-vite preview",
 		"dev": "electron-vite dev",
 		"dev:review": "vite --config vite.review.config.ts",
-		"dev:review:portless": "portless beaver-review pnpm run dev:review",
 		"build": "pnpm run typecheck && electron-vite build",
 		"postinstall": "electron-builder install-app-deps",
 		"prepare": "husky",

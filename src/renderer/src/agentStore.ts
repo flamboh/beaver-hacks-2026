@@ -64,10 +64,12 @@ export function useAgentSnapshot(): AgentSnapshot {
 
 export async function sendAgentMessage(input: {
 	prompt: string
+	cwd: string
 	threadId?: string
 }): Promise<void> {
 	const nextSnapshot = await window.api.agent.startTurn({
 		...(input.threadId ? { threadId: input.threadId } : {}),
+		cwd: input.cwd,
 		prompt: input.prompt,
 		runtimeMode: "full-access"
 	})

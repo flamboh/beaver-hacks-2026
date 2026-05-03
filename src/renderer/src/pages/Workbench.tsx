@@ -5,24 +5,36 @@ import Review from "@renderer/components/_Workbench/_Review/main/Review"
 import Agents from "@renderer/components/_Workbench/_Agents/main/Agents"
 import Settings from "@renderer/components/_Workbench/_Settings/main/Settings"
 import { WorkbenchTab } from "@renderer/types/models"
-import { useState } from "react"
-import { useParams } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
+import { useNavigate, useParams } from "react-router-dom"
 
 const WORKBENCH_TABS: WorkbenchTab[] = ["control-panel", "gallery", "review", "agents", "settings"]
 
 export default function Workbench() {
-	const { tab } = useParams()
+	const { projectId, tab } = useParams()
+	const navigate = useNavigate()
 	const initialPage = WORKBENCH_TABS.includes(tab as WorkbenchTab)
 		? (tab as WorkbenchTab)
 		: "control-panel"
-	const [currentPage, setCurrentPage] = useState<WorkbenchTab>(initialPage)
+	const currentPage = initialPage
+	const projectQuery = useQuery({
+		queryKey: ["project", projectId],
+		queryFn: () => window.api.projects.get({ id: projectId ?? "" })
+	})
+	const project = projectQuery.data
+
+	const setProjectPage = (nextTab: WorkbenchTab) => {
+		if (projectId) navigate(`/project/${encodeURIComponent(projectId)}/workbench/${nextTab}`)
+	}
 
 	const renderPage = () => {
+		if (!project) return null
+
 		switch (currentPage) {
 			case "control-panel":
-				return <ControlPanel />
+				return <ControlPanel projectCwd={project.path} />
 			case "review":
-				return <Review />
+				return <Review projectCwd={project.path} projectName={project.name} />
 			case "agents":
 				return <Agents />
 			case "settings":
@@ -41,11 +53,23 @@ export default function Workbench() {
 			<div className="flex flex-1 overflow-hidden">
 				<SideBar
 					currentPage={currentPage}
-					projectName="Test Project"
-					setCurrentPage={setCurrentPage}
+					projectName={project?.name ?? "Loading project"}
+					setCurrentPage={setProjectPage}
 				/>
 				<main className={`flex-1 overflow-hidden ${isCanvas ? "" : "overflow-auto p-6"}`}>
-					{renderPage()}
+					{projectQuery.isLoading ? (
+						<div className="flex h-full items-center justify-center text-xs text-neutral-500">
+							Loading project.
+						</div>
+					) : projectQuery.error ? (
+						<div className="flex h-full items-center justify-center px-4 text-center text-xs text-red-300/80">
+							{projectQuery.error instanceof Error
+								? projectQuery.error.message
+								: "Project unavailable."}
+						</div>
+					) : (
+						renderPage()
+					)}
 				</main>
 			</div>
 		</div>

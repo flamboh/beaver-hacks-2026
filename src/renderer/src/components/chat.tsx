@@ -9,9 +9,10 @@ type AgentThread = AgentSnapshot["threads"][number]
 interface ChatProps {
 	thread: AgentThread | null
 	isRunning: boolean
+	cwd: string
 }
 
-export function Chat({ thread, isRunning }: ChatProps): JSX.Element {
+export function Chat({ thread, isRunning, cwd }: ChatProps): JSX.Element {
 	const [draft, setDraft] = useState("")
 	const [isSending, setIsSending] = useState(false)
 	const [error, setError] = useState<string | null>(null)
@@ -27,6 +28,7 @@ export function Chat({ thread, isRunning }: ChatProps): JSX.Element {
 		setIsSending(true)
 		void sendAgentMessage({
 			prompt,
+			cwd,
 			...(thread ? { threadId: thread.id } : {})
 		})
 			.catch((cause: unknown) => {
