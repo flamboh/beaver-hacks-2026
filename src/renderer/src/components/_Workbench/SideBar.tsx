@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { ChevronRight } from "lucide-react"
 import type { ProjectRow } from "@renderer/types/models"
-import type { WorkspaceRow } from "../../../../main/db/ipc"
+import type { WorkspaceRow } from "src/main/db/contracts"
 
 interface Props {
 	activeProjectId: string | null
