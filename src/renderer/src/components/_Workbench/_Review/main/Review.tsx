@@ -240,6 +240,11 @@ export default function Review({ projectCwd, projectName }: ReviewProps) {
 	)
 
 	const launchDevServer = async () => {
+		if (devServerRunning && devServerQuery.data?.url) {
+			window.open(devServerQuery.data.url, "_blank", "noopener,noreferrer")
+			return
+		}
+
 		setLaunching(true)
 		try {
 			const result = await window.api.devServer.launchProject({
@@ -286,7 +291,7 @@ export default function Review({ projectCwd, projectName }: ReviewProps) {
 					<button
 						type="button"
 						onClick={launchDevServer}
-						disabled={launching || devServerRunning}
+						disabled={launching}
 						className="flex items-center gap-2 rounded-md border border-white/10 bg-white px-3 py-2 text-sm font-medium text-neutral-950 transition-colors duration-150 hover:bg-neutral-200 disabled:cursor-wait disabled:bg-neutral-400"
 					>
 						{launching ? <ExternalLink size={15} /> : <Play size={15} />}
