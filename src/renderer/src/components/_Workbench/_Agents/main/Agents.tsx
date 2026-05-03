@@ -7,7 +7,6 @@ import { spawnAgentThread } from "@renderer/agentStore"
 import type { AgentRow } from "@renderer/types/models"
 import AgentsSidebar, { type AgentStatus } from "../AgentsSidebar"
 import NewAgentModal, { type NewAgentInput } from "../NewAgentModal"
-import AgentTaskTooltip from "./AgentTaskTooltip"
 import { summarizeTasks, type AgentTaskSummary } from "./agentTaskSummary"
 
 type AgentCardRow = AgentRow & {
@@ -235,8 +234,6 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 											</span>
 										) : null}
 									</div>
-
-									<AgentTaskTooltip summary={agent.taskSummary} />
 								</motion.button>
 							)
 						})}
