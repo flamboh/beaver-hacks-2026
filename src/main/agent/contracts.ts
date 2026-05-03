@@ -55,6 +55,21 @@ export interface AgentSkillSuggestion {
 	installed: boolean
 }
 
+export interface AgentMcpSuggestion {
+	id: string
+	name: string
+	owner: string
+	repo: string
+	url: string
+	description: string
+	stars: number
+	language: string | null
+	topics: string[]
+	installHint: string
+	reason: string
+	score: number
+}
+
 export interface AgentModelOption {
 	id: string
 	label: string
@@ -92,6 +107,7 @@ export interface AgentThread {
 	plan: AgentPlan
 	reasoningPreview: string | null
 	suggestedSkills: AgentSkillSuggestion[]
+	suggestedMcps: AgentMcpSuggestion[]
 	session: AgentSession | null
 	createdAt: string
 	updatedAt: string
@@ -116,6 +132,10 @@ export interface StartTurnInput {
 	runtimeMode?: AgentRuntimeMode
 }
 
+export interface StopTurnInput {
+	threadId: string
+}
+
 export interface SemgrepStatus {
 	available: boolean
 	command: string
@@ -129,9 +149,22 @@ export interface FindSkillsInput {
 	runtimeMode?: AgentRuntimeMode
 }
 
+export interface FindMcpsInput {
+	threadId?: string
+	cwd?: string
+	prompt?: string
+	runtimeMode?: AgentRuntimeMode
+}
+
 export interface InstallSkillInput {
 	threadId: string
 	skillId: string
+}
+
+export interface UninstallSkillInput {
+	threadId: string
+	cwd: string
+	skillPath: string
 }
 
 export interface SpawnThreadInput {

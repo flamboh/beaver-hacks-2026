@@ -3,11 +3,14 @@ import type {
 	AgentModelOption,
 	AgentProvider,
 	AgentSnapshot,
+	FindMcpsInput,
 	SemgrepStatus,
 	FindSkillsInput,
 	InstallSkillInput,
 	SpawnThreadInput,
-	StartTurnInput
+	StopTurnInput,
+	StartTurnInput,
+	UninstallSkillInput
 } from "../main/agent/ipc"
 import type {
 	ComposerFileSuggestion,
@@ -75,8 +78,11 @@ interface BeaverApi {
 		listModels: (provider: AgentProvider) => Promise<AgentModelOption[]>
 		getSemgrepStatus: () => Promise<SemgrepStatus>
 		startTurn: (input: StartTurnInput) => Promise<AgentSnapshot>
+		stopTurn: (input: StopTurnInput) => Promise<AgentSnapshot>
 		findSkills: (input: FindSkillsInput) => Promise<AgentSnapshot>
+		findMcps: (input: FindMcpsInput) => Promise<AgentSnapshot>
 		installSkill: (input: InstallSkillInput) => Promise<AgentSnapshot>
+		uninstallSkill: (input: UninstallSkillInput) => Promise<AgentSnapshot>
 		spawnThread: (input: SpawnThreadInput) => Promise<AgentSnapshot>
 		onSnapshot: (listener: (snapshot: AgentSnapshot) => void) => () => void
 	}

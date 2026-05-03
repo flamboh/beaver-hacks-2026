@@ -14,14 +14,11 @@ export interface SkillRecommenderOptions {
 	runCodexPrompt?: (input: { prompt: string; model: string }) => Promise<string>
 }
 
-const MAX_QUERIES = 4
-const MAX_SUGGESTIONS = 8
+const MAX_QUERIES = 8
+const MAX_SUGGESTIONS = 10
+const FALLBACK_QUERIES = ["typescript react", "code quality", "ui testing", "developer tooling"]
 
-function rankSkill(
-	skill: MarketplaceSkill,
-	profile: ProjectSkillProfile,
-	installed: boolean
-): number {
+function rankSkill(skill: MarketplaceSkill, profile: ProjectSkillProfile): number {
 	const haystack = `${skill.name} ${skill.slug} ${skill.source}`.toLowerCase()
 	const domainMatches = profile.domains.filter((domain) =>
 		haystack.includes(domain.toLowerCase().split(" ")[0])
@@ -32,9 +29,7 @@ function rankSkill(
 		? 8
 		: 0
 
-	return Math.round(
-		Math.log10(skill.installs + 1) * 10 + domainMatches * 12 + sourceBoost + (installed ? 20 : 0)
-	)
+	return Math.round(Math.log10(skill.installs + 1) * 10 + domainMatches * 12 + sourceBoost)
 }
 
 export async function recommendProjectSkills(
@@ -45,7 +40,10 @@ export async function recommendProjectSkills(
 	const files = await readProjectFiles(cwd)
 	const profile = await buildProjectSkillProfile(files, prompt, options.runCodexPrompt)
 	const installedKeys = await listInstalledSkillKeys(cwd)
-	const queries = Array.from(new Set(profile.searchQueries)).slice(0, MAX_QUERIES)
+	const queries = Array.from(new Set(profile.searchQueries.concat(FALLBACK_QUERIES))).slice(
+		0,
+		MAX_QUERIES
+	)
 	const searchResults = await Promise.all(queries.map(searchMarketplaceSkills))
 	const results = searchResults.flatMap((result) => result.skills)
 	const marketplaceError = searchResults.find((result) => result.error)?.error ?? null
@@ -56,8 +54,8 @@ export async function recommendProjectSkills(
 	}
 
 	const suggestions = Array.from(byId.values())
+		.filter((skill) => !matchesInstalledSkill(installedKeys, skill))
 		.map((skill) => {
-			const installed = matchesInstalledSkill(installedKeys, skill)
 			return {
 				id: skill.id,
 				slug: skill.slug,
@@ -68,8 +66,8 @@ export async function recommendProjectSkills(
 				installUrl: skill.installUrl,
 				url: skill.url,
 				description: skill.description,
-				score: rankSkill(skill, profile, installed),
-				installed
+				score: rankSkill(skill, profile),
+				installed: false
 			}
 		})
 		.sort((a, b) => b.score - a.score || b.installs - a.installs)

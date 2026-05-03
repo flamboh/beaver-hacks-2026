@@ -1,9 +1,14 @@
-import type { CSSProperties, FormEvent, JSX, KeyboardEvent, UIEvent } from "react"
-import { useRef, useState } from "react"
+import type { CSSProperties, FormEvent, JSX, KeyboardEvent, RefObject, UIEvent } from "react"
+import { useCallback, useRef, useState, useSyncExternalStore } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "motion/react"
 import { ArrowUp } from "lucide-react"
-import { getSemgrepStatus, listAgentModels, sendAgentMessage } from "../agentStore"
+import {
+	getSemgrepStatus,
+	listAgentModels,
+	sendAgentMessage,
+	stopAgentMessage
+} from "../agentStore"
 import type { AgentSnapshot } from "../../../main/agent/ipc"
 import type { ComposerMentionSuggestion } from "../../../main/composer/ipc"
 import { AgentRunSettings } from "./AgentRunSettings"
@@ -59,6 +64,25 @@ const FALLBACK_MODELS: Record<AgentProvider, ModelOption[]> = {
 	]
 }
 
+function scrollToBottom(element: HTMLElement | null): void {
+	if (element) element.scrollTop = element.scrollHeight
+}
+
+function useAutoFollowTranscript(scrollRef: RefObject<HTMLElement | null>, version: string): void {
+	const subscribe = useCallback(
+		(listener: () => void) => {
+			const frame = requestAnimationFrame(() => {
+				listener()
+				requestAnimationFrame(() => scrollToBottom(scrollRef.current))
+			})
+			return () => cancelAnimationFrame(frame)
+		},
+		[scrollRef]
+	)
+	const getSnapshot = useCallback(() => version, [version])
+	useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
 interface ChatProps {
 	thread: AgentThread | null
 	threadId: string
@@ -94,6 +118,7 @@ export function Chat({
 }: ChatProps): JSX.Element {
 	const [draft, setDraft] = useState("")
 	const [isSending, setIsSending] = useState(false)
+	const [isCancelling, setIsCancelling] = useState(false)
 	const [planningMode, setPlanningMode] = useState(false)
 	const [securityMode, setSecurityMode] = useState(false)
 	const [error, setError] = useState<string | null>(null)
@@ -102,8 +127,14 @@ export function Chat({
 	const [isPinnedToBottom, setIsPinnedToBottom] = useState(true)
 	const transcriptViewportRef = useRef<HTMLDivElement | null>(null)
 	const inputRef = useRef<HTMLTextAreaElement | null>(null)
+	const transcriptScrollRef = useRef<HTMLElement | null>(null)
 	const canSend = draft.trim().length > 0 && !isSending && !isRunning
+	const canCancel = isRunning && !isCancelling
 	const transcript = thread ? buildTranscript(thread) : []
+	const transcriptVersion = thread
+		? `${thread.updatedAt}:${thread.messages.length}:${thread.activities.length}`
+		: ""
+	useAutoFollowTranscript(transcriptScrollRef, transcriptVersion)
 	const lastBlock = transcript.at(-1)
 	const isAwaitingAssistant =
 		(isSending || isRunning) && (!lastBlock || lastBlock.kind === "user" || !lastBlock.streaming)
@@ -208,6 +239,18 @@ export function Chat({
 			.finally(() => setIsSending(false))
 	}
 
+	function handleCancel(): void {
+		if (!canCancel) return
+
+		setError(null)
+		setIsCancelling(true)
+		void stopAgentMessage(thread?.id ?? threadId)
+			.catch((cause: unknown) => {
+				setError(cause instanceof Error ? cause.message : String(cause))
+			})
+			.finally(() => setIsCancelling(false))
+	}
+
 	function syncCursor(element: HTMLTextAreaElement): void {
 		setCursor(element.selectionStart)
 	}
@@ -257,9 +300,10 @@ export function Chat({
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<section
+				ref={transcriptScrollRef}
 				data-selectable-text
+				data-scroll-boundary-stop="true"
 				className="nowheel nodrag min-h-0 flex-1 select-text overflow-y-auto px-4 py-5"
-				ref={transcriptViewportRef}
 				onScroll={handleTranscriptScroll}
 			>
 				<div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
@@ -376,20 +420,29 @@ export function Chat({
 									onSecurityModeChange={setSecurityMode}
 								/>
 								<motion.button
-									type="submit"
-									disabled={!canSend}
-									aria-label="Send message"
-									title="Send message"
-									whileHover={canSend ? { scale: 1.06 } : undefined}
-									whileTap={canSend ? { scale: 0.92 } : undefined}
+									type={isRunning ? "button" : "submit"}
+									onClick={isRunning ? handleCancel : undefined}
+									disabled={isRunning ? !canCancel : !canSend}
+									aria-label={isRunning ? "Cancel message" : "Send message"}
+									title={isRunning ? "Cancel" : "Send message"}
+									whileHover={isRunning ? { scale: 1.02 } : canSend ? { scale: 1.06 } : undefined}
+									whileTap={isRunning || canSend ? { scale: 0.92 } : undefined}
 									animate={{
-										backgroundColor: canSend ? "rgb(59 130 246)" : "rgba(255,255,255,0.08)",
-										color: canSend ? "rgb(255 255 255)" : "rgb(113 113 122)"
+										backgroundColor: isRunning
+											? "rgb(244 244 245)"
+											: canSend
+												? "rgb(59 130 246)"
+												: "rgba(255,255,255,0.08)",
+										color: isRunning
+											? "rgb(9 9 11)"
+											: canSend
+												? "rgb(255 255 255)"
+												: "rgb(113 113 122)"
 									}}
 									transition={{ type: "spring", stiffness: 500, damping: 32, mass: 0.6 }}
-									className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full shadow-[0_4px_14px_-4px_rgba(59,130,246,0.55)] outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed disabled:shadow-none"
+									className="flex h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center rounded-full px-2 text-xs font-medium shadow-[0_4px_14px_-4px_rgba(59,130,246,0.55)] outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed disabled:shadow-none"
 								>
-									<ArrowUp size={15} strokeWidth={2.75} />
+									{isRunning ? "Cancel" : <ArrowUp size={15} strokeWidth={2.75} />}
 								</motion.button>
 							</div>
 						</div>
