@@ -4,18 +4,24 @@ interface UseControlPanelKeyboardProps {
 	centerFocused: () => void
 	focusedIdx: number
 	moveFocus: (direction: "left" | "right" | "up" | "down") => void
+	moveFocusedWithinRail: (direction: "left" | "right") => void
+	resizeFocused: (direction: "grow" | "shrink") => void
 	setSpacePanActive: (active: boolean) => void
 	snapToCard: (idx: number) => void
 	spacePan: { current: boolean }
+	toggleZoom: () => void
 }
 
 export function useControlPanelKeyboard({
 	centerFocused,
 	focusedIdx,
 	moveFocus,
+	moveFocusedWithinRail,
+	resizeFocused,
 	setSpacePanActive,
 	snapToCard,
-	spacePan
+	spacePan,
+	toggleZoom
 }: UseControlPanelKeyboardProps): void {
 	useEffect(() => {
 		const keyDown = (e: KeyboardEvent) => {
@@ -24,16 +30,32 @@ export function useControlPanelKeyboard({
 				if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
 				return
 			}
+			if (target?.closest(".agent-create-popover")) return
+			if (target?.closest("input, textarea, [contenteditable='true']")) return
+			if (e.altKey && e.code === "KeyZ") {
+				e.preventDefault()
+				toggleZoom()
+				return
+			}
+			if (e.code === "Space") {
+				spacePan.current = true
+				setSpacePanActive(true)
+				return
+			}
 			if (e.key === "Tab") {
 				e.preventDefault()
 				if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
 				snapToCard(focusedIdx + (e.shiftKey ? -1 : 1))
 				return
 			}
-			if (target?.closest("input, textarea, [contenteditable='true']")) return
-			if (e.code === "Space") {
-				spacePan.current = true
-				setSpacePanActive(true)
+			if (e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+				e.preventDefault()
+				resizeFocused(e.key === "ArrowRight" ? "grow" : "shrink")
+				return
+			}
+			if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+				e.preventDefault()
+				moveFocusedWithinRail(e.key === "ArrowRight" ? "right" : "left")
 				return
 			}
 			if (
@@ -61,5 +83,15 @@ export function useControlPanelKeyboard({
 			window.removeEventListener("keydown", keyDown)
 			window.removeEventListener("keyup", keyUp)
 		}
-	}, [centerFocused, focusedIdx, moveFocus, setSpacePanActive, snapToCard, spacePan])
+	}, [
+		centerFocused,
+		focusedIdx,
+		moveFocus,
+		moveFocusedWithinRail,
+		resizeFocused,
+		setSpacePanActive,
+		snapToCard,
+		spacePan,
+		toggleZoom
+	])
 }

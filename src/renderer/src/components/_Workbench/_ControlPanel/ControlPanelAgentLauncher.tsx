@@ -33,7 +33,7 @@ export default function ControlPanelAgentLauncher({
 					setOpen((nextOpen) => !nextOpen)
 				}}
 				disabled={isCreatingCard}
-				className="flex size-12 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-neutral-900 text-neutral-500 shadow-2xl shadow-black/40 transition-all duration-150 hover:scale-105 hover:border-white/20 hover:bg-neutral-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+				className="polished-button flex size-12 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-neutral-900 text-neutral-500 shadow-2xl shadow-black/40 hover:scale-105 hover:border-white/20 hover:bg-neutral-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
 				aria-label="Create card"
 				title="Create card"
 			>
@@ -42,6 +42,7 @@ export default function ControlPanelAgentLauncher({
 			<span className="text-xs font-medium text-neutral-600">No cards</span>
 			{open ? (
 				<CreateCardOptionsPopover
+					anchor="center"
 					onClose={() => setOpen(false)}
 					onCreateCard={onCreateCard}
 					side="right"

@@ -56,6 +56,14 @@ export default function TerminalCard({ cwd }: TerminalCardProps): JSX.Element {
 			const fit = new FitAddon()
 			term.loadAddon(fit)
 			term.open(node)
+			term.attachCustomKeyEventHandler((event) => {
+				if (event.type !== "keydown" || event.key !== "Escape") return true
+				event.preventDefault()
+				event.stopPropagation()
+				term.blur()
+				if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+				return false
+			})
 
 			let mounted = true
 			let pendingInput = ""

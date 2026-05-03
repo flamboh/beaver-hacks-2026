@@ -1,5 +1,5 @@
 import { AlertCircle, LoaderCircle, Map as MapIcon, RefreshCw } from "lucide-react"
-import { motion } from "motion/react"
+import { AnimatePresence, motion } from "motion/react"
 import type { PointerEvent, ReactNode, RefObject } from "react"
 import { useCallback, useRef, useState, useSyncExternalStore } from "react"
 
@@ -109,6 +109,7 @@ export function ReviewTourPanel({
 	const resizeStart = useRef({ height: MIN_HEIGHT, y: 0 })
 	const tourBodyRef = useRef<HTMLDivElement>(null)
 	const [resizing, setResizing] = useState(false)
+	const hasTour = Boolean(tour)
 	const hasBody = Boolean(tour || error)
 	const hasStarted = hasBody || generating
 	const streamedTour = useStreamingText(tour, tourBodyRef)
@@ -148,64 +149,80 @@ export function ReviewTourPanel({
 			>
 				<div className="h-px w-10 rounded-full bg-white/15" />
 			</div>
-			{!hasStarted ? (
-				<div className="flex h-[calc(100%-0.5rem)] items-center justify-center p-3">
-					<button
-						type="button"
-						onClick={onGenerate}
-						disabled={!canGenerate}
-						aria-label="Tour"
-						className="cursor-pointer flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-3 text-xs font-medium text-neutral-200 transition-colors duration-150 hover:border-white/20 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-neutral-600"
+			<AnimatePresence initial={false}>
+				{!hasStarted ? (
+					<motion.div
+						key="empty"
+						initial={{ opacity: 0, y: 6, filter: "blur(3px)" }}
+						animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+						exit={{ opacity: 0, y: -4, filter: "blur(3px)" }}
+						transition={{ type: "spring", duration: 0.28, bounce: 0 }}
+						className="flex h-[calc(100%-0.5rem)] items-center justify-center p-3"
 					>
-						<MapIcon size={13} />
-						Tour
-					</button>
-				</div>
-			) : (
-				<>
-					<div className="relative flex h-10 items-center justify-end border-b border-white/8 px-3">
-						{generating ? (
-							<div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 text-[11px] text-neutral-500">
-								<LoaderCircle className="size-3 animate-spin" />
-								Generating
+						<button
+							type="button"
+							onClick={onGenerate}
+							disabled={!canGenerate}
+							aria-label="Tour"
+							className="polished-button flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-3 text-xs font-medium text-neutral-200 hover:border-white/20 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-neutral-600"
+						>
+							<MapIcon size={13} />
+							Tour
+						</button>
+					</motion.div>
+				) : (
+					<motion.div
+						key="body"
+						initial={{ opacity: 0, y: 8, filter: "blur(3px)" }}
+						animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+						exit={{ opacity: 0, y: -4, filter: "blur(3px)" }}
+						transition={{ type: "spring", duration: 0.28, bounce: 0 }}
+						className="h-[calc(100%-0.5rem)]"
+					>
+						<div className="relative flex h-10 items-center justify-end border-b border-white/8 px-3">
+							{generating ? (
+								<div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 text-[11px] text-neutral-500">
+									<LoaderCircle className="size-3 animate-spin" />
+									Generating
+								</div>
+							) : null}
+							<div className="flex items-center gap-2">
+								{stale ? (
+									<span className="rounded border border-white/8 bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 uppercase">
+										stale
+									</span>
+								) : null}
+								<button
+									type="button"
+									onClick={onGenerate}
+									disabled={generating || !canGenerate}
+									aria-label={generating ? "Generating tour" : hasTour ? "Refresh tour" : "Tour"}
+									className="polished-button flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-3 text-xs font-medium text-neutral-200 hover:border-white/20 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-neutral-600"
+								>
+									{hasTour ? <RefreshCw size={13} /> : <MapIcon size={13} />}
+									{hasTour ? "Refresh" : "Tour"}
+								</button>
+							</div>
+						</div>
+						{error && hasBody ? (
+							<div className="flex items-start gap-2 px-3 py-3 text-xs leading-5 text-red-300/85">
+								<AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+								<p>{error}</p>
+							</div>
+						) : hasBody ? (
+							<div
+								ref={tourBodyRef}
+								className="h-[calc(100%-2.5rem)] overflow-auto whitespace-pre-wrap px-3 py-3 font-mono text-sm leading-6 text-neutral-300"
+							>
+								{renderBoldSpans(streamedTour.text)}
+								{streamedTour.streaming ? (
+									<span className="ml-0.5 inline-block h-4 w-1 translate-y-0.5 animate-pulse bg-neutral-400" />
+								) : null}
 							</div>
 						) : null}
-						<div className="flex items-center gap-2">
-							{stale ? (
-								<span className="rounded border border-white/8 bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 uppercase">
-									stale
-								</span>
-							) : null}
-							<button
-								type="button"
-								onClick={onGenerate}
-								disabled={generating || !canGenerate}
-								aria-label={generating ? "Generating tour" : "Refresh tour"}
-								className="cursor-pointer flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-3 text-xs font-medium text-neutral-200 transition-colors duration-150 hover:border-white/20 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-neutral-600"
-							>
-								<RefreshCw size={13} />
-								Refresh
-							</button>
-						</div>
-					</div>
-					{error && hasBody ? (
-						<div className="flex items-start gap-2 px-3 py-3 text-xs leading-5 text-red-300/85">
-							<AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-							<p>{error}</p>
-						</div>
-					) : hasBody ? (
-						<div
-							ref={tourBodyRef}
-							className="h-[calc(100%-3rem)] overflow-auto whitespace-pre-wrap px-3 py-3 font-mono text-sm leading-6 text-neutral-300"
-						>
-							{renderBoldSpans(streamedTour.text)}
-							{streamedTour.streaming ? (
-								<span className="ml-0.5 inline-block h-4 w-1 translate-y-0.5 animate-pulse bg-neutral-400" />
-							) : null}
-						</div>
-					) : null}
-				</>
-			)}
+					</motion.div>
+				)}
+			</AnimatePresence>
 		</motion.section>
 	)
 }

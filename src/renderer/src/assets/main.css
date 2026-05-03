@@ -1,20 +1,15 @@
 @import "tailwindcss";
 
 :root {
-	--background: #ffffff;
-	--foreground: #171717;
+	--background: #070707;
+	--foreground: #ededed;
+	--ease-out: cubic-bezier(0.2, 0, 0, 1);
+	--ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @theme inline {
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
-}
-
-@media (prefers-color-scheme: dark) {
-	:root {
-		--background: #0a0a0a;
-		--foreground: #ededed;
-	}
 }
 
 /* strip React Flow node chrome so our custom cards render cleanly */
@@ -33,7 +28,9 @@
 }
 
 .agent-create-popover {
-	transform: translate(-50%, -50%) scale(0.45);
+	--popover-translate-x: 0;
+	--popover-translate-y: 0;
+	transform: translate(var(--popover-translate-x), var(--popover-translate-y)) scale(0.45);
 	transform-origin: center;
 	opacity: 0;
 	filter: blur(3px);
@@ -41,15 +38,24 @@
 	will-change: transform, opacity, filter;
 }
 
+.agent-create-popover-center {
+	--popover-translate-x: -50%;
+	--popover-translate-y: -50%;
+}
+
 @keyframes agent-create-popover-in {
 	to {
-		transform: translate(-50%, -50%) scale(1);
+		transform: translate(var(--popover-translate-x), var(--popover-translate-y)) scale(1);
 		opacity: 1;
 		filter: blur(0);
 	}
 }
 
 @layer base {
+	* {
+		box-sizing: border-box;
+	}
+
 	html,
 	body,
 	#root {
@@ -65,27 +71,84 @@
 		-moz-osx-font-smoothing: grayscale;
 	}
 
-	* {
-		scrollbar-color: #3f3f46 #0a0a0a;
-		scrollbar-width: thin;
+	::selection {
+		background: rgba(96, 165, 250, 0.28);
+		color: #ffffff;
 	}
 
-	*::-webkit-scrollbar {
+	:focus-visible {
+		outline: 2px solid rgba(96, 165, 250, 0.55);
+		outline-offset: 2px;
+	}
+
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+	}
+
+	::-webkit-scrollbar {
 		width: 10px;
 		height: 10px;
 	}
 
-	*::-webkit-scrollbar-track {
-		background: #0a0a0a;
+	::-webkit-scrollbar-track {
+		background: transparent;
 	}
 
-	*::-webkit-scrollbar-thumb {
-		background: #3f3f46;
-		border: 2px solid #0a0a0a;
+	::-webkit-scrollbar-thumb {
+		background: rgba(255, 255, 255, 0.16);
+		border: 3px solid transparent;
 		border-radius: 999px;
+		background-clip: content-box;
 	}
 
-	*::-webkit-scrollbar-thumb:hover {
-		background: #52525b;
+	::-webkit-scrollbar-thumb:hover {
+		background-color: rgba(255, 255, 255, 0.28);
+	}
+
+	h1,
+	h2,
+	h3 {
+		text-wrap: balance;
+	}
+
+	p,
+	li {
+		text-wrap: pretty;
+	}
+
+	button,
+	a,
+	input,
+	textarea,
+	select {
+		-webkit-tap-highlight-color: transparent;
+	}
+}
+
+@layer components {
+	.polished-button {
+		transition-property: color, background-color, border-color, box-shadow, opacity, scale;
+		transition-duration: 160ms;
+		transition-timing-function: var(--ease-out);
+	}
+
+	.polished-button:not(:disabled):active {
+		scale: 0.96;
+	}
+
+	.polished-surface {
+		box-shadow:
+			0 1px 0 rgba(255, 255, 255, 0.04) inset,
+			0 18px 46px -24px rgba(0, 0, 0, 0.9);
+		transition-property: border-color, background-color, box-shadow, opacity, transform;
+		transition-duration: 180ms;
+		transition-timing-function: var(--ease-out);
+	}
+
+	.polished-input {
+		transition-property: border-color, background-color, box-shadow;
+		transition-duration: 160ms;
+		transition-timing-function: var(--ease-out);
 	}
 }

@@ -11,11 +11,13 @@ import { useAgentSnapshot } from "@renderer/agentStore"
 import { useSessionData } from "@renderer/hooks/useSessionData"
 import type { ProjectRow, WorkbenchTab } from "@renderer/types/models"
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
+import { AnimatePresence, motion } from "motion/react"
 import { useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import type { WorkspaceRow } from "../../../main/db/ipc"
 
 const WORKBENCH_TABS: WorkbenchTab[] = ["control-panel", "review", "agents", "skills", "settings"]
+const PAGE_TRANSITION = { type: "spring", duration: 0.32, bounce: 0 } as const
 
 export default function Workbench() {
 	const { projectId, tab } = useParams()
@@ -300,7 +302,6 @@ export default function Workbench() {
 				activeAgentCount={activeAgentCount}
 				currentPage={currentPage}
 				onTabChange={setProjectPage}
-				onToggleSidebar={() => setSidebarOpen((open) => !open)}
 			/>
 			<div className="flex flex-1 overflow-hidden">
 				<SideBar
@@ -308,6 +309,7 @@ export default function Workbench() {
 					activeWorkspaceId={selectedWorkspace?.id ?? null}
 					onNewProject={() => setNewProjectOpen(true)}
 					onProjectSelect={selectProject}
+					onToggleSidebar={() => setSidebarOpen((open) => !open)}
 					onWorkspaceCreate={createWorkspace}
 					onWorkspaceDelete={deleteWorkspace}
 					onWorkspaceSelect={selectWorkspace}
@@ -315,27 +317,38 @@ export default function Workbench() {
 					projects={projects}
 					workspacesByProjectId={workspacesByProjectId}
 				/>
-				<main className={`flex-1 overflow-hidden ${isCanvas ? "" : "overflow-auto p-6"}`}>
-					{(projectQuery.isLoading || workspacesQuery.isLoading) &&
-					(!selectedProject || !selectedWorkspace) ? (
-						<div className="flex h-full items-center justify-center text-xs text-neutral-500">
-							Loading project.
-						</div>
-					) : !selectedProject || !selectedWorkspace ? (
-						<div className="flex h-full items-center justify-center text-xs text-neutral-500">
-							Select a project or create one from the sidebar.
-						</div>
-					) : projectId && (projectQuery.error || workspacesQuery.error) ? (
-						<div className="flex h-full items-center justify-center px-4 text-center text-xs text-red-300/80">
-							{projectQuery.error instanceof Error
-								? projectQuery.error.message
-								: workspacesQuery.error instanceof Error
-									? workspacesQuery.error.message
-									: "Project unavailable."}
-						</div>
-					) : (
-						renderPage()
-					)}
+				<main className="relative flex-1 overflow-hidden">
+					<AnimatePresence initial={false}>
+						<motion.div
+							key={currentPage}
+							initial={{ opacity: 0, y: 10, filter: "blur(4px)" }}
+							animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+							exit={{ opacity: 0, y: -6, filter: "blur(3px)" }}
+							transition={PAGE_TRANSITION}
+							className={`absolute inset-0 ${isCanvas ? "overflow-hidden" : "overflow-auto p-6"}`}
+						>
+							{(projectQuery.isLoading || workspacesQuery.isLoading) &&
+							(!selectedProject || !selectedWorkspace) ? (
+								<div className="flex h-full items-center justify-center text-xs text-neutral-500">
+									Loading project.
+								</div>
+							) : !selectedProject || !selectedWorkspace ? (
+								<div className="flex h-full items-center justify-center text-xs text-neutral-500">
+									Select a project or create one from the sidebar.
+								</div>
+							) : projectId && (projectQuery.error || workspacesQuery.error) ? (
+								<div className="flex h-full items-center justify-center px-4 text-center text-xs text-red-300/80">
+									{projectQuery.error instanceof Error
+										? projectQuery.error.message
+										: workspacesQuery.error instanceof Error
+											? workspacesQuery.error.message
+											: "Project unavailable."}
+								</div>
+							) : (
+								renderPage()
+							)}
+						</motion.div>
+					</AnimatePresence>
 				</main>
 			</div>
 			{newProjectOpen ? (

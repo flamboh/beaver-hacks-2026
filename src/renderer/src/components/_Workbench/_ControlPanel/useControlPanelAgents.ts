@@ -52,6 +52,8 @@ export interface ToolCard {
 	tool: "terminal" | "browser"
 	layout_x: number
 	layout_y: number
+	width?: number
+	height?: number
 	workspace_id: string
 	projectId: string
 	projectName: string
@@ -71,6 +73,8 @@ export type ControlPanelCard =
 			enterDevAction: string
 			workspaceName: string
 			workspacePath: string
+			width?: number
+			height?: number
 	  } & AgentRow)
 	| ToolCard
 

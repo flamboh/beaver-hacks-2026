@@ -312,7 +312,7 @@ export function Chat({
 							{transcript.map((block) => (
 								<TranscriptBlockView key={block.id} block={block} />
 							))}
-							<AnimatePresence>
+							<AnimatePresence initial={false}>
 								{isAwaitingAssistant ? (
 									<motion.article
 										key="pending"
@@ -352,7 +352,7 @@ export function Chat({
 			<footer className="nodrag shrink-0 cursor-default p-4">
 				<form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
 					<div className="relative">
-						<AnimatePresence>
+						<AnimatePresence initial={false}>
 							{suggestions.length > 0 ? (
 								<motion.div
 									key="suggestions"
@@ -454,7 +454,7 @@ export function Chat({
 							then retry.
 						</p>
 					) : null}
-					<AnimatePresence>
+					<AnimatePresence initial={false}>
 						{error ? (
 							<motion.p
 								key="error"

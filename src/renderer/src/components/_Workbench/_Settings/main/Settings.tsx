@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { FolderOpen, FolderPlus, Save } from "lucide-react"
+import { motion } from "motion/react"
 import { useState } from "react"
 
 const WORKSPACE_TEMPLATE_KEY = "workspace.default_template"
@@ -109,7 +110,12 @@ export default function Settings({
 				<p className="mt-1 text-xs text-neutral-500">Workspace defaults.</p>
 			</section>
 
-			<section className="flex flex-col gap-3 rounded-lg border border-white/8 bg-white/[0.03] p-4">
+			<motion.section
+				initial={{ opacity: 0, y: 10, filter: "blur(3px)" }}
+				animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+				transition={{ type: "spring", duration: 0.32, bounce: 0 }}
+				className="polished-surface flex flex-col gap-3 rounded-lg border border-white/8 bg-white/[0.03] p-4"
+			>
 				<label className="text-xs font-medium uppercase tracking-widest text-neutral-500">
 					Project setup
 				</label>
@@ -118,22 +124,27 @@ export default function Settings({
 					onChange={(event) => setSetupDraft(event.currentTarget.value)}
 					placeholder={"npm i"}
 					rows={4}
-					className="min-h-24 resize-none rounded-md border border-white/10 bg-neutral-950 px-3 py-2 font-mono text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-white/20"
+					className="polished-input min-h-24 resize-none rounded-md border border-white/10 bg-neutral-950 px-3 py-2 font-mono text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-white/20"
 				/>
 				<div className="flex justify-end">
 					<button
 						type="button"
 						onClick={saveSetupAction}
 						disabled={busy !== null || !project}
-						className="inline-flex h-9 items-center gap-2 rounded-md bg-white px-3 text-sm font-medium text-neutral-950 hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
+						className="polished-button inline-flex h-9 items-center gap-2 rounded-md bg-white px-3 text-sm font-medium text-neutral-950 hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						<Save size={14} />
 						Save
 					</button>
 				</div>
-			</section>
+			</motion.section>
 
-			<section className="flex flex-col gap-3 rounded-lg border border-white/8 bg-white/[0.03] p-4">
+			<motion.section
+				initial={{ opacity: 0, y: 10, filter: "blur(3px)" }}
+				animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+				transition={{ type: "spring", duration: 0.32, bounce: 0, delay: 0.04 }}
+				className="polished-surface flex flex-col gap-3 rounded-lg border border-white/8 bg-white/[0.03] p-4"
+			>
 				<label className="text-xs font-medium uppercase tracking-widest text-neutral-500">
 					Workspace folder template
 				</label>
@@ -141,13 +152,13 @@ export default function Settings({
 					<input
 						value={template}
 						onChange={(event) => setTemplateDraft(event.currentTarget.value)}
-						className="h-9 min-w-0 flex-1 rounded-md border border-white/10 bg-neutral-950 px-3 font-mono text-sm text-neutral-200 outline-none focus:border-white/20"
+						className="polished-input h-9 min-w-0 flex-1 rounded-md border border-white/10 bg-neutral-950 px-3 font-mono text-sm text-neutral-200 outline-none focus:border-white/20"
 					/>
 					<button
 						type="button"
 						onClick={saveTemplate}
 						disabled={busy !== null || !template.trim()}
-						className="inline-flex h-9 items-center gap-2 rounded-md bg-white px-3 text-sm font-medium text-neutral-950 hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
+						className="polished-button inline-flex h-9 items-center gap-2 rounded-md bg-white px-3 text-sm font-medium text-neutral-950 hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						<Save size={14} />
 						Save
@@ -156,9 +167,14 @@ export default function Settings({
 				<p className="text-xs text-neutral-500">
 					Default: ~/.nulloth/worktrees/{"{projectSlug}"}/{"{workspaceSlug}"}
 				</p>
-			</section>
+			</motion.section>
 
-			<section className="flex flex-col gap-3 rounded-lg border border-white/8 bg-white/[0.03] p-4">
+			<motion.section
+				initial={{ opacity: 0, y: 10, filter: "blur(3px)" }}
+				animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+				transition={{ type: "spring", duration: 0.32, bounce: 0, delay: 0.08 }}
+				className="polished-surface flex flex-col gap-3 rounded-lg border border-white/8 bg-white/[0.03] p-4"
+			>
 				<label className="text-xs font-medium uppercase tracking-widest text-neutral-500">
 					Existing workspace
 				</label>
@@ -167,13 +183,13 @@ export default function Settings({
 						value={existingName}
 						onChange={(event) => setExistingName(event.currentTarget.value)}
 						placeholder="workspace name"
-						className="h-9 min-w-0 rounded-md border border-white/10 bg-neutral-950 px-3 text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-white/20"
+						className="polished-input h-9 min-w-0 rounded-md border border-white/10 bg-neutral-950 px-3 text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-white/20"
 					/>
 					<input
 						value={existingPath}
 						onChange={(event) => setExistingPath(event.currentTarget.value)}
 						placeholder="/path/to/worktree"
-						className="h-9 min-w-0 rounded-md border border-white/10 bg-neutral-950 px-3 font-mono text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-white/20"
+						className="polished-input h-9 min-w-0 rounded-md border border-white/10 bg-neutral-950 px-3 font-mono text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-white/20"
 					/>
 				</div>
 				<div className="flex justify-end gap-2">
@@ -181,7 +197,7 @@ export default function Settings({
 						type="button"
 						onClick={browseExistingWorkspace}
 						disabled={busy !== null}
-						className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 text-sm font-medium text-neutral-300 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-neutral-600"
+						className="polished-button inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 text-sm font-medium text-neutral-300 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-neutral-600"
 					>
 						<FolderOpen size={14} />
 						Browse
@@ -190,13 +206,13 @@ export default function Settings({
 						type="button"
 						onClick={addExistingWorkspace}
 						disabled={busy !== null || !existingPath.trim()}
-						className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.06] px-3 text-sm font-medium text-neutral-200 hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:text-neutral-600"
+						className="polished-button inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.06] px-3 text-sm font-medium text-neutral-200 hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:text-neutral-600"
 					>
 						<FolderPlus size={14} />
 						Add
 					</button>
 				</div>
-			</section>
+			</motion.section>
 
 			{message ? <p className="text-xs text-neutral-400">{message}</p> : null}
 		</div>

@@ -4,9 +4,11 @@ import {
 	FolderPlus,
 	GitBranch,
 	GitBranchPlus,
+	PanelLeft,
 	Trash2
 } from "lucide-react"
 import type { ProjectRow } from "@renderer/types/models"
+import { useRef, useState, type PointerEvent } from "react"
 import type { WorkspaceRow } from "src/main/db/contracts"
 
 interface Props {
@@ -14,6 +16,7 @@ interface Props {
 	activeWorkspaceId: string | null
 	onNewProject: () => void
 	onProjectSelect: (project: ProjectRow) => void
+	onToggleSidebar: () => void
 	onWorkspaceCreate: (project: ProjectRow) => void
 	onWorkspaceDelete: (workspace: WorkspaceRow) => void
 	onWorkspaceSelect: (project: ProjectRow, workspace: WorkspaceRow) => void
@@ -22,7 +25,10 @@ interface Props {
 	workspacesByProjectId: Map<string, WorkspaceRow[]>
 }
 
-const SIDEBAR_WIDTH = 300
+const DEFAULT_SIDEBAR_WIDTH = 300
+const COLLAPSED_SIDEBAR_WIDTH = 40
+const MIN_SIDEBAR_WIDTH = 220
+const MAX_SIDEBAR_WIDTH = 420
 
 function sortWorkspaces(workspaces: WorkspaceRow[]) {
 	return [...workspaces].sort((a, b) => {
@@ -45,6 +51,7 @@ export default function SideBar({
 	activeWorkspaceId,
 	onNewProject,
 	onProjectSelect,
+	onToggleSidebar,
 	onWorkspaceCreate,
 	onWorkspaceDelete,
 	onWorkspaceSelect,
@@ -52,21 +59,49 @@ export default function SideBar({
 	projects,
 	workspacesByProjectId
 }: Props) {
+	const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
+	const [resizing, setResizing] = useState(false)
+	const resizeStart = useRef({ width: DEFAULT_SIDEBAR_WIDTH, x: 0 })
+
 	const selectProject = (project: ProjectRow) => {
 		onProjectSelect(project)
 	}
 
+	const startResize = (event: PointerEvent<HTMLDivElement>) => {
+		resizeStart.current = { width: sidebarWidth, x: event.clientX }
+		setResizing(true)
+		event.currentTarget.setPointerCapture(event.pointerId)
+	}
+
+	const resize = (event: PointerEvent<HTMLDivElement>) => {
+		if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+		const nextWidth = resizeStart.current.width + event.clientX - resizeStart.current.x
+		setSidebarWidth(clampSidebarWidth(nextWidth))
+	}
+
+	const stopResize = () => {
+		setResizing(false)
+	}
+
 	return (
 		<div
-			className="flex h-full shrink-0 flex-col overflow-hidden border-r border-white/5 bg-neutral-900 transition-[width] duration-200 ease-in-out"
-			style={{ width: open ? SIDEBAR_WIDTH : 0 }}
+			className={`relative flex h-full shrink-0 flex-col overflow-hidden border-r border-white/5 bg-neutral-900 transition-[width] ease-in-out ${
+				resizing ? "duration-0" : "duration-200"
+			}`}
+			style={{ width: open ? sidebarWidth : COLLAPSED_SIDEBAR_WIDTH }}
 		>
-			<div className="flex min-h-0 flex-1 flex-col" style={{ width: SIDEBAR_WIDTH }}>
+			<div className="flex min-h-0 flex-1 flex-col" style={{ width: sidebarWidth }}>
 				<div className="flex h-10 items-center border-b border-white/5 px-3">
-					<div
-						className="flex min-w-0 flex-1 items-center gap-2 p-1 transition-opacity duration-150 ease-in-out"
-						style={{ opacity: open ? 1 : 0 }}
-					>
+					<div className="flex min-w-0 flex-1 items-center gap-2 p-1 transition-opacity duration-150 ease-in-out">
+						<button
+							type="button"
+							onClick={onToggleSidebar}
+							className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-neutral-500 transition-colors duration-150 hover:bg-white/5 hover:text-white"
+							aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
+							title={open ? "Collapse sidebar" : "Expand sidebar"}
+						>
+							<PanelLeft size={16} />
+						</button>
 						<p className="min-w-0 flex-1 text-md font-medium tracking-widest text-neutral-500 uppercase">
 							Projects
 						</p>
@@ -76,6 +111,7 @@ export default function SideBar({
 							className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-neutral-500 transition-colors duration-150 hover:bg-white/5 hover:text-white"
 							aria-label="Create project"
 							title="Create project"
+							style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }}
 						>
 							<FolderPlus size={"1.4rem"} />
 						</button>
@@ -93,7 +129,7 @@ export default function SideBar({
 							return (
 								<div key={project.id} className="flex flex-col">
 									<div
-										className={`flex items-center rounded-md text-[1rem] whitespace-nowrap transition-colors duration-150 ${
+										className={`polished-button flex items-center rounded-md text-[1rem] whitespace-nowrap ${
 											active
 												? "bg-white/8 text-white"
 												: "text-neutral-500 hover:bg-white/5 hover:text-neutral-200"
@@ -138,7 +174,7 @@ export default function SideBar({
 											return (
 												<div
 													key={workspace.id}
-													className={`group/workspace flex items-center rounded-md text-xs whitespace-nowrap transition-colors duration-150 ${
+													className={`group/workspace polished-button flex items-center rounded-md text-xs whitespace-nowrap ${
 														workspaceActive
 															? "bg-white/8 text-neutral-100"
 															: "text-neutral-600 hover:bg-white/5 hover:text-neutral-300"
@@ -160,7 +196,7 @@ export default function SideBar({
 													<button
 														type="button"
 														onClick={() => onWorkspaceDelete(workspace)}
-														className="mr-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-neutral-700 opacity-0 transition-all duration-150 group-hover/workspace:opacity-100 hover:bg-red-500/10 hover:text-red-300"
+														className="polished-button mr-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-neutral-700 opacity-0 group-hover/workspace:opacity-100 group-focus-within/workspace:opacity-100 hover:bg-red-500/10 hover:text-red-300 focus-visible:opacity-100"
 														aria-label={`Delete workspace ${workspace.name}`}
 														title="Delete workspace"
 													>
@@ -176,6 +212,25 @@ export default function SideBar({
 					</nav>
 				</div>
 			</div>
+			<div
+				role="separator"
+				aria-orientation="vertical"
+				aria-valuemin={MIN_SIDEBAR_WIDTH}
+				aria-valuemax={MAX_SIDEBAR_WIDTH}
+				aria-valuenow={sidebarWidth}
+				onPointerDown={startResize}
+				onPointerMove={resize}
+				onPointerUp={stopResize}
+				onPointerCancel={stopResize}
+				onLostPointerCapture={stopResize}
+				className="absolute top-0 right-0 z-10 h-full w-2 cursor-col-resize touch-none bg-transparent transition-colors duration-150 hover:bg-white/8"
+				style={{ pointerEvents: open ? "auto" : "none" }}
+				title="Resize sidebar"
+			/>
 		</div>
 	)
+}
+
+function clampSidebarWidth(width: number): number {
+	return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width))
 }
