@@ -1,6 +1,15 @@
 import { ipcMain } from "electron"
 import { DatabaseService } from "./database"
-import type { CreateProjectInput, ProjectIdInput, UpdateProjectInput } from "./contracts"
+import type {
+	CreateProjectInput,
+	CreateWorkspaceInput,
+	ProjectIdInput,
+	ProjectWorkspaceInput,
+	UpdateProjectInput,
+	UpdateSettingInput,
+	UpdateWorkspaceInput,
+	WorkspaceIdInput
+} from "./contracts"
 
 export function registerDatabaseIpc(database: DatabaseService): void {
 	ipcMain.handle("db:get-info", () => database.getInfo())
@@ -14,12 +23,37 @@ export function registerDatabaseIpc(database: DatabaseService): void {
 	)
 	ipcMain.handle("project:touch", (_event, input: ProjectIdInput) => database.touchProject(input))
 	ipcMain.handle("project:delete", (_event, input: ProjectIdInput) => database.deleteProject(input))
+	ipcMain.handle("workspace:list", (_event, input: ProjectWorkspaceInput) =>
+		database.listWorkspaces(input)
+	)
+	ipcMain.handle("workspace:active", (_event, input: ProjectWorkspaceInput) =>
+		database.getActiveWorkspace(input)
+	)
+	ipcMain.handle("workspace:create", (_event, input: CreateWorkspaceInput) =>
+		database.createWorkspace(input)
+	)
+	ipcMain.handle("workspace:update", (_event, input: UpdateWorkspaceInput) =>
+		database.updateWorkspace(input)
+	)
+	ipcMain.handle("workspace:activate", (_event, input: WorkspaceIdInput) =>
+		database.activateWorkspace(input)
+	)
+	ipcMain.handle("setting:get", (_event, key: string) => database.getSetting(key))
+	ipcMain.handle("setting:update", (_event, input: UpdateSettingInput) =>
+		database.updateSetting(input)
+	)
 }
 
 export type {
 	CreateProjectInput,
+	CreateWorkspaceInput,
 	DatabaseInfo,
 	ProjectIdInput,
 	ProjectRow,
-	UpdateProjectInput
+	ProjectWorkspaceInput,
+	UpdateProjectInput,
+	UpdateSettingInput,
+	UpdateWorkspaceInput,
+	WorkspaceIdInput,
+	WorkspaceRow
 } from "./contracts"

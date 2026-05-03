@@ -9,7 +9,7 @@ import {
 } from "../agentStore"
 
 interface GitCommitMenuProps {
-	cwd: string | null
+	workspaceId: string | null
 }
 
 type BusyAction = "commit" | "push" | null
@@ -20,8 +20,8 @@ function formatGitLabel(files: number, ahead: number): string {
 	return "Git"
 }
 
-export function GitCommitMenu({ cwd }: GitCommitMenuProps): JSX.Element | null {
-	const status = useGitStatus(cwd ?? "")
+export function GitCommitMenu({ workspaceId }: GitCommitMenuProps): JSX.Element | null {
+	const status = useGitStatus(workspaceId ?? "")
 	const [open, setOpen] = useState(false)
 	const [subject, setSubject] = useState("")
 	const [body, setBody] = useState("")
@@ -30,7 +30,7 @@ export function GitCommitMenu({ cwd }: GitCommitMenuProps): JSX.Element | null {
 	const hasChanges = (status?.files.length ?? 0) > 0
 
 	function run(action: BusyAction, task: () => Promise<void>): void {
-		if (!cwd || busy) return
+		if (!workspaceId || busy) return
 		setError(null)
 		setBusy(action)
 		void task()
@@ -43,18 +43,22 @@ export function GitCommitMenu({ cwd }: GitCommitMenuProps): JSX.Element | null {
 			let nextSubject = subject.trim()
 			let nextBody = body.trim()
 			if (!nextSubject) {
-				const generated = await generateGitCommitMessage(cwd ?? "")
+				const generated = await generateGitCommitMessage(workspaceId ?? "")
 				nextSubject = generated.subject
 				nextBody = generated.body
 			}
-			await commitAllGitChanges({ cwd: cwd ?? "", subject: nextSubject, body: nextBody })
+			await commitAllGitChanges({
+				workspaceId: workspaceId ?? "",
+				subject: nextSubject,
+				body: nextBody
+			})
 			setSubject("")
 			setBody("")
 			setOpen(false)
 		})
 	}
 
-	if (!cwd) return null
+	if (!workspaceId) return null
 
 	return (
 		<div className="relative">
@@ -107,7 +111,7 @@ export function GitCommitMenu({ cwd }: GitCommitMenuProps): JSX.Element | null {
 								<button
 									type="button"
 									disabled={busy !== null || !status?.hasRemote}
-									onClick={() => run("push", () => pushGitBranch({ cwd }))}
+									onClick={() => run("push", () => pushGitBranch({ workspaceId }))}
 									className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-2 text-xs text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:text-zinc-600"
 								>
 									<GitPullRequestArrow className="size-3.5" />

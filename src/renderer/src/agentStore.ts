@@ -20,7 +20,7 @@ let snapshot = EMPTY_SNAPSHOT
 const listeners = new Set<() => void>()
 const gitListeners = new Set<() => void>()
 const gitSnapshots = new Map<string, GitStatusSnapshot>()
-const watchedGitCwds = new Map<string, { refCount: number; cleanup: () => void }>()
+const watchedGitWorkspaces = new Map<string, { refCount: number; cleanup: () => void }>()
 const gitRefreshInFlight = new Map<string, Promise<GitStatusSnapshot>>()
 const gitLastRefreshAt = new Map<string, number>()
 const GIT_STATUS_REFRESH_INTERVAL_MS = 30_000
@@ -97,83 +97,86 @@ export async function installProjectSkill(input: {
 	setSnapshot(nextSnapshot)
 }
 
-function subscribeGit(cwd: string, listener: () => void): () => void {
+function subscribeGit(workspaceId: string, listener: () => void): () => void {
 	gitListeners.add(listener)
-	if (cwd) retainGitWatch(cwd)
+	if (workspaceId) retainGitWatch(workspaceId)
 
 	return () => {
 		gitListeners.delete(listener)
-		if (cwd) releaseGitWatch(cwd)
+		if (workspaceId) releaseGitWatch(workspaceId)
 	}
 }
 
-function getGitSnapshot(cwd: string): GitStatusSnapshot | null {
-	return gitSnapshots.get(cwd) ?? null
+function getGitSnapshot(workspaceId: string): GitStatusSnapshot | null {
+	return gitSnapshots.get(workspaceId) ?? null
 }
 
-export function useGitStatus(cwd: string): GitStatusSnapshot | null {
-	const subscribe = useMemo(() => (listener: () => void) => subscribeGit(cwd, listener), [cwd])
-	const read = useMemo(() => () => getGitSnapshot(cwd), [cwd])
+export function useGitStatus(workspaceId: string): GitStatusSnapshot | null {
+	const subscribe = useMemo(
+		() => (listener: () => void) => subscribeGit(workspaceId, listener),
+		[workspaceId]
+	)
+	const read = useMemo(() => () => getGitSnapshot(workspaceId), [workspaceId])
 	return useSyncExternalStore(subscribe, read, read)
 }
 
-export async function refreshGitStatus(cwd: string): Promise<GitStatusSnapshot> {
-	const inFlight = gitRefreshInFlight.get(cwd)
+export async function refreshGitStatus(workspaceId: string): Promise<GitStatusSnapshot> {
+	const inFlight = gitRefreshInFlight.get(workspaceId)
 	if (inFlight) return inFlight
 
-	const lastRefreshAt = gitLastRefreshAt.get(cwd) ?? 0
+	const lastRefreshAt = gitLastRefreshAt.get(workspaceId) ?? 0
 	if (Date.now() - lastRefreshAt < GIT_STATUS_REFRESH_DEBOUNCE_MS) {
-		const cached = gitSnapshots.get(cwd)
+		const cached = gitSnapshots.get(workspaceId)
 		if (cached) return cached
 	}
 
-	gitLastRefreshAt.set(cwd, Date.now())
+	gitLastRefreshAt.set(workspaceId, Date.now())
 	const refresh = window.api.git
-		.getStatus(cwd)
+		.getStatus(workspaceId)
 		.then((nextSnapshot) => {
-			gitSnapshots.set(cwd, nextSnapshot)
+			gitSnapshots.set(workspaceId, nextSnapshot)
 			emitGit()
 			return nextSnapshot
 		})
-		.finally(() => gitRefreshInFlight.delete(cwd))
-	gitRefreshInFlight.set(cwd, refresh)
+		.finally(() => gitRefreshInFlight.delete(workspaceId))
+	gitRefreshInFlight.set(workspaceId, refresh)
 	return refresh
 }
 
 export async function checkoutGitBranch(input: GitCheckoutInput): Promise<void> {
 	const nextSnapshot = await window.api.git.checkout(input)
-	gitSnapshots.set(input.cwd, nextSnapshot)
+	gitSnapshots.set(input.workspaceId, nextSnapshot)
 	emitGit()
 }
 
 export async function createGitBranch(input: GitCreateBranchInput): Promise<void> {
 	const nextSnapshot = await window.api.git.createBranch(input)
-	gitSnapshots.set(input.cwd, nextSnapshot)
+	gitSnapshots.set(input.workspaceId, nextSnapshot)
 	emitGit()
 }
 
-export async function generateGitCommitMessage(cwd: string): Promise<GitCommitMessage> {
-	return window.api.git.generateCommitMessage(cwd)
+export async function generateGitCommitMessage(workspaceId: string): Promise<GitCommitMessage> {
+	return window.api.git.generateCommitMessage(workspaceId)
 }
 
-export async function generateGitDiffTour(cwd: string): Promise<GitDiffTour> {
-	return window.api.git.generateDiffTour(cwd)
+export async function generateGitDiffTour(workspaceId: string): Promise<GitDiffTour> {
+	return window.api.git.generateDiffTour(workspaceId)
 }
 
 export async function commitAllGitChanges(input: GitCommitAllInput): Promise<void> {
 	const result = await window.api.git.commitAll(input)
-	gitSnapshots.set(input.cwd, result.status)
+	gitSnapshots.set(input.workspaceId, result.status)
 	emitGit()
 }
 
 export async function pushGitBranch(input: GitPushInput): Promise<void> {
 	const result = await window.api.git.push(input)
-	gitSnapshots.set(input.cwd, result.status)
+	gitSnapshots.set(input.workspaceId, result.status)
 	emitGit()
 }
 
-function retainGitWatch(cwd: string): void {
-	const watched = watchedGitCwds.get(cwd)
+function retainGitWatch(workspaceId: string): void {
+	const watched = watchedGitWorkspaces.get(workspaceId)
 	if (watched) {
 		watched.refCount += 1
 		return
@@ -184,21 +187,21 @@ function retainGitWatch(cwd: string): void {
 		if (focusRefreshTimeout !== null) window.clearTimeout(focusRefreshTimeout)
 		focusRefreshTimeout = window.setTimeout(() => {
 			focusRefreshTimeout = null
-			void refreshGitStatus(cwd).catch(() => undefined)
+			void refreshGitStatus(workspaceId).catch(() => undefined)
 		}, GIT_STATUS_REFRESH_DEBOUNCE_MS)
 	}
 	const handleVisibilityChange = (): void => {
 		if (document.visibilityState === "visible") scheduleRefresh()
 	}
 	const intervalId = window.setInterval(() => {
-		void refreshGitStatus(cwd).catch(() => undefined)
+		void refreshGitStatus(workspaceId).catch(() => undefined)
 	}, GIT_STATUS_REFRESH_INTERVAL_MS)
 
 	window.addEventListener("focus", scheduleRefresh)
 	document.addEventListener("visibilitychange", handleVisibilityChange)
-	void refreshGitStatus(cwd).catch(() => undefined)
+	void refreshGitStatus(workspaceId).catch(() => undefined)
 
-	watchedGitCwds.set(cwd, {
+	watchedGitWorkspaces.set(workspaceId, {
 		refCount: 1,
 		cleanup: () => {
 			if (focusRefreshTimeout !== null) window.clearTimeout(focusRefreshTimeout)
@@ -209,15 +212,15 @@ function retainGitWatch(cwd: string): void {
 	})
 }
 
-function releaseGitWatch(cwd: string): void {
-	const watched = watchedGitCwds.get(cwd)
+function releaseGitWatch(workspaceId: string): void {
+	const watched = watchedGitWorkspaces.get(workspaceId)
 	if (!watched) return
 
 	watched.refCount -= 1
 	if (watched.refCount > 0) return
 
 	watched.cleanup()
-	watchedGitCwds.delete(cwd)
+	watchedGitWorkspaces.delete(workspaceId)
 }
 
 function refreshCompletedThreadGitStatus(
@@ -241,7 +244,11 @@ function refreshCompletedThreadGitStatus(
 			nextSession.status === "stopped"
 
 		if (previousRunning && nextSettled) {
-			void refreshGitStatus(thread.cwd).catch(() => undefined)
+			for (const [workspaceId, gitSnapshot] of gitSnapshots) {
+				if (gitSnapshot.workspacePath === thread.cwd || gitSnapshot.cwd === thread.cwd) {
+					void refreshGitStatus(workspaceId).catch(() => undefined)
+				}
+			}
 		}
 	}
 }

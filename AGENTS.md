@@ -38,7 +38,14 @@ This project is greenfield, sweeping changes are expected.
 - Assume dev servers are already running.
 - Reference t3code implementation where relevant in agent loop and infrastructure.
 
-## References
+Docs:
 
-- Skills: use ~/.agents/skills/find-skills to locate relevant skills wherever possible
-- SDK infrastructure: ~/code/oss/t3code
+- Codex App Server docs: https://developers.openai.com/codex/sdk/#app-server
+
+## Reference Repos
+
+- Open-source Codex repo: https://github.com/openai/codex
+- Codex-Monitor (Tauri, feature-complete, strong reference implementation): https://github.com/Dimillian/CodexMonitor
+- T3 Code (Lots of feature parity and general plumbing reference) ~/Code/oss/t3code
+
+Use these as implementation references when designing protocol handling, UX flows, and operational safeguards.

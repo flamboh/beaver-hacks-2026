@@ -4,7 +4,7 @@ import { GitBranch } from "lucide-react"
 import { checkoutGitBranch, createGitBranch, useGitStatus } from "../agentStore"
 
 interface GitBranchControlsProps {
-	cwd: string | null
+	workspaceId: string | null
 }
 
 function formatChanges(files: number, insertions: number, deletions: number): string {
@@ -12,14 +12,14 @@ function formatChanges(files: number, insertions: number, deletions: number): st
 	return `${files} files  +${insertions} -${deletions}`
 }
 
-export function GitBranchControls({ cwd }: GitBranchControlsProps): JSX.Element | null {
-	const status = useGitStatus(cwd ?? "")
+export function GitBranchControls({ workspaceId }: GitBranchControlsProps): JSX.Element | null {
+	const status = useGitStatus(workspaceId ?? "")
 	const [branchDraft, setBranchDraft] = useState("")
 	const [isBusy, setIsBusy] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 
 	function run(task: () => Promise<void>): void {
-		if (!cwd || isBusy) return
+		if (!workspaceId || isBusy) return
 		setError(null)
 		setIsBusy(true)
 		void task()
@@ -27,7 +27,7 @@ export function GitBranchControls({ cwd }: GitBranchControlsProps): JSX.Element 
 			.finally(() => setIsBusy(false))
 	}
 
-	if (!cwd) return null
+	if (!workspaceId) return null
 
 	return (
 		<section className="mx-auto mt-3 flex max-w-3xl flex-col gap-2 border-t border-white/10 pt-3">
@@ -50,7 +50,7 @@ export function GitBranchControls({ cwd }: GitBranchControlsProps): JSX.Element 
 			</div>
 
 			{status && !status.isRepo ? (
-				<p className="text-xs text-zinc-500">No git repository at this thread cwd.</p>
+				<p className="text-xs text-zinc-500">No git repository for this workspace.</p>
 			) : null}
 
 			{status?.isRepo ? (
@@ -58,7 +58,7 @@ export function GitBranchControls({ cwd }: GitBranchControlsProps): JSX.Element 
 					<select
 						value={status.branch ?? ""}
 						onChange={(event) =>
-							run(() => checkoutGitBranch({ cwd, branch: event.currentTarget.value }))
+							run(() => checkoutGitBranch({ workspaceId, branch: event.currentTarget.value }))
 						}
 						className="h-8 rounded-md border border-white/10 bg-[#0f0f12] px-2 text-xs text-zinc-200 outline-none focus:border-white/20"
 						disabled={isBusy}
@@ -82,7 +82,7 @@ export function GitBranchControls({ cwd }: GitBranchControlsProps): JSX.Element 
 							disabled={isBusy || !branchDraft.trim()}
 							onClick={() =>
 								run(async () => {
-									await createGitBranch({ cwd, branch: branchDraft })
+									await createGitBranch({ workspaceId, branch: branchDraft })
 									setBranchDraft("")
 								})
 							}

@@ -9,6 +9,8 @@ export interface GitBranch {
 }
 
 export interface GitStatusSnapshot {
+	workspaceId: string | null
+	workspacePath: string | null
 	cwd: string
 	isRepo: boolean
 	branch: string | null
@@ -24,6 +26,8 @@ export interface GitStatusSnapshot {
 }
 
 export interface GitWorkingTreeDiffSnapshot {
+	workspaceId: string | null
+	workspacePath: string | null
 	cwd: string
 	isRepo: boolean
 	patch: string
@@ -41,17 +45,17 @@ export interface GitDiffTour {
 }
 
 export interface GitCheckoutInput {
-	cwd: string
+	workspaceId: string
 	branch: string
 }
 
 export interface GitCreateBranchInput {
-	cwd: string
+	workspaceId: string
 	branch: string
 }
 
 export interface GitCommitAllInput {
-	cwd: string
+	workspaceId: string
 	subject: string
 	body?: string
 }
@@ -62,7 +66,7 @@ export interface GitCommitResult {
 }
 
 export interface GitPushInput {
-	cwd: string
+	workspaceId: string
 }
 
 export interface GitPushResult {

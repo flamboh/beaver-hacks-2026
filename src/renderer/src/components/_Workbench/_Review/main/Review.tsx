@@ -3,7 +3,7 @@ import type { FileDiffMetadata } from "@pierre/diffs/react"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { ExternalLink, Play, Square } from "lucide-react"
 import { useMemo, useState } from "react"
-import { generateGitDiffTour, useAgentSnapshot, useGitStatus } from "@renderer/agentStore"
+import { generateGitDiffTour, useGitStatus } from "@renderer/agentStore"
 import { buildPatchCacheKey } from "@renderer/lib/diffRendering"
 import { ReviewFilesWorkspace } from "./ReviewFilesWorkspace"
 import { ReviewTourPanel } from "./ReviewTourPanel"
@@ -49,31 +49,27 @@ function getRenderablePatch(
 }
 
 interface ReviewProps {
-	projectCwd: string
 	projectName: string
+	workspaceId: string
+	workspacePath: string
 }
 
-export default function Review({ projectCwd, projectName }: ReviewProps) {
-	const snapshot = useAgentSnapshot()
-	const activeThread = snapshot.threads.find(
-		(thread) => thread.id === snapshot.activeThreadId && thread.cwd === projectCwd
-	)
-	const cwd = activeThread?.cwd ?? projectCwd
-	const gitStatus = useGitStatus(cwd)
-	const savedTour = useReviewTour(cwd)
+export default function Review({ projectName, workspaceId, workspacePath }: ReviewProps) {
+	const gitStatus = useGitStatus(workspaceId)
+	const savedTour = useReviewTour(workspaceId)
 	const [launching, setLaunching] = useState(false)
 	const [stopping, setStopping] = useState(false)
 	const [tourPanelHeight, setTourPanelHeight] = useState(() => (savedTour.tour ? 280 : 52))
 	const [message, setMessage] = useState("Review workspace ready")
 	const devServerQuery = useQuery({
-		queryKey: ["dev-server", "project-status", cwd],
-		queryFn: () => window.api.devServer.getProjectStatus({ cwd }),
+		queryKey: ["dev-server", "project-status", workspacePath],
+		queryFn: () => window.api.devServer.getProjectStatus({ cwd: workspacePath }),
 		refetchInterval: 2000
 	})
 	const devServerRunning = devServerQuery.data?.status === "running"
 	const diffQuery = useQuery({
-		queryKey: ["git", "working-tree-diff", cwd, gitStatus?.updatedAt ?? null],
-		queryFn: () => window.api.git.getWorkingTreeDiff(cwd),
+		queryKey: ["git", "working-tree-diff", workspaceId, gitStatus?.updatedAt ?? null],
+		queryFn: () => window.api.git.getWorkingTreeDiff(workspaceId),
 		enabled: gitStatus?.isRepo === true,
 		placeholderData: keepPreviousData
 	})
@@ -101,7 +97,7 @@ export default function Review({ projectCwd, projectName }: ReviewProps) {
 		setLaunching(true)
 		try {
 			const result = await window.api.devServer.launchProject({
-				cwd,
+				cwd: workspacePath,
 				name: projectName
 			})
 			setMessage(result.message)
@@ -116,7 +112,7 @@ export default function Review({ projectCwd, projectName }: ReviewProps) {
 	const stopDevServer = async () => {
 		setStopping(true)
 		try {
-			const result = await window.api.devServer.stopProject({ cwd })
+			const result = await window.api.devServer.stopProject({ cwd: workspacePath })
 			setMessage(
 				result.status === "stopped" ? "Project dev server stopped." : "Project dev server stopping."
 			)
@@ -131,7 +127,7 @@ export default function Review({ projectCwd, projectName }: ReviewProps) {
 	const generateTour = async () => {
 		if (!currentDiffKey) return
 		const previousTour = savedTour
-		saveReviewTour(cwd, {
+		saveReviewTour(workspaceId, {
 			...previousTour,
 			error: null,
 			generating: true,
@@ -139,8 +135,8 @@ export default function Review({ projectCwd, projectName }: ReviewProps) {
 		})
 		setMessage("Tour agent running")
 		try {
-			const result = await generateGitDiffTour(cwd)
-			saveReviewTour(cwd, {
+			const result = await generateGitDiffTour(workspaceId)
+			saveReviewTour(workspaceId, {
 				diffKey: currentDiffKey,
 				error: null,
 				generating: false,
@@ -150,7 +146,7 @@ export default function Review({ projectCwd, projectName }: ReviewProps) {
 			setTourPanelHeight(280)
 			setMessage("Tour ready")
 		} catch (error) {
-			saveReviewTour(cwd, {
+			saveReviewTour(workspaceId, {
 				...previousTour,
 				diffKey: previousTour.diffKey || currentDiffKey,
 				error: error instanceof Error ? error.message : "Tour failed.",
@@ -172,7 +168,7 @@ export default function Review({ projectCwd, projectName }: ReviewProps) {
 				</div>
 				<div className="flex items-center gap-2">
 					<p className="hidden max-w-[420px] truncate font-mono text-xs text-neutral-500 lg:block">
-						{cwd ?? diffQuery.data?.cwd}
+						{workspacePath}
 					</p>
 					<button
 						type="button"
