@@ -25,7 +25,7 @@ export type TaskRow = {
 }
 
 export type BatchRow = {
-	id: string,
-	agent_id: string,
+	id: string
+	agent_id: string
 	summary: string
 }
