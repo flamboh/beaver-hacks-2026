@@ -18,6 +18,7 @@ export default function Workbench() {
 		? (tab as WorkbenchTab)
 		: "control-panel"
 	const [currentPage, setCurrentPage] = useState<WorkbenchTab>(initialPage)
+	const [sidebarOpen, setSidebarOpen] = useState(true)
 
 	const renderPage = () => {
 		switch (currentPage) {
@@ -39,12 +40,13 @@ export default function Workbench() {
 
 	return (
 		<div className="flex h-screen flex-col bg-neutral-950 text-white">
-			<TopBar />
+			<TopBar onToggleSidebar={() => setSidebarOpen((o) => !o)} />
 			<div className="flex flex-1 overflow-hidden">
 				<SideBar
 					currentPage={currentPage}
 					projectName={project?.name ?? "No project selected"}
 					setCurrentPage={setCurrentPage}
+					open={sidebarOpen}
 				/>
 				<main className={`flex-1 overflow-hidden ${isCanvas ? "" : "overflow-auto p-6"}`}>
 					{renderPage()}
