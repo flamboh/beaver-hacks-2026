@@ -7,6 +7,7 @@ import {
 	Trash2
 } from "lucide-react"
 import type { ProjectRow } from "@renderer/types/models"
+import { motion } from "motion/react"
 import type { WorkspaceRow } from "src/main/db/contracts"
 
 interface Props {
@@ -91,9 +92,14 @@ export default function SideBar({
 							const active = activeProjectId === project.id
 							const workspaces = sortWorkspaces(workspacesByProjectId.get(project.id) ?? [])
 							return (
-								<div key={project.id} className="flex flex-col">
+								<motion.div
+									key={project.id}
+									layout
+									transition={{ type: "spring", duration: 0.28, bounce: 0 }}
+									className="flex flex-col"
+								>
 									<div
-										className={`flex items-center rounded-md text-sm whitespace-nowrap transition-colors duration-150 ${
+										className={`polished-button flex items-center rounded-md text-sm whitespace-nowrap ${
 											active
 												? "bg-white/8 text-white"
 												: "text-neutral-500 hover:bg-white/5 hover:text-neutral-200"
@@ -136,9 +142,11 @@ export default function SideBar({
 											const workspaceActive =
 												activeProjectId === project.id && activeWorkspaceId === workspace.id
 											return (
-												<div
+												<motion.div
 													key={workspace.id}
-													className={`group/workspace flex items-center rounded-md text-xs whitespace-nowrap transition-colors duration-150 ${
+													layout
+													transition={{ type: "spring", duration: 0.26, bounce: 0 }}
+													className={`group/workspace polished-button flex items-center rounded-md text-xs whitespace-nowrap ${
 														workspaceActive
 															? "bg-white/8 text-neutral-100"
 															: "text-neutral-600 hover:bg-white/5 hover:text-neutral-300"
@@ -160,17 +168,17 @@ export default function SideBar({
 													<button
 														type="button"
 														onClick={() => onWorkspaceDelete(workspace)}
-														className="mr-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-neutral-700 opacity-0 transition-all duration-150 group-hover/workspace:opacity-100 hover:bg-red-500/10 hover:text-red-300"
+														className="polished-button mr-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-neutral-700 opacity-0 group-hover/workspace:opacity-100 hover:bg-red-500/10 hover:text-red-300"
 														aria-label={`Delete workspace ${workspace.name}`}
 														title="Delete workspace"
 													>
 														<Trash2 size={13} />
 													</button>
-												</div>
+												</motion.div>
 											)
 										})}
 									</div>
-								</div>
+								</motion.div>
 							)
 						})}
 					</nav>

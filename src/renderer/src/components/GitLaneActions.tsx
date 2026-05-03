@@ -39,14 +39,13 @@ export function GitLaneActions({
 
 	return (
 		<div className="pointer-events-auto flex items-center gap-1.5">
-			<GitCommitMenu workspaceId={workspaceId} featureBranchName={branchName} />
-			<label className="inline-flex h-8 max-w-48 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2 text-xs text-zinc-300 transition-colors duration-150 hover:bg-white/[0.07] hover:text-zinc-100">
+			<label className="polished-button inline-flex h-8 max-w-48 items-center gap-1.5 px-1 text-xs text-zinc-500 hover:text-zinc-200">
 				<GitBranch className="size-3.5 shrink-0" />
 				<select
 					value={status?.branch ?? ""}
 					onChange={(event) => checkoutBranch(event.currentTarget.value)}
 					disabled={isBusy || !status}
-					className="min-w-0 bg-transparent text-xs text-zinc-300 outline-none disabled:cursor-not-allowed disabled:text-zinc-600"
+					className="min-w-0 cursor-pointer bg-transparent text-xs text-zinc-500 outline-none hover:text-zinc-200 disabled:cursor-not-allowed disabled:text-zinc-700"
 					aria-label="Checkout branch"
 				>
 					{status?.branch ? null : <option value="">detached</option>}
@@ -57,6 +56,7 @@ export function GitLaneActions({
 					))}
 				</select>
 			</label>
+			<GitCommitMenu workspaceId={workspaceId} featureBranchName={branchName} />
 			{error ? <span className="max-w-64 truncate text-xs text-red-400">{error}</span> : null}
 		</div>
 	)

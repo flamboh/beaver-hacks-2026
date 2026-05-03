@@ -1,5 +1,6 @@
 import { findProjectSkills, useAgentSnapshot } from "@renderer/agentStore"
 import type { AgentSkillSuggestion } from "src/main/agent/contracts"
+import { motion } from "motion/react"
 import { useState } from "react"
 
 interface Props {
@@ -40,23 +41,28 @@ export default function Skills({ projectPath }: Props) {
 					type="button"
 					onClick={() => void scanSkills()}
 					disabled={isScanning}
-					className="min-w-24 cursor-pointer rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+					className="polished-button min-w-24 cursor-pointer rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
 				>
 					{isScanning ? "Scanning..." : "Skills"}
 				</button>
 			</div>
 
 			{latestSkillActivity ? (
-				<div className="rounded-md border border-white/8 bg-neutral-900 px-3 py-2 text-xs text-neutral-400">
+				<motion.div
+					initial={{ opacity: 0, y: 6, filter: "blur(3px)" }}
+					animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+					transition={{ type: "spring", duration: 0.3, bounce: 0 }}
+					className="polished-surface rounded-md border border-white/8 bg-neutral-900 px-3 py-2 text-xs text-neutral-400"
+				>
 					{latestSkillActivity.summary}
-				</div>
+				</motion.div>
 			) : null}
 
-			<div className="overflow-hidden rounded-lg border border-white/8 bg-neutral-900">
+			<div className="polished-surface overflow-hidden rounded-lg border border-white/8 bg-neutral-900">
 				{suggestions.length > 0 ? (
 					<ul className="divide-y divide-white/5">
-						{suggestions.map((skill) => (
-							<SkillRow key={skill.id} skill={skill} />
+						{suggestions.map((skill, index) => (
+							<SkillRow key={skill.id} skill={skill} index={index} />
 						))}
 					</ul>
 				) : (
@@ -69,9 +75,14 @@ export default function Skills({ projectPath }: Props) {
 	)
 }
 
-function SkillRow({ skill }: { skill: AgentSkillSuggestion }) {
+function SkillRow({ skill, index }: { skill: AgentSkillSuggestion; index: number }) {
 	return (
-		<li className="flex items-start gap-4 px-4 py-3">
+		<motion.li
+			initial={{ opacity: 0, y: 8 }}
+			animate={{ opacity: 1, y: 0 }}
+			transition={{ type: "spring", duration: 0.3, bounce: 0, delay: index * 0.025 }}
+			className="flex items-start gap-4 px-4 py-3"
+		>
 			<div className="min-w-0 flex-1">
 				<div className="flex min-w-0 items-center gap-2">
 					<h2 className="truncate text-sm font-medium text-neutral-100">{skill.name}</h2>
@@ -90,6 +101,6 @@ function SkillRow({ skill }: { skill: AgentSkillSuggestion }) {
 					<span>{skill.installs.toLocaleString()} installs</span>
 				</div>
 			</div>
-		</li>
+		</motion.li>
 	)
 }

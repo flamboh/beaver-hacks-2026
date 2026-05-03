@@ -1,5 +1,8 @@
 export const CARD_W = 1040
 export const CARD_H = 680
+export const CARD_WIDTH_STEPS = [CARD_W * 0.5, CARD_W, CARD_W * 1.5, CARD_W * 2] as const
+export const MIN_CARD_W = CARD_WIDTH_STEPS[0]
+export const MAX_CARD_W = CARD_WIDTH_STEPS[CARD_WIDTH_STEPS.length - 1]
 export const GAP = 96
 export const PADDING = 80
 export const LANE_LABEL_GUTTER = 72
@@ -9,28 +12,39 @@ export const MAX_ZOOM = 1.15
 export const STEP_X = CARD_W + GAP
 export const STEP_Y = CARD_H + LANE_LABEL_GUTTER + GAP
 
+export interface CardSize {
+	w: number
+	h: number
+}
+
 export interface CanvasLayout {
 	w: number
 	h: number
 	minX: number
 	minY: number
+	columnLefts: Map<number, number>
+	cellLefts: Map<string, number>
+	rowTops: Map<number, number>
+	rowHeights: Map<number, number>
 }
 
 export interface PositionedCard {
 	layout_x: number
 	layout_y: number
+	width?: number
+	height?: number
 }
 
 export function canvasSize(cards: PositionedCard[], laneCount = 0): CanvasLayout {
+	const emptyLayout = baseLayout(
+		[0],
+		Array.from({ length: Math.max(1, laneCount) }, (_, index) => index)
+	)
 	if (cards.length === 0) {
 		return {
+			...emptyLayout,
 			w: CARD_W + PADDING * 2,
-			h:
-				Math.max(1, laneCount) * (CARD_H + LANE_LABEL_GUTTER) +
-				Math.max(0, laneCount - 1) * GAP +
-				PADDING * 2,
-			minX: 0,
-			minY: 0
+			h: layoutHeight(emptyLayout.rowHeights, emptyLayout.minY, Math.max(0, laneCount - 1))
 		}
 	}
 	const xs = cards.map((card) => card.layout_x)
@@ -39,23 +53,73 @@ export function canvasSize(cards: PositionedCard[], laneCount = 0): CanvasLayout
 	const maxX = Math.max(...xs)
 	const minY = Math.min(0, ...ys)
 	const maxY = Math.max(laneCount - 1, ...ys)
+	const xRange = range(minX, maxX)
+	const yRange = range(minY, maxY)
+	const layout = baseLayout(xRange, yRange)
+	for (const x of xRange) {
+		layout.columnLefts.set(
+			x,
+			PADDING +
+				xRange
+					.filter((candidate) => candidate < x)
+					.reduce((sum, candidate) => sum + columnWidth(cards, candidate) + GAP, 0)
+		)
+	}
+	for (const y of yRange) {
+		for (const x of xRange) {
+			layout.cellLefts.set(
+				cellKey(x, y),
+				PADDING +
+					xRange
+						.filter((candidate) => candidate < x)
+						.reduce((sum, candidate) => sum + rowColumnWidth(cards, candidate, y) + GAP, 0)
+			)
+		}
+	}
+	for (const y of yRange) {
+		layout.rowHeights.set(y, rowHeight(cards, y))
+		layout.rowTops.set(
+			y,
+			PADDING +
+				yRange
+					.filter((candidate) => candidate < y)
+					.reduce(
+						(sum, candidate) =>
+							sum + (layout.rowHeights.get(candidate) ?? CARD_H) + LANE_LABEL_GUTTER + GAP,
+						0
+					)
+		)
+	}
 	return {
-		w: (maxX - minX + 1) * CARD_W + (maxX - minX) * GAP + PADDING * 2,
-		h: (maxY - minY + 1) * (CARD_H + LANE_LABEL_GUTTER) + (maxY - minY) * GAP + PADDING * 2,
-		minX,
-		minY
+		...layout,
+		w: Math.max(
+			...yRange.map(
+				(y) =>
+					xRange.reduce((sum, x) => sum + rowColumnWidth(cards, x, y), 0) +
+					(xRange.length - 1) * GAP +
+					PADDING * 2
+			)
+		),
+		h: layoutHeight(layout.rowHeights, minY, maxY)
 	}
 }
 
 export function cardPos(card: PositionedCard, layout: CanvasLayout): { x: number; y: number } {
 	return {
-		x: PADDING + (card.layout_x - layout.minX) * STEP_X,
-		y: PADDING + LANE_LABEL_GUTTER + (card.layout_y - layout.minY) * STEP_Y
+		x:
+			layout.cellLefts.get(cellKey(card.layout_x, card.layout_y)) ??
+			layout.columnLefts.get(card.layout_x) ??
+			PADDING + (card.layout_x - layout.minX) * STEP_X,
+		y:
+			(layout.rowTops.get(card.layout_y) ?? PADDING + (card.layout_y - layout.minY) * STEP_Y) +
+			LANE_LABEL_GUTTER
 	}
 }
 
 export function laneCardCenterY(laneIndex: number, layout: CanvasLayout): number {
-	return PADDING + LANE_LABEL_GUTTER + (laneIndex - layout.minY) * STEP_Y + CARD_H / 2
+	const rowTop = layout.rowTops.get(laneIndex) ?? PADDING + (laneIndex - layout.minY) * STEP_Y
+	const rowHeight = layout.rowHeights.get(laneIndex) ?? CARD_H
+	return rowTop + LANE_LABEL_GUTTER + rowHeight / 2
 }
 
 export function clampZoom(zoom: number): number {
@@ -102,7 +166,34 @@ export function centerOffset(
 
 export function cardCenter(card: PositionedCard, layout: CanvasLayout): { x: number; y: number } {
 	const pos = cardPos(card, layout)
-	return { x: pos.x + CARD_W / 2, y: pos.y + CARD_H / 2 }
+	const size = cardSize(card)
+	return { x: pos.x + size.w / 2, y: pos.y + size.h / 2 }
+}
+
+export function cardSize(card: PositionedCard): CardSize {
+	return {
+		w: clampCardWidth(card.width ?? CARD_W),
+		h: CARD_H
+	}
+}
+
+export function clampCardWidth(width: number): number {
+	return Math.min(MAX_CARD_W, Math.max(MIN_CARD_W, width))
+}
+
+export function snapCardWidth(width: number): number {
+	const clamped = clampCardWidth(width)
+	return CARD_WIDTH_STEPS.reduce((nearest, step) =>
+		Math.abs(step - clamped) < Math.abs(nearest - clamped) ? step : nearest
+	)
+}
+
+export function nextCardWidthStep(width: number, direction: "grow" | "shrink"): number {
+	const current = snapCardWidth(width)
+	const index = CARD_WIDTH_STEPS.findIndex((step) => step === current)
+	const nextIndex =
+		direction === "grow" ? Math.min(CARD_WIDTH_STEPS.length - 1, index + 1) : Math.max(0, index - 1)
+	return CARD_WIDTH_STEPS[nextIndex] ?? current
 }
 
 export function nearestCardIndex(
@@ -177,4 +268,57 @@ export function canElementScroll(element: HTMLElement, deltaX: number, deltaY: n
 function clampAxis(offset: number, viewportSize: number, contentSize: number): number {
 	if (contentSize <= viewportSize) return (viewportSize - contentSize) / 2
 	return Math.min(0, Math.max(offset, viewportSize - contentSize))
+}
+
+function baseLayout(xRange: number[], yRange: number[]): CanvasLayout {
+	const minX = Math.min(...xRange)
+	const minY = Math.min(...yRange)
+	const rowHeights = new Map(yRange.map((y) => [y, CARD_H]))
+	const rowTops = new Map(yRange.map((y) => [y, PADDING + (y - minY) * STEP_Y]))
+	return {
+		w: CARD_W + PADDING * 2,
+		h: CARD_H + LANE_LABEL_GUTTER + PADDING * 2,
+		minX,
+		minY,
+		columnLefts: new Map(xRange.map((x) => [x, PADDING + (x - minX) * STEP_X])),
+		cellLefts: new Map(
+			yRange.flatMap((y) => xRange.map((x) => [cellKey(x, y), PADDING + (x - minX) * STEP_X]))
+		),
+		rowTops,
+		rowHeights
+	}
+}
+
+function range(min: number, max: number): number[] {
+	return Array.from({ length: max - min + 1 }, (_, index) => min + index)
+}
+
+function columnWidth(cards: PositionedCard[], x: number): number {
+	const widths = cards.filter((card) => card.layout_x === x).map((card) => cardSize(card).w)
+	return widths.length > 0 ? Math.max(...widths) : CARD_W
+}
+
+function rowColumnWidth(cards: PositionedCard[], x: number, y: number): number {
+	const widths = cards
+		.filter((card) => card.layout_x === x && card.layout_y === y)
+		.map((card) => cardSize(card).w)
+	return widths.length > 0 ? Math.max(...widths) : CARD_W
+}
+
+function rowHeight(cards: PositionedCard[], y: number): number {
+	const heights = cards.filter((card) => card.layout_y === y).map((card) => cardSize(card).h)
+	return heights.length > 0 ? Math.max(...heights) : CARD_H
+}
+
+function layoutHeight(rowHeights: Map<number, number>, minY: number, maxY: number): number {
+	const rows = range(minY, maxY)
+	return (
+		rows.reduce((sum, y) => sum + (rowHeights.get(y) ?? CARD_H) + LANE_LABEL_GUTTER, 0) +
+		(rows.length - 1) * GAP +
+		PADDING * 2
+	)
+}
+
+function cellKey(x: number, y: number): string {
+	return `${x}:${y}`
 }

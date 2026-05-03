@@ -173,7 +173,7 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 					</div>
 					<button
 						onClick={() => setIsNewAgentModalOpen(true)}
-						className="flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/8 px-3 py-1.5 text-sm text-white transition-colors duration-300 hover:bg-white/12"
+						className="polished-button flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/8 px-3 py-1.5 text-sm text-white hover:bg-white/12"
 					>
 						<Plus size={14} />
 						New Agent
@@ -196,11 +196,14 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 									animate={{ opacity: 1, y: 0 }}
 									transition={{
 										delay: index * 0.045,
-										duration: 0.9,
-										ease: [0.22, 1, 0.36, 1]
+										type: "spring",
+										duration: 0.38,
+										bounce: 0
 									}}
+									whileHover={{ y: -2, scale: 1.01 }}
+									whileTap={{ scale: 0.99 }}
 									onClick={() => setEditingAgent(agent)}
-									className={`group relative min-w-0 cursor-pointer rounded-lg border bg-neutral-900 p-4 text-left transition-colors duration-300 hover:border-white/20 ${
+									className={`group polished-surface relative min-w-0 cursor-pointer rounded-lg border bg-neutral-900 p-4 text-left hover:border-white/20 ${
 										hoveredStatus === agent.status
 											? STATUS_BORDER_STYLES[agent.status]
 											: "border-white/5"

@@ -45,7 +45,7 @@ export default function AgentCardSideCreateButton({
 					}
 					onOpen()
 				}}
-				className="flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-neutral-400 opacity-35 transition-all duration-150 hover:scale-110 hover:text-white hover:opacity-100 group-hover/card:opacity-70"
+				className="polished-button flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-neutral-400 opacity-35 hover:scale-110 hover:text-white hover:opacity-100 group-hover/card:opacity-70"
 				aria-label={side === "top" || side === "bottom" ? "Create workspace" : "Create card"}
 				title={side === "top" || side === "bottom" ? "Create workspace" : "Create card"}
 			>

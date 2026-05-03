@@ -9,7 +9,9 @@ import { useControlPanelAgents } from "../useControlPanelAgents"
 import { useControlPanelKeyboard } from "../useControlPanelKeyboard"
 import {
 	PADDING,
+	CARD_H,
 	CARD_W,
+	type CardSize,
 	canElementScroll,
 	canStartPan,
 	canvasSize,
@@ -20,7 +22,8 @@ import {
 	fitZoom,
 	laneCardCenterY,
 	nearestCardInDirection,
-	nearestCardIndex
+	nearestCardIndex,
+	nextCardWidthStep
 } from "../controlPanelLayout"
 import type { ControlPanelCard, StartCardInput, WorkspaceLane } from "../useControlPanelAgents"
 
@@ -70,8 +73,21 @@ export default function ControlPanel({
 	} | null>(null)
 	const { cards, createCard, deleteCard, deletingCardId, isCreatingCard, refetch } =
 		useControlPanelAgents(projectIds, workspaces, activeWorkspaceId)
-	const canvas = useMemo(() => canvasSize(cards, workspaces.length), [cards, workspaces.length])
-	const hasCards = cards.length > 0
+	const [cardSizes, setCardSizes] = useState<Record<string, CardSize>>({})
+	const sizedCards = useMemo(
+		() =>
+			cards.map((card) => ({
+				...card,
+				width: cardSizes[card.id]?.w,
+				height: cardSizes[card.id]?.h
+			})),
+		[cards, cardSizes]
+	)
+	const canvas = useMemo(
+		() => canvasSize(sizedCards, workspaces.length),
+		[sizedCards, workspaces.length]
+	)
+	const hasCards = sizedCards.length > 0
 	const hasCanvas = workspaces.length > 0
 	const viewportCenter = useCallback(
 		(nextOffset: { x: number; y: number }, nextZoom: number) => ({
@@ -101,12 +117,12 @@ export default function ControlPanel({
 			const clamped = clampOffset(nextOffset, vpSize, nextCanvas, nextZoom)
 			wheelTargetOffset.current = clamped
 			setOffset(clamped)
-			if (syncFocus && cards.length > 0) {
-				setFocusedIdx(nearestCardIndex(viewportCenter(clamped, nextZoom), cards, nextCanvas))
+			if (syncFocus && sizedCards.length > 0) {
+				setFocusedIdx(nearestCardIndex(viewportCenter(clamped, nextZoom), sizedCards, nextCanvas))
 			}
 			flashMap()
 		},
-		[cards, canvas, flashMap, stopWheelPan, viewportCenter, vpSize, zoom]
+		[canvas, flashMap, sizedCards, stopWheelPan, viewportCenter, vpSize, zoom]
 	)
 
 	const setView = useCallback(
@@ -173,7 +189,7 @@ export default function ControlPanel({
 			if (!viewportRef.current) return
 			setSmoothPan(true)
 			setFocusedIdx(idx)
-			const card = cards[idx]
+			const card = sizedCards[idx]
 			if (!card) return
 			activateCardWorkspace(card)
 			commitOffset(centerOffset(cardCenter(card, canvas), vpSize, canvas, zoom), zoom, false)
@@ -181,12 +197,12 @@ export default function ControlPanel({
 			if (smoothPanTimer.current) clearTimeout(smoothPanTimer.current)
 			smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 320)
 		},
-		[activateCardWorkspace, cards, canvas, commitOffset, flashMap, vpSize, zoom]
+		[activateCardWorkspace, sizedCards, canvas, commitOffset, flashMap, vpSize, zoom]
 	)
 
 	const snapToCard = useCallback(
-		(idx: number) => centerCard(Math.max(0, Math.min(idx, cards.length - 1))),
-		[cards.length, centerCard]
+		(idx: number) => centerCard(Math.max(0, Math.min(idx, sizedCards.length - 1))),
+		[sizedCards.length, centerCard]
 	)
 
 	const centerWorkspaceLane = useCallback(
@@ -195,7 +211,7 @@ export default function ControlPanel({
 			const workspace = workspaces[workspaceIndex]
 			if (!workspace) return
 			onWorkspaceActivate(workspace.id)
-			const cardIdx = cards.findIndex((card) => card.workspace_id === workspace.id)
+			const cardIdx = sizedCards.findIndex((card) => card.workspace_id === workspace.id)
 			if (cardIdx >= 0) {
 				centerCard(cardIdx)
 				return
@@ -206,13 +222,13 @@ export default function ControlPanel({
 			if (smoothPanTimer.current) clearTimeout(smoothPanTimer.current)
 			smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 320)
 		},
-		[cards, canvas, centerCard, commitOffset, onWorkspaceActivate, vpSize, workspaces, zoom]
+		[sizedCards, canvas, centerCard, commitOffset, onWorkspaceActivate, vpSize, workspaces, zoom]
 	)
 
 	useEffect(() => {
 		if (!hasCanvas || vpSize.w === 0 || vpSize.h === 0) return
 		if (lastCenteredWorkspace.current === activeWorkspaceId) return
-		const idx = cards.findIndex((card) => card.workspace_id === activeWorkspaceId)
+		const idx = sizedCards.findIndex((card) => card.workspace_id === activeWorkspaceId)
 		const workspaceIndex = workspaces.findIndex((workspace) => workspace.id === activeWorkspaceId)
 		if (idx < 0 && workspaceIndex < 0) return
 		lastCenteredWorkspace.current = activeWorkspaceId
@@ -230,11 +246,11 @@ export default function ControlPanel({
 		return () => cancelAnimationFrame(frame)
 	}, [
 		activeWorkspaceId,
-		cards,
 		canvas,
 		centerCard,
 		commitOffset,
 		hasCanvas,
+		sizedCards,
 		vpSize,
 		workspaces,
 		zoom
@@ -254,16 +270,18 @@ export default function ControlPanel({
 				return
 			}
 			if (!hasCards) return
-			centerCard(nearestCardInDirection(viewportCenter(offset, zoom), cards, canvas, direction))
+			centerCard(
+				nearestCardInDirection(viewportCenter(offset, zoom), sizedCards, canvas, direction)
+			)
 		},
 		[
 			activeWorkspaceId,
-			cards,
 			canvas,
 			centerCard,
 			centerWorkspaceLane,
 			hasCards,
 			offset,
+			sizedCards,
 			viewportCenter,
 			workspaces,
 			zoom
@@ -273,16 +291,41 @@ export default function ControlPanel({
 	const focusCard = useCallback(
 		(idx: number) => {
 			setFocusedIdx(idx)
-			const card = cards[idx]
+			const card = sizedCards[idx]
 			if (card) activateCardWorkspace(card)
 		},
-		[activateCardWorkspace, cards]
+		[activateCardWorkspace, sizedCards]
+	)
+	const resizeCard = useCallback(
+		(cardId: string, size: CardSize) => {
+			setSmoothPan(true)
+			setCardSizes((current) => ({ ...current, [cardId]: size }))
+			flashMap()
+			if (smoothPanTimer.current) clearTimeout(smoothPanTimer.current)
+			smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 220)
+		},
+		[flashMap]
+	)
+	const resizeFocused = useCallback(
+		(direction: "grow" | "shrink") => {
+			const card = sizedCards[Math.max(0, Math.min(focusedIdx, sizedCards.length - 1))]
+			if (!card) return
+			const currentSize = cardSizes[card.id] ?? {
+				w: card.width ?? CARD_W,
+				h: card.height ?? CARD_H
+			}
+			const nextWidth = nextCardWidthStep(currentSize.w, direction)
+			if (nextWidth === currentSize.w) return
+			resizeCard(card.id, { ...currentSize, w: nextWidth })
+		},
+		[cardSizes, focusedIdx, resizeCard, sizedCards]
 	)
 
 	useControlPanelKeyboard({
 		centerFocused: () => centerCard(focusedIdx),
 		focusedIdx,
 		moveFocus,
+		resizeFocused,
 		setSpacePanActive,
 		snapToCard,
 		spacePan
@@ -294,14 +337,14 @@ export default function ControlPanel({
 			setOffset((current) => {
 				const clamped = clampOffset({ x: current.x + dx, y: current.y + dy }, vpSize, canvas, zoom)
 				wheelTargetOffset.current = clamped
-				if (cards.length > 0) {
-					setFocusedIdx(nearestCardIndex(viewportCenter(clamped, zoom), cards, canvas))
+				if (sizedCards.length > 0) {
+					setFocusedIdx(nearestCardIndex(viewportCenter(clamped, zoom), sizedCards, canvas))
 				}
 				return clamped
 			})
 			flashMap()
 		},
-		[cards, canvas, flashMap, stopWheelPan, viewportCenter, vpSize, zoom]
+		[sizedCards, canvas, flashMap, stopWheelPan, viewportCenter, vpSize, zoom]
 	)
 
 	const smoothWheelPanBy = useCallback(
@@ -328,8 +371,8 @@ export default function ControlPanel({
 						next.x = target.x
 						next.y = target.y
 					}
-					if (cards.length > 0) {
-						setFocusedIdx(nearestCardIndex(viewportCenter(next, zoom), cards, canvas))
+					if (sizedCards.length > 0) {
+						setFocusedIdx(nearestCardIndex(viewportCenter(next, zoom), sizedCards, canvas))
 					}
 					return next
 				})
@@ -342,7 +385,7 @@ export default function ControlPanel({
 
 			wheelPanFrame.current = requestAnimationFrame(tick)
 		},
-		[cards, canvas, flashMap, viewportCenter, vpSize, zoom]
+		[sizedCards, canvas, flashMap, viewportCenter, vpSize, zoom]
 	)
 
 	const stopEdgePan = useCallback(() => {
@@ -458,7 +501,7 @@ export default function ControlPanel({
 	const handleCreateCard = useCallback(
 		async (input: StartCardInput) => {
 			if (isCreatingCard) return
-			const sourceCard = cards.find((card) => card.id === input.sourceCardId)
+			const sourceCard = sizedCards.find((card) => card.id === input.sourceCardId)
 			if (sourceCard && (input.side === "top" || input.side === "bottom")) {
 				onWorkspaceCreate(sourceCard.workspace_id, input.side)
 				return
@@ -483,7 +526,7 @@ export default function ControlPanel({
 				layout_x: nextX ?? createdCard.layout_x,
 				layout_y: nextY ?? createdCard.layout_y
 			}
-			const nextCanvas = canvasSize([...cards, nextCard], workspaces.length)
+			const nextCanvas = canvasSize([...sizedCards, nextCard], workspaces.length)
 			setSmoothPan(true)
 			onWorkspaceActivate(createdCard.workspaceId)
 			commitOffset(
@@ -496,12 +539,12 @@ export default function ControlPanel({
 			smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 320)
 		},
 		[
-			cards,
 			commitOffset,
 			createCard,
 			isCreatingCard,
 			onWorkspaceActivate,
 			onWorkspaceCreate,
+			sizedCards,
 			vpSize,
 			workspaces.length,
 			zoom
@@ -509,16 +552,16 @@ export default function ControlPanel({
 	)
 	const handleCreateWorkspace = useCallback(
 		(sourceCardId: string, side: "top" | "bottom") => {
-			const sourceCard = cards.find((card) => card.id === sourceCardId)
+			const sourceCard = sizedCards.find((card) => card.id === sourceCardId)
 			if (!sourceCard) return
 			onWorkspaceCreate(sourceCard.workspace_id, side)
 		},
-		[cards, onWorkspaceCreate]
+		[sizedCards, onWorkspaceCreate]
 	)
 	const handleDeleteCard = useCallback(
 		async (id: string) => {
-			const deletedCard = cards.find((card) => card.id === id)
-			const remainingCards = cards.filter((card) => card.id !== id)
+			const deletedCard = sizedCards.find((card) => card.id === id)
+			const remainingCards = sizedCards.filter((card) => card.id !== id)
 			const nextCard = deletedCard
 				? nearestRemainingCard(deletedCard, remainingCards, canvas)
 				: null
@@ -542,10 +585,10 @@ export default function ControlPanel({
 		},
 		[
 			activateCardWorkspace,
-			cards,
 			canvas,
 			commitOffset,
 			deleteCard,
+			sizedCards,
 			vpSize,
 			workspaces.length,
 			zoom
@@ -570,7 +613,8 @@ export default function ControlPanel({
 			}
 			event.preventDefault()
 			event.stopPropagation()
-			const sourceCard = cards[Math.max(0, Math.min(focusedIdx, cards.length - 1))] ?? cards[0]
+			const sourceCard =
+				sizedCards[Math.max(0, Math.min(focusedIdx, sizedCards.length - 1))] ?? sizedCards[0]
 			const vp = viewportRef.current
 			if (!sourceCard || !vp) return
 			const rect = vp.getBoundingClientRect()
@@ -580,7 +624,7 @@ export default function ControlPanel({
 				rect.width,
 				rect.height
 			)
-			const side = resolveCreateSide(preferredSide, sourceCard, cards)
+			const side = resolveCreateSide(preferredSide, sourceCard, sizedCards)
 			if (!side) return
 			const menuW = 120
 			const menuH = 82
@@ -592,7 +636,7 @@ export default function ControlPanel({
 				side
 			})
 		},
-		[cards, focusedIdx, hasCards]
+		[focusedIdx, hasCards, sizedCards]
 	)
 	const isActualSize = Math.abs(zoom - 1) < 0.01
 
@@ -627,7 +671,7 @@ export default function ControlPanel({
 				<>
 					<ControlPanelCanvas
 						activeWorkspaceId={activeWorkspaceId}
-						cards={cards}
+						cards={sizedCards}
 						canvas={canvas}
 						draggedDuringPan={draggedDuringPan}
 						deletingCardId={deletingCardId}
@@ -638,6 +682,7 @@ export default function ControlPanel({
 						onCreateWorkspace={handleCreateWorkspace}
 						onDeleteCard={handleDeleteCard}
 						onFocus={focusCard}
+						onResizeCard={resizeCard}
 						onSnap={snapToCard}
 						smoothPan={smoothPan}
 						workspaces={workspaces}
@@ -646,6 +691,8 @@ export default function ControlPanel({
 					<NavigationMap
 						canvasWidth={canvas.w}
 						canvasHeight={canvas.h}
+						cards={sizedCards}
+						canvas={canvas}
 						viewportWidth={vpSize.w}
 						viewportHeight={vpSize.h}
 						offset={offset}
@@ -659,7 +706,7 @@ export default function ControlPanel({
 						showFitAll={isActualSize}
 					/>
 					<div className="pointer-events-none absolute right-3 bottom-3 select-none text-xs text-neutral-600">
-						{cards.length} cards
+						{sizedCards.length} cards
 					</div>
 				</>
 			) : null}

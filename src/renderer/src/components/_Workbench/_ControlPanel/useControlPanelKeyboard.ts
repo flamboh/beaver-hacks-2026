@@ -4,6 +4,7 @@ interface UseControlPanelKeyboardProps {
 	centerFocused: () => void
 	focusedIdx: number
 	moveFocus: (direction: "left" | "right" | "up" | "down") => void
+	resizeFocused: (direction: "grow" | "shrink") => void
 	setSpacePanActive: (active: boolean) => void
 	snapToCard: (idx: number) => void
 	spacePan: { current: boolean }
@@ -13,6 +14,7 @@ export function useControlPanelKeyboard({
 	centerFocused,
 	focusedIdx,
 	moveFocus,
+	resizeFocused,
 	setSpacePanActive,
 	snapToCard,
 	spacePan
@@ -33,6 +35,11 @@ export function useControlPanelKeyboard({
 			if (e.key === "Tab") {
 				e.preventDefault()
 				snapToCard(focusedIdx + (e.shiftKey ? -1 : 1))
+				return
+			}
+			if (e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+				e.preventDefault()
+				resizeFocused(e.key === "ArrowRight" ? "grow" : "shrink")
 				return
 			}
 			if (
@@ -60,5 +67,5 @@ export function useControlPanelKeyboard({
 			window.removeEventListener("keydown", keyDown)
 			window.removeEventListener("keyup", keyUp)
 		}
-	}, [centerFocused, focusedIdx, moveFocus, setSpacePanActive, snapToCard, spacePan])
+	}, [centerFocused, focusedIdx, moveFocus, resizeFocused, setSpacePanActive, snapToCard, spacePan])
 }

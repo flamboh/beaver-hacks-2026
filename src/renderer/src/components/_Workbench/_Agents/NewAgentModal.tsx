@@ -1,5 +1,6 @@
 import { type FormEvent, type ReactNode, useState } from "react"
 import { AlignLeft, ChevronDown, FolderOpen, X } from "lucide-react"
+import { motion } from "motion/react"
 
 type AgentProvider = "codex" | "claude"
 
@@ -129,12 +130,22 @@ export default function NewAgentModal({
 	}
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 text-white">
-			<section
+		<motion.div
+			initial={{ opacity: 0 }}
+			animate={{ opacity: 1 }}
+			exit={{ opacity: 0 }}
+			transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
+			className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 text-white backdrop-blur-sm"
+		>
+			<motion.section
+				initial={{ opacity: 0, y: 14, scale: 0.98, filter: "blur(4px)" }}
+				animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+				exit={{ opacity: 0, y: -8, scale: 0.98, filter: "blur(4px)" }}
+				transition={{ type: "spring", duration: 0.32, bounce: 0 }}
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="new-agent-title"
-				className="flex max-h-[calc(100vh-48px)] w-full max-w-md flex-col overflow-hidden rounded-lg border border-white/10 bg-neutral-900 shadow-2xl"
+				className="polished-surface flex max-h-[calc(100vh-48px)] w-full max-w-md flex-col overflow-hidden rounded-lg border border-white/10 bg-neutral-900 shadow-2xl"
 			>
 				<header className="flex h-12 shrink-0 items-center justify-between border-b border-white/5 bg-neutral-800/40 px-4">
 					<h2 id="new-agent-title" className="text-sm font-medium text-white">
@@ -144,7 +155,7 @@ export default function NewAgentModal({
 						type="button"
 						onClick={onCancel}
 						disabled={isSubmitting}
-						className="cursor-pointer text-neutral-500 transition-colors duration-300 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+						className="polished-button flex size-8 cursor-pointer items-center justify-center rounded-md text-neutral-500 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
 						aria-label={isEditing ? "Close edit agent modal" : "Close new agent modal"}
 					>
 						<X size={15} />
@@ -160,7 +171,7 @@ export default function NewAgentModal({
 								value={form.name}
 								onChange={(event) => set("name", event.target.value)}
 								disabled={isSubmitting}
-								className="w-full rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 text-sm text-white transition-colors duration-300 placeholder:text-neutral-600 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+								className="polished-input w-full rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
 							/>
 						</Field>
 
@@ -172,7 +183,7 @@ export default function NewAgentModal({
 										type="button"
 										onClick={() => setProvider(provider.value)}
 										disabled={isSubmitting}
-										className={`cursor-pointer rounded-md border py-1.5 text-xs transition-colors duration-300 disabled:cursor-not-allowed disabled:opacity-60 ${
+										className={`polished-button cursor-pointer rounded-md border py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60 ${
 											form.provider === provider.value
 												? "border-white/10 bg-white/8 text-neutral-200"
 												: "border-white/5 text-neutral-600 hover:border-white/10 hover:text-neutral-400"
@@ -190,7 +201,7 @@ export default function NewAgentModal({
 									value={form.model}
 									onChange={(event) => set("model", event.target.value)}
 									disabled={isSubmitting}
-									className="cursor-pointer w-full appearance-none rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 pr-9 text-sm text-white transition-colors duration-300 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+									className="polished-input w-full cursor-pointer appearance-none rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 pr-9 text-sm text-white focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
 								>
 									{modelOptions.map((group) => (
 										<optgroup key={group.group} label={group.group}>
@@ -217,7 +228,7 @@ export default function NewAgentModal({
 										type="button"
 										onClick={() => set("effort", level)}
 										disabled={isSubmitting}
-										className={`cursor-pointer rounded-md border py-1.5 text-xs capitalize transition-colors duration-300 disabled:cursor-not-allowed disabled:opacity-60 ${
+										className={`polished-button cursor-pointer rounded-md border py-1.5 text-xs capitalize disabled:cursor-not-allowed disabled:opacity-60 ${
 											form.effort === level
 												? EFFORT_STYLES[level]
 												: "border-white/5 text-neutral-600 hover:border-white/10 hover:text-neutral-400"
@@ -235,7 +246,7 @@ export default function NewAgentModal({
 									type="button"
 									onClick={() => set("instructionMode", "text")}
 									disabled={isSubmitting}
-									className={`flex cursor-pointer items-center justify-center gap-1.5 py-1.5 text-xs transition-colors duration-300 disabled:cursor-not-allowed disabled:opacity-60 ${
+									className={`polished-button flex cursor-pointer items-center justify-center gap-1.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60 ${
 										form.instructionMode === "text"
 											? "bg-white/8 text-white"
 											: "text-neutral-600 hover:text-neutral-400"
@@ -247,7 +258,7 @@ export default function NewAgentModal({
 									type="button"
 									onClick={() => set("instructionMode", "path")}
 									disabled={isSubmitting}
-									className={`flex cursor-pointer items-center justify-center gap-1.5 py-1.5 text-xs transition-colors duration-300 disabled:cursor-not-allowed disabled:opacity-60 ${
+									className={`polished-button flex cursor-pointer items-center justify-center gap-1.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60 ${
 										form.instructionMode === "path"
 											? "bg-white/8 text-white"
 											: "text-neutral-600 hover:text-neutral-400"
@@ -265,7 +276,7 @@ export default function NewAgentModal({
 										value={form.instructions}
 										onChange={(event) => set("instructions", event.target.value)}
 										disabled={isSubmitting}
-										className="w-full resize-none rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 text-sm leading-relaxed text-white transition-colors duration-300 placeholder:text-neutral-600 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+										className="polished-input w-full resize-none rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 text-sm leading-relaxed text-white placeholder:text-neutral-600 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
 									/>
 									<div className="flex items-center gap-2">
 										<span className="shrink-0 font-mono text-xs text-neutral-600">scopes/</span>
@@ -275,7 +286,7 @@ export default function NewAgentModal({
 											value={form.scopeFileName}
 											onChange={(event) => set("scopeFileName", event.target.value)}
 											disabled={isSubmitting}
-											className="min-w-0 flex-1 rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 font-mono text-sm text-white transition-colors duration-300 placeholder:text-neutral-600 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+											className="polished-input min-w-0 flex-1 rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 font-mono text-sm text-white placeholder:text-neutral-600 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
 										/>
 										<span className="shrink-0 font-mono text-xs text-neutral-600">.md</span>
 									</div>
@@ -288,13 +299,13 @@ export default function NewAgentModal({
 										value={form.scopePath}
 										onChange={(event) => set("scopePath", event.target.value)}
 										disabled={isSubmitting}
-										className="min-w-0 flex-1 rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 font-mono text-sm text-white transition-colors duration-300 placeholder:text-neutral-600 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+										className="polished-input min-w-0 flex-1 rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 font-mono text-sm text-white placeholder:text-neutral-600 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
 									/>
 									<button
 										type="button"
 										onClick={handleBrowse}
 										disabled={isSubmitting}
-										className="cursor-pointer rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition-colors duration-300 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+										className="polished-button cursor-pointer rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
 									>
 										Browse
 									</button>
@@ -308,14 +319,14 @@ export default function NewAgentModal({
 							type="button"
 							onClick={onCancel}
 							disabled={isSubmitting}
-							className="cursor-pointer rounded-md border border-white/8 px-4 py-2 text-sm text-neutral-300 transition-colors duration-300 hover:border-white/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+							className="polished-button cursor-pointer rounded-md border border-white/8 px-4 py-2 text-sm text-neutral-300 hover:border-white/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
 						>
 							Cancel
 						</button>
 						<button
 							type="submit"
 							disabled={isSubmitting}
-							className="flex min-w-32 cursor-pointer items-center justify-center gap-2 rounded-md border border-white/10 bg-white/10 px-4 py-2 text-sm font-medium text-white transition-colors duration-300 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50"
+							className="polished-button flex min-w-32 cursor-pointer items-center justify-center gap-2 rounded-md border border-white/10 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							{isSubmitting ? (
 								<>
@@ -328,8 +339,8 @@ export default function NewAgentModal({
 						</button>
 					</footer>
 				</form>
-			</section>
-		</div>
+			</motion.section>
+		</motion.div>
 	)
 }
 
