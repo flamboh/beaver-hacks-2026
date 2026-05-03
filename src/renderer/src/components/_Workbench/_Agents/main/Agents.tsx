@@ -1,12 +1,14 @@
 import { useState } from "react"
 import { Plus } from "lucide-react"
+import { motion } from "motion/react"
 import { useSessionData } from "@renderer/hooks/useSessionData"
 import type { AgentRow } from "@renderer/types/models"
-import AgentsSidebar from "../AgentsSidebar"
+import AgentsSidebar, { type AgentStatus } from "../AgentsSidebar"
 import NewAgentModal, { type NewAgentInput } from "../NewAgentModal"
 
 type AgentCardRow = AgentRow & {
 	current_task: string
+	status: AgentStatus
 }
 
 type AgentProvider = "claudeCode" | "codex"
@@ -20,6 +22,7 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		model: "claude-opus-4-7",
 		scope_path: "@Pipeline.md",
 		effort: "high",
+		status: "working",
 		current_task: "Extracting auth middleware boundaries"
 	},
 	{
@@ -29,6 +32,7 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		model: "gpt-4o-mini",
 		scope_path: "@tests/README.md",
 		effort: "medium",
+		status: "pending",
 		current_task: "Writing renderer smoke tests"
 	},
 	{
@@ -38,6 +42,7 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		model: "claude-sonnet-4-6",
 		scope_path: "@docs",
 		effort: "low",
+		status: "idle",
 		current_task: "Summarizing review workflow"
 	},
 	{
@@ -47,6 +52,7 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		model: "o4-mini",
 		scope_path: "@src/main/git",
 		effort: "medium",
+		status: "failure",
 		current_task: "Checking branch isolation rules"
 	},
 	{
@@ -56,6 +62,7 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		model: "claude-haiku-4-5",
 		scope_path: "@src/renderer",
 		effort: "low",
+		status: "working",
 		current_task: "Tightening sidebar spacing"
 	}
 ]
@@ -67,6 +74,20 @@ const EFFORT_STYLES: Record<string, string> = {
 	low: "border-white/10 bg-white/8 text-neutral-200",
 	medium: "border-white/10 bg-white/8 text-neutral-200",
 	high: "border-white/10 bg-white/8 text-neutral-200"
+}
+
+const STATUS_STYLES: Record<AgentStatus, string> = {
+	failure: "bg-red-500",
+	pending: "bg-orange-400",
+	working: "bg-blue-500",
+	idle: "bg-neutral-500"
+}
+
+const STATUS_BORDER_STYLES: Record<AgentStatus, string> = {
+	failure: "border-red-500/80",
+	pending: "border-orange-400/80",
+	working: "border-blue-500/80",
+	idle: "border-neutral-400/70"
 }
 
 function agentImage(agent: AgentCardRow) {
@@ -117,10 +138,20 @@ function AgentLogo({ label, provider }: { label: string; provider: AgentProvider
 
 // ─────────────────────────────────────────────────────────────────
 
-export default function Agents() {
+export default function Agents({ projectPath }: { projectPath: string }) {
 	const { project } = useSessionData()
 	const [agents, setAgents] = useState<AgentCardRow[]>(PLACEHOLDER_AGENTS)
 	const [isNewAgentModalOpen, setIsNewAgentModalOpen] = useState(false)
+	const [editingAgent, setEditingAgent] = useState<AgentCardRow | null>(null)
+	const [hoveredStatus, setHoveredStatus] = useState<AgentStatus | null>(null)
+
+	const statusCounts = agents.reduce<Record<AgentStatus, number>>(
+		(counts, agent) => ({
+			...counts,
+			[agent.status]: counts[agent.status] + 1
+		}),
+		{ failure: 0, pending: 0, working: 0, idle: 0 }
+	)
 
 	const handleCreateAgent = async (input: NewAgentInput) => {
 		// simulate DB write
@@ -130,16 +161,36 @@ export default function Agents() {
 			name: input.name || "Unnamed Agent",
 			project_id: project?.id ?? "",
 			model: input.model,
-			scope_path: input.instructionMode === "path" ? input.scopePath : "",
+			scope_path: input.scopePath,
 			effort: input.effort,
+			status: "idle",
 			current_task: "Waiting for task"
 		}
 		setAgents((prev) => [newAgent, ...prev])
 	}
 
+	const handleUpdateAgent = async (input: NewAgentInput) => {
+		if (!editingAgent) return
+		// simulate DB write
+		await new Promise((res) => setTimeout(res, 900))
+		setAgents((prev) =>
+			prev.map((agent) =>
+				agent.id === editingAgent.id
+					? {
+							...agent,
+							name: input.name || "Unnamed Agent",
+							model: input.model,
+							scope_path: input.scopePath,
+							effort: input.effort
+						}
+					: agent
+			)
+		)
+	}
+
 	return (
 		<div className="flex h-full overflow-hidden">
-			<AgentsSidebar />
+			<AgentsSidebar total={agents.length} counts={statusCounts} onStatusHover={setHoveredStatus} />
 
 			{/* main list */}
 			<div className="flex flex-1 flex-col overflow-auto pl-6">
@@ -165,14 +216,31 @@ export default function Agents() {
 					</div>
 				) : (
 					<div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-						{agents.map((agent) => {
+						{agents.map((agent, index) => {
 							const image = agentImage(agent)
 							return (
-								<div
+								<motion.button
+									type="button"
 									key={agent.id}
-									className="min-w-0 rounded-lg border border-white/5 bg-neutral-900 p-4 transition-colors duration-300 hover:border-white/20"
+									initial={{ opacity: 0, y: 32 }}
+									animate={{ opacity: 1, y: 0 }}
+									transition={{
+										delay: index * 0.045,
+										duration: 0.9,
+										ease: [0.22, 1, 0.36, 1]
+									}}
+									onClick={() => setEditingAgent(agent)}
+									className={`min-w-0 cursor-pointer rounded-lg border bg-neutral-900 p-4 text-left transition-colors duration-300 hover:border-white/20 ${
+										hoveredStatus === agent.status
+											? STATUS_BORDER_STYLES[agent.status]
+											: "border-white/5"
+									}`}
 								>
-									<div className="mb-4 flex aspect-[16/9] items-center justify-center rounded-md border border-white/8 bg-black">
+									<div className="relative mb-4 flex aspect-[16/9] items-center justify-center rounded-md border border-white/8 bg-neutral-950">
+										<span
+											className={`absolute right-3 top-3 h-2.5 w-2.5 rounded-full ${STATUS_STYLES[agent.status]}`}
+											aria-label={`${agent.status} status`}
+										/>
 										<AgentLogo provider={image.provider} label={image.label} />
 									</div>
 
@@ -195,7 +263,7 @@ export default function Agents() {
 										</span>
 										<span className="truncate text-xs text-neutral-400">{agent.current_task}</span>
 									</div>
-								</div>
+								</motion.button>
 							)
 						})}
 					</div>
@@ -205,7 +273,17 @@ export default function Agents() {
 			{isNewAgentModalOpen && (
 				<NewAgentModal
 					onCancel={() => setIsNewAgentModalOpen(false)}
-					onCreate={handleCreateAgent}
+					onSubmit={handleCreateAgent}
+					projectPath={projectPath}
+				/>
+			)}
+
+			{editingAgent && (
+				<NewAgentModal
+					initialAgent={editingAgent}
+					onCancel={() => setEditingAgent(null)}
+					onSubmit={handleUpdateAgent}
+					projectPath={projectPath}
 				/>
 			)}
 		</div>

@@ -31,6 +31,7 @@ import type {
 	GitStatusSnapshot,
 	GitWorkingTreeDiffSnapshot
 } from "../main/git/ipc"
+import type { SaveScopeFileInput, SaveScopeFileResult } from "../main/scopeFiles/ipc"
 
 // Custom APIs for renderer
 const api = {
@@ -79,7 +80,12 @@ const api = {
 			ipcRenderer.invoke("dev-server:stop-project", input)
 	},
 	dialog: {
-		selectDirectory: (): Promise<string | null> => ipcRenderer.invoke("dialog:select-directory")
+		selectDirectory: (): Promise<string | null> => ipcRenderer.invoke("dialog:select-directory"),
+		selectFile: (): Promise<string | null> => ipcRenderer.invoke("dialog:select-file")
+	},
+	files: {
+		saveScopeFile: (input: SaveScopeFileInput): Promise<SaveScopeFileResult> =>
+			ipcRenderer.invoke("scope-file:save", input)
 	},
 	projects: {
 		list: (): Promise<ProjectRow[]> => ipcRenderer.invoke("project:list"),

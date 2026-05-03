@@ -35,6 +35,7 @@ const DEFAULT_FORM = {
 	effort: "medium" as (typeof EFFORT_OPTIONS)[number],
 	instructionMode: "text" as "text" | "path",
 	instructions: "",
+	scopeFileName: "",
 	scopePath: ""
 }
 
@@ -42,20 +43,61 @@ export type NewAgentInput = typeof DEFAULT_FORM
 
 type NewAgentModalProps = {
 	onCancel: () => void
-	onCreate: (input: NewAgentInput) => Promise<unknown>
+	onSubmit: (input: NewAgentInput) => Promise<unknown>
+	projectPath: string
+	initialAgent?: {
+		name: string
+		model: string
+		effort: string
+		scope_path: string
+	}
 }
 
-export default function NewAgentModal({ onCancel, onCreate }: NewAgentModalProps) {
-	const [form, setForm] = useState<NewAgentInput>({ ...DEFAULT_FORM })
+export default function NewAgentModal({
+	onCancel,
+	onSubmit,
+	projectPath,
+	initialAgent
+}: NewAgentModalProps) {
+	const isEditing = Boolean(initialAgent)
+	const [form, setForm] = useState<NewAgentInput>({
+		...DEFAULT_FORM,
+		name: initialAgent?.name ?? DEFAULT_FORM.name,
+		model: initialAgent?.model ?? DEFAULT_FORM.model,
+		effort: (initialAgent?.effort ?? DEFAULT_FORM.effort) as NewAgentInput["effort"],
+		instructionMode: initialAgent ? "path" : DEFAULT_FORM.instructionMode,
+		scopePath: initialAgent?.scope_path ?? DEFAULT_FORM.scopePath
+	})
 	const [isSubmitting, setIsSubmitting] = useState(false)
 
 	const set = <K extends keyof NewAgentInput>(key: K, value: NewAgentInput[K]) =>
 		setForm((prev) => ({ ...prev, [key]: value }))
 
+	const scopePathFromFileName = `./scopes/${form.scopeFileName.trim() || "agent-scope"}.md`
+
+	async function handleBrowse(): Promise<void> {
+		const selectedPath = await window.api.dialog.selectFile()
+		if (selectedPath) set("scopePath", selectedPath)
+	}
+
 	async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
 		event.preventDefault()
 		setIsSubmitting(true)
-		await onCreate(form)
+		const savedScope =
+			form.instructionMode === "text"
+				? await window.api.files.saveScopeFile({
+						projectPath,
+						fileName: form.scopeFileName || "agent-scope",
+						contents: form.instructions
+					})
+				: null
+		await onSubmit({
+			...form,
+			scopePath:
+				form.instructionMode === "text"
+					? (savedScope?.relativePath ?? scopePathFromFileName)
+					: form.scopePath
+		})
 		setIsSubmitting(false)
 		onCancel()
 	}
@@ -70,14 +112,14 @@ export default function NewAgentModal({ onCancel, onCreate }: NewAgentModalProps
 			>
 				<header className="flex h-12 shrink-0 items-center justify-between border-b border-white/5 bg-neutral-800/40 px-4">
 					<h2 id="new-agent-title" className="text-sm font-medium text-white">
-						New Agent
+						{isEditing ? "Edit Agent" : "New Agent"}
 					</h2>
 					<button
 						type="button"
 						onClick={onCancel}
 						disabled={isSubmitting}
 						className="cursor-pointer text-neutral-500 transition-colors duration-300 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-						aria-label="Close new agent modal"
+						aria-label={isEditing ? "Close edit agent modal" : "Close new agent modal"}
 					>
 						<X size={15} />
 					</button>
@@ -170,23 +212,47 @@ export default function NewAgentModal({ onCancel, onCreate }: NewAgentModalProps
 							</div>
 
 							{form.instructionMode === "text" ? (
-								<textarea
-									rows={4}
-									placeholder="Describe what this agent should accomplish..."
-									value={form.instructions}
-									onChange={(event) => set("instructions", event.target.value)}
-									disabled={isSubmitting}
-									className="w-full resize-none rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 text-sm leading-relaxed text-white transition-colors duration-300 placeholder:text-neutral-600 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-								/>
+								<div className="flex flex-col gap-2">
+									<textarea
+										rows={4}
+										placeholder="Describe what this agent should accomplish..."
+										value={form.instructions}
+										onChange={(event) => set("instructions", event.target.value)}
+										disabled={isSubmitting}
+										className="w-full resize-none rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 text-sm leading-relaxed text-white transition-colors duration-300 placeholder:text-neutral-600 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+									/>
+									<div className="flex items-center gap-2">
+										<span className="shrink-0 font-mono text-xs text-neutral-600">./scopes/</span>
+										<input
+											type="text"
+											placeholder="agent-scope"
+											value={form.scopeFileName}
+											onChange={(event) => set("scopeFileName", event.target.value)}
+											disabled={isSubmitting}
+											className="min-w-0 flex-1 rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 font-mono text-sm text-white transition-colors duration-300 placeholder:text-neutral-600 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+										/>
+										<span className="shrink-0 font-mono text-xs text-neutral-600">.md</span>
+									</div>
+								</div>
 							) : (
-								<input
-									type="text"
-									placeholder="./scopes/agent-scope.md"
-									value={form.scopePath}
-									onChange={(event) => set("scopePath", event.target.value)}
-									disabled={isSubmitting}
-									className="w-full rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 font-mono text-sm text-white transition-colors duration-300 placeholder:text-neutral-600 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-								/>
+								<div className="flex gap-2">
+									<input
+										type="text"
+										placeholder="./scopes/agent-scope.md"
+										value={form.scopePath}
+										onChange={(event) => set("scopePath", event.target.value)}
+										disabled={isSubmitting}
+										className="min-w-0 flex-1 rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 font-mono text-sm text-white transition-colors duration-300 placeholder:text-neutral-600 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+									/>
+									<button
+										type="button"
+										onClick={handleBrowse}
+										disabled={isSubmitting}
+										className="cursor-pointer rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition-colors duration-300 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+									>
+										Browse
+									</button>
+								</div>
 							)}
 						</Field>
 					</div>
@@ -211,7 +277,7 @@ export default function NewAgentModal({ onCancel, onCreate }: NewAgentModalProps
 									Saving...
 								</>
 							) : (
-								"Create Agent"
+								<>{isEditing ? "Save" : "Create Agent"}</>
 							)}
 						</button>
 					</footer>

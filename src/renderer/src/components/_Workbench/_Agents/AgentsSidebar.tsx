@@ -1,17 +1,19 @@
-const AGENT_STATS = {
-	total: 8,
-	working: 3,
-	pending: 2,
-	idle: 3
+export type AgentStatus = "failure" | "pending" | "working" | "idle"
+
+type AgentsSidebarProps = {
+	total: number
+	counts: Record<AgentStatus, number>
+	onStatusHover: (status: AgentStatus | null) => void
 }
 
-const STATUS_ROWS = [
-	{ label: "Working", value: AGENT_STATS.working, dot: "bg-blue-400" },
-	{ label: "Pending", value: AGENT_STATS.pending, dot: "bg-orange-400" },
-	{ label: "Idle", value: AGENT_STATS.idle, dot: "bg-neutral-500" }
+const STATUS_ROWS: { label: string; status: AgentStatus; dot: string }[] = [
+	{ label: "Working", status: "working", dot: "bg-blue-400" },
+	{ label: "Pending", status: "pending", dot: "bg-orange-400" },
+	{ label: "Idle", status: "idle", dot: "bg-neutral-500" },
+	{ label: "Failed", status: "failure", dot: "bg-red-500" }
 ]
 
-export default function AgentsSidebar() {
+export default function AgentsSidebar({ total, counts, onStatusHover }: AgentsSidebarProps) {
 	return (
 		<aside className="flex h-full w-[220px] shrink-0 flex-col border-r border-white/5 bg-neutral-950">
 			<div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
@@ -19,7 +21,7 @@ export default function AgentsSidebar() {
 					<p className="text-[10px] font-medium uppercase tracking-widest text-neutral-600">
 						Agents
 					</p>
-					<p className="mt-0.5 text-sm font-medium text-neutral-200">{AGENT_STATS.total} Agents</p>
+					<p className="mt-0.5 text-sm font-medium text-neutral-200">{total} Agents</p>
 				</div>
 			</div>
 
@@ -27,13 +29,15 @@ export default function AgentsSidebar() {
 				{STATUS_ROWS.map((row) => (
 					<div
 						key={row.label}
-						className="flex items-center justify-between rounded-md px-2 py-2 text-sm"
+						onMouseEnter={() => onStatusHover(row.status)}
+						onMouseLeave={() => onStatusHover(null)}
+						className="flex cursor-default items-center justify-between rounded-md px-2 py-2 text-sm transition-colors duration-300 hover:bg-white/5"
 					>
 						<div className="flex items-center gap-2">
 							<span className={`h-2 w-2 rounded-full ${row.dot}`} />
 							<span className="text-neutral-400">{row.label}</span>
 						</div>
-						<span className="font-mono text-xs text-neutral-500">{row.value}</span>
+						<span className="font-mono text-xs text-neutral-500">{counts[row.status]}</span>
 					</div>
 				))}
 			</div>

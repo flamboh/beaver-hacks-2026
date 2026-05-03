@@ -40,7 +40,7 @@ export default function Workbench() {
 			case "review":
 				return <Review projectCwd={project.path} projectName={project.name} />
 			case "agents":
-				return <Agents />
+				return <Agents projectPath={project.path} />
 			case "settings":
 				return <Settings />
 			default:

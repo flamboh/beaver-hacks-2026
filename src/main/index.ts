@@ -11,6 +11,7 @@ import { registerDevServerIpc } from "./devServer/ipc"
 import { registerDialogIpc } from "./dialog/ipc"
 import { GitService } from "./git/gitService"
 import { registerGitIpc } from "./git/ipc"
+import { registerScopeFileIpc } from "./scopeFiles/ipc"
 
 const agentEngine = new AgentEngine({ cwd: process.cwd() })
 const gitService = new GitService()
@@ -71,6 +72,7 @@ app.whenReady().then(async () => {
 	registerDevServerIpc(devServer)
 	registerDialogIpc()
 	registerGitIpc(gitService, agentEngine)
+	registerScopeFileIpc()
 
 	createWindow()
 
