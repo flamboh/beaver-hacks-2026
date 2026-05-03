@@ -14,6 +14,7 @@ const TOOL_OPTIONS: StartToolInput[] = [
 ]
 
 interface CreateCardOptionsPopoverProps {
+	anchor?: "center" | "topLeft"
 	autoFocusFirst?: boolean
 	className?: string
 	onClose: () => void
@@ -25,6 +26,7 @@ interface CreateCardOptionsPopoverProps {
 }
 
 export default function CreateCardOptionsPopover({
+	anchor = "topLeft",
 	autoFocusFirst = false,
 	className,
 	onClose,
@@ -131,13 +133,13 @@ export default function CreateCardOptionsPopover({
 	return (
 		<div
 			ref={setPopoverRef}
-			className={`agent-create-popover z-50 flex w-[120px] flex-col gap-2 rounded-lg border border-white/10 bg-neutral-900 p-2 shadow-2xl shadow-black/50 ${className ?? ""}`}
+			className={`agent-create-popover ${anchor === "center" ? "agent-create-popover-center" : ""} z-50 flex w-[108px] flex-col gap-1.5 rounded-xl border border-white/[0.08] bg-neutral-950/95 p-1.5 shadow-[0_16px_48px_-18px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.03)] backdrop-blur-md ${className ?? ""}`}
 			style={style}
 			onClick={(event) => event.stopPropagation()}
 			onKeyDown={handleKeyDown}
 		>
 			{showAgents ? (
-				<div className="grid grid-cols-2 gap-2">
+				<div className="grid grid-cols-2 gap-1.5">
 					{AGENT_OPTIONS.map((option) => (
 						<button
 							key={option.provider}
@@ -151,7 +153,7 @@ export default function CreateCardOptionsPopover({
 									...(sourceCardId ? { sourceCardId } : {})
 								}).then(onClose)
 							}}
-							className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-white/8 bg-neutral-950 text-neutral-400 transition-colors duration-150 hover:border-white/15 hover:bg-white/8 hover:text-white"
+							className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-black/35 text-neutral-400 outline-none transition-[border-color,background-color,color,box-shadow,scale] duration-150 hover:border-white/12 hover:bg-white/[0.06] hover:text-white focus-visible:border-blue-400/45 focus-visible:shadow-[0_0_0_2px_rgba(96,165,250,0.18)] active:scale-[0.96]"
 							aria-label={`Start ${option.provider} agent`}
 							title={option.provider}
 						>
@@ -160,7 +162,7 @@ export default function CreateCardOptionsPopover({
 					))}
 				</div>
 			) : null}
-			<div className={`grid grid-cols-2 gap-2 ${showAgents ? "border-t border-white/8 pt-2" : ""}`}>
+			<div className="grid grid-cols-2 gap-1.5">
 				{TOOL_OPTIONS.map((option) => (
 					<button
 						key={option.tool}
@@ -174,7 +176,7 @@ export default function CreateCardOptionsPopover({
 								...(sourceCardId ? { sourceCardId } : {})
 							}).then(onClose)
 						}}
-						className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-white/8 bg-neutral-950 text-neutral-400 transition-colors duration-150 hover:border-white/15 hover:bg-white/8 hover:text-white"
+						className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-black/35 text-neutral-400 outline-none transition-[border-color,background-color,color,box-shadow,scale] duration-150 hover:border-white/12 hover:bg-white/[0.06] hover:text-white focus-visible:border-blue-400/45 focus-visible:shadow-[0_0_0_2px_rgba(96,165,250,0.18)] active:scale-[0.96]"
 						aria-label={`Create ${option.tool} card`}
 						title={option.tool}
 					>

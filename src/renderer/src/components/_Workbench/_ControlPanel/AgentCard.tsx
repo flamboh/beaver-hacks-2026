@@ -160,19 +160,6 @@ export default function AgentCard({
 			onMouseDown={clearSelectionOutsideText}
 			onWheel={(event) => event.stopPropagation()}
 		>
-			{availableCreateSides.map((side) => (
-				<AgentCardSideCreateButton
-					key={side}
-					active={activeCreateSide === side}
-					onClose={() => setActiveCreateSide(null)}
-					onCreateCard={onCreateCard}
-					onCreateWorkspace={onCreateWorkspace}
-					onOpen={() => setActiveCreateSide(side)}
-					side={side}
-					sourceCardId={agent.id}
-				/>
-			))}
-
 			<motion.div
 				whileHover={{ y: -1 }}
 				whileTap={{ scale: 0.998 }}
@@ -260,6 +247,18 @@ export default function AgentCard({
 					</div>
 				</div>
 			</motion.div>
+			{availableCreateSides.map((side) => (
+				<AgentCardSideCreateButton
+					key={side}
+					active={activeCreateSide === side}
+					onClose={() => setActiveCreateSide(null)}
+					onCreateCard={onCreateCard}
+					onCreateWorkspace={onCreateWorkspace}
+					onOpen={() => setActiveCreateSide(side)}
+					side={side}
+					sourceCardId={agent.id}
+				/>
+			))}
 		</div>
 	)
 }

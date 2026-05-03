@@ -28,7 +28,9 @@
 }
 
 .agent-create-popover {
-	transform: translate(-50%, -50%) scale(0.45);
+	--popover-translate-x: 0;
+	--popover-translate-y: 0;
+	transform: translate(var(--popover-translate-x), var(--popover-translate-y)) scale(0.45);
 	transform-origin: center;
 	opacity: 0;
 	filter: blur(3px);
@@ -36,9 +38,14 @@
 	will-change: transform, opacity, filter;
 }
 
+.agent-create-popover-center {
+	--popover-translate-x: -50%;
+	--popover-translate-y: -50%;
+}
+
 @keyframes agent-create-popover-in {
 	to {
-		transform: translate(-50%, -50%) scale(1);
+		transform: translate(var(--popover-translate-x), var(--popover-translate-y)) scale(1);
 		opacity: 1;
 		filter: blur(0);
 	}

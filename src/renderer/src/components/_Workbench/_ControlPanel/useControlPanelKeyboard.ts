@@ -9,6 +9,7 @@ interface UseControlPanelKeyboardProps {
 	setSpacePanActive: (active: boolean) => void
 	snapToCard: (idx: number) => void
 	spacePan: { current: boolean }
+	toggleZoom: () => void
 }
 
 export function useControlPanelKeyboard({
@@ -19,7 +20,8 @@ export function useControlPanelKeyboard({
 	resizeFocused,
 	setSpacePanActive,
 	snapToCard,
-	spacePan
+	spacePan,
+	toggleZoom
 }: UseControlPanelKeyboardProps): void {
 	useEffect(() => {
 		const keyDown = (e: KeyboardEvent) => {
@@ -30,6 +32,11 @@ export function useControlPanelKeyboard({
 			}
 			if (target?.closest(".agent-create-popover")) return
 			if (target?.closest("input, textarea, [contenteditable='true']")) return
+			if (e.altKey && e.code === "KeyZ") {
+				e.preventDefault()
+				toggleZoom()
+				return
+			}
 			if (e.code === "Space") {
 				spacePan.current = true
 				setSpacePanActive(true)
@@ -83,6 +90,7 @@ export function useControlPanelKeyboard({
 		resizeFocused,
 		setSpacePanActive,
 		snapToCard,
-		spacePan
+		spacePan,
+		toggleZoom
 	])
 }

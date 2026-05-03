@@ -37,18 +37,6 @@ export default function ToolCard({
 			style={{ width: size.w, height: size.h }}
 			onWheel={(event) => event.stopPropagation()}
 		>
-			{availableCreateSides.map((side) => (
-				<AgentCardSideCreateButton
-					key={side}
-					active={activeCreateSide === side}
-					onClose={() => setActiveCreateSide(null)}
-					onCreateCard={onCreateCard}
-					onCreateWorkspace={onCreateWorkspace}
-					onOpen={() => setActiveCreateSide(side)}
-					side={side}
-					sourceCardId={card.id}
-				/>
-			))}
 			<motion.div
 				whileHover={{ y: -1 }}
 				whileTap={{ scale: 0.998 }}
@@ -93,6 +81,18 @@ export default function ToolCard({
 					)}
 				</div>
 			</motion.div>
+			{availableCreateSides.map((side) => (
+				<AgentCardSideCreateButton
+					key={side}
+					active={activeCreateSide === side}
+					onClose={() => setActiveCreateSide(null)}
+					onCreateCard={onCreateCard}
+					onCreateWorkspace={onCreateWorkspace}
+					onOpen={() => setActiveCreateSide(side)}
+					side={side}
+					sourceCardId={card.id}
+				/>
+			))}
 		</div>
 	)
 }

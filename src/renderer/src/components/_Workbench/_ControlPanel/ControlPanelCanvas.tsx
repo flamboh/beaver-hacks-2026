@@ -7,6 +7,7 @@ import {
 	LANE_LABEL_GUTTER,
 	PADDING,
 	STEP_Y,
+	VERTICAL_PADDING,
 	type CardSize,
 	type CanvasLayout,
 	cardSize,
@@ -70,7 +71,7 @@ export function ControlPanelCanvas({
 		>
 			<div className="pointer-events-none absolute inset-0 rounded-sm border border-white/10" />
 			{workspaces.map((workspace, index) => {
-				const y = PADDING + (index - canvas.minY) * STEP_Y
+				const y = VERTICAL_PADDING + (index - canvas.minY) * STEP_Y
 				const rowTop = canvas.rowTops.get(index) ?? y
 				const rowHeight = canvas.rowHeights.get(index) ?? CARD_H
 				const active = workspace.id === activeWorkspaceId
@@ -117,7 +118,7 @@ export function ControlPanelCanvas({
 					return (
 						<motion.div
 							key={card.id}
-							className="absolute"
+							className="absolute has-[.agent-create-popover]:z-50"
 							initial={{ opacity: 0, scale: 0.96, y: 14, filter: "blur(5px)" }}
 							animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
 							exit={{ opacity: 0, scale: 0.98, y: -6, filter: "blur(3px)" }}

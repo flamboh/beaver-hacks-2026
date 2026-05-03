@@ -42,6 +42,7 @@ export default function ControlPanelAgentLauncher({
 			<span className="text-xs font-medium text-neutral-600">No cards</span>
 			{open ? (
 				<CreateCardOptionsPopover
+					anchor="center"
 					onClose={() => setOpen(false)}
 					onCreateCard={onCreateCard}
 					side="right"

@@ -12,6 +12,7 @@ import {
 	CARD_H,
 	CARD_W,
 	type CardSize,
+	adaptiveRailCardHeight,
 	canElementScroll,
 	canStartPan,
 	cardPos,
@@ -22,7 +23,6 @@ import {
 	clampOffset,
 	clampZoom,
 	fitZoom,
-	laneCardCenterY,
 	nearestCardInDirection,
 	nearestCardIndex,
 	nextCardWidthStep
@@ -78,15 +78,16 @@ export default function ControlPanel({
 		useControlPanelAgents(projectIds, workspaces, activeWorkspaceId)
 	const [cardSizes, setCardSizes] = useState<Record<string, CardSize>>({})
 	const [cardLayouts, setCardLayouts] = useState<Record<string, { layout_x: number }>>({})
+	const railCardHeight = useMemo(() => adaptiveRailCardHeight(vpSize.h), [vpSize.h])
 	const sizedCards = useMemo(
 		() =>
 			cards.map((card) => ({
 				...card,
 				layout_x: cardLayouts[card.id]?.layout_x ?? card.layout_x,
 				width: cardSizes[card.id]?.w,
-				height: cardSizes[card.id]?.h
+				height: railCardHeight
 			})),
-		[cards, cardLayouts, cardSizes]
+		[cards, cardLayouts, cardSizes, railCardHeight]
 	)
 	const canvas = useMemo(
 		() => canvasSize(sizedCards, workspaces.length),
@@ -197,7 +198,7 @@ export default function ControlPanel({
 			const card = sizedCards[idx]
 			if (!card) return
 			activateCardWorkspace(card)
-			commitOffset(centerOffset(cardCenter(card, canvas), vpSize, canvas, zoom), zoom, false)
+			commitOffset(laneAlignedCardOffset(card, canvas, vpSize, zoom), zoom, false)
 			flashMap()
 			if (smoothPanTimer.current) clearTimeout(smoothPanTimer.current)
 			smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 320)
@@ -222,8 +223,11 @@ export default function ControlPanel({
 				return
 			}
 			setSmoothPan(true)
-			const y = laneCardCenterY(workspaceIndex, canvas)
-			commitOffset(centerOffset({ x: PADDING + CARD_W / 2, y }, vpSize, canvas, zoom), zoom, false)
+			commitOffset(
+				laneAlignedPointOffset(PADDING + CARD_W / 2, workspaceIndex, canvas, vpSize, zoom),
+				zoom,
+				false
+			)
 			if (smoothPanTimer.current) clearTimeout(smoothPanTimer.current)
 			smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 320)
 		},
@@ -243,8 +247,11 @@ export default function ControlPanel({
 				return
 			}
 			setSmoothPan(true)
-			const y = laneCardCenterY(workspaceIndex, canvas)
-			commitOffset(centerOffset({ x: PADDING + CARD_W / 2, y }, vpSize, canvas, zoom), zoom, false)
+			commitOffset(
+				laneAlignedPointOffset(PADDING + CARD_W / 2, workspaceIndex, canvas, vpSize, zoom),
+				zoom,
+				false
+			)
 			if (smoothPanTimer.current) clearTimeout(smoothPanTimer.current)
 			smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 320)
 		})
@@ -290,9 +297,16 @@ export default function ControlPanel({
 					if (!resolveCreateSide(side, sourceCard, sizedCards)) return
 					const pos = cardPos(sourceCard, canvas)
 					const size = cardSize(sourceCard)
+					const preferredX =
+						offset.x +
+						(side === "left"
+							? pos.x - CREATE_MENU_W - CREATE_MENU_PADDING
+							: pos.x + size.w + CREATE_MENU_PADDING) *
+							zoom
+					const preferredY = offset.y + (pos.y + size.h / 2 - CREATE_MENU_KEYBOARD_H / 2) * zoom
 					setContextCreateMenu({
-						x: offset.x + (side === "left" ? pos.x - 64 : pos.x + size.w + 16) * zoom,
-						y: offset.y + (pos.y + size.h / 2 - 41) * zoom,
+						x: clampCreateMenuX(preferredX, vpSize.w),
+						y: clampCreateMenuY(preferredY, vpSize.h, CREATE_MENU_KEYBOARD_H),
 						showAgents: true,
 						sourceCardId: sourceCard.id,
 						side
@@ -318,6 +332,8 @@ export default function ControlPanel({
 			offset,
 			sizedCards,
 			viewportCenter,
+			vpSize.h,
+			vpSize.w,
 			workspaces,
 			zoom
 		]
@@ -382,8 +398,12 @@ export default function ControlPanel({
 			setFocusedIdx(Math.max(0, nextFocusedIdx))
 			activateCardWorkspace(card)
 			const movedCard = nextCards[Math.max(0, nextFocusedIdx)] ?? card
-			const movedCenter = cardCenter(movedCard, nextCanvas)
-			commitOffset(centerOffset(movedCenter, vpSize, nextCanvas, zoom), zoom, false, nextCanvas)
+			commitOffset(
+				laneAlignedCardOffset(movedCard, nextCanvas, vpSize, zoom),
+				zoom,
+				false,
+				nextCanvas
+			)
 			flashMap()
 			if (smoothPanTimer.current) clearTimeout(smoothPanTimer.current)
 			smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 260)
@@ -399,17 +419,6 @@ export default function ControlPanel({
 			zoom
 		]
 	)
-
-	useControlPanelKeyboard({
-		centerFocused: () => centerCard(focusedIdx),
-		focusedIdx,
-		moveFocus,
-		moveFocusedWithinRail,
-		resizeFocused,
-		setSpacePanActive,
-		snapToCard,
-		spacePan
-	})
 
 	const panBy = useCallback(
 		(dx: number, dy: number) => {
@@ -572,6 +581,26 @@ export default function ControlPanel({
 		smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 320)
 	}, [canvas, offset, setView, viewportCenter, vpSize, zoom])
 
+	const toggleZoom = useCallback(() => {
+		if (Math.abs(zoom - 1) < 0.01) {
+			fitAll()
+			return
+		}
+		actualSize()
+	}, [actualSize, fitAll, zoom])
+
+	useControlPanelKeyboard({
+		centerFocused: () => centerCard(focusedIdx),
+		focusedIdx,
+		moveFocus,
+		moveFocusedWithinRail,
+		resizeFocused,
+		setSpacePanActive,
+		snapToCard,
+		spacePan,
+		toggleZoom
+	})
+
 	const navigateToCanvasPoint = useCallback(
 		(center: { x: number; y: number }) => {
 			commitOffset(centerOffset(center, vpSize, canvas, zoom), zoom)
@@ -610,7 +639,7 @@ export default function ControlPanel({
 			setSmoothPan(true)
 			onWorkspaceActivate(createdCard.workspaceId)
 			commitOffset(
-				centerOffset(cardCenter(nextCard, nextCanvas), vpSize, nextCanvas, zoom),
+				laneAlignedCardOffset(nextCard, nextCanvas, vpSize, zoom),
 				zoom,
 				false,
 				nextCanvas
@@ -706,12 +735,9 @@ export default function ControlPanel({
 			)
 			const side = resolveCreateSide(preferredSide, sourceCard, sizedCards)
 			if (!side) return
-			const menuW = 120
-			const menuH = 82
-			const padding = 8
 			setContextCreateMenu({
-				x: Math.min(Math.max(event.clientX - rect.left, padding), rect.width - menuW - padding),
-				y: Math.min(Math.max(event.clientY - rect.top, padding), rect.height - menuH - padding),
+				x: clampCreateMenuX(event.clientX - rect.left, rect.width),
+				y: clampCreateMenuY(event.clientY - rect.top, rect.height, CREATE_MENU_CONTEXT_H),
 				showAgents: false,
 				sourceCardId: sourceCard.id,
 				side
@@ -781,14 +807,7 @@ export default function ControlPanel({
 						visible={showMap}
 						onNavigate={navigateToCanvasPoint}
 					/>
-					<CanvasControls
-						onCenterFocused={() => centerCard(focusedIdx)}
-						onToggleFit={isActualSize ? fitAll : actualSize}
-						showFitAll={isActualSize}
-					/>
-					<div className="pointer-events-none absolute right-3 bottom-3 select-none text-xs text-neutral-600">
-						{sizedCards.length} cards
-					</div>
+					<CanvasControls onToggleFit={toggleZoom} showFitAll={isActualSize} />
 				</>
 			) : null}
 			{contextCreateMenu ? (
@@ -819,6 +838,53 @@ const SIDE_PRIORITY: Record<CreateSide, CreateSide[]> = {
 	right: ["right", "left"],
 	top: ["left", "right"],
 	bottom: ["right", "left"]
+}
+
+const CREATE_MENU_W = 108
+const CREATE_MENU_CONTEXT_H = 56
+const CREATE_MENU_KEYBOARD_H = 106
+const CREATE_MENU_PADDING = 12
+
+function clampCreateMenuX(x: number, viewportWidth: number): number {
+	return Math.min(
+		Math.max(x, CREATE_MENU_PADDING),
+		Math.max(CREATE_MENU_PADDING, viewportWidth - CREATE_MENU_W - CREATE_MENU_PADDING)
+	)
+}
+
+function clampCreateMenuY(y: number, viewportHeight: number, menuHeight: number): number {
+	return Math.min(
+		Math.max(y, CREATE_MENU_PADDING),
+		Math.max(CREATE_MENU_PADDING, viewportHeight - menuHeight - CREATE_MENU_PADDING)
+	)
+}
+
+function laneAlignedCardOffset(
+	card: ControlPanelCard | { layout_x: number; layout_y: number },
+	layout: ReturnType<typeof canvasSize>,
+	viewport: { w: number; h: number },
+	zoom: number
+): { x: number; y: number } {
+	return laneAlignedPointOffset(cardCenter(card, layout).x, card.layout_y, layout, viewport, zoom)
+}
+
+function laneAlignedPointOffset(
+	x: number,
+	laneIndex: number,
+	layout: ReturnType<typeof canvasSize>,
+	viewport: { w: number; h: number },
+	zoom: number
+): { x: number; y: number } {
+	const rowTop = layout.rowTops.get(laneIndex) ?? 0
+	return clampOffset(
+		{
+			x: viewport.w / 2 - x * zoom,
+			y: -rowTop * zoom
+		},
+		viewport,
+		layout,
+		zoom
+	)
 }
 
 function sideFromViewportPoint(x: number, y: number, width: number, height: number): CreateSide {

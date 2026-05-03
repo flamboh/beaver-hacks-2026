@@ -21,15 +21,21 @@ export default function AgentCardSideCreateButton({
 	side: CreateSide
 	sourceCardId: string
 }) {
-	const sideClass: Record<CreateSide, string> = {
-		left: "left-[-62px] top-1/2 -translate-y-1/2",
-		right: "right-[-62px] top-1/2 -translate-y-1/2",
-		top: "left-1/2 top-[-62px] -translate-x-1/2",
-		bottom: "bottom-[-62px] left-1/2 -translate-x-1/2"
+	const anchorClass: Record<CreateSide, string> = {
+		left: "left-[-42px] top-1/2",
+		right: "right-[-42px] top-1/2",
+		top: "left-1/2 top-[-42px]",
+		bottom: "bottom-[-42px] left-1/2"
+	}
+	const popoverClass: Record<CreateSide, string> = {
+		left: "absolute top-0 left-[-18px]",
+		right: "absolute top-0 left-0",
+		top: "absolute top-0 left-0",
+		bottom: "absolute top-0 left-0"
 	}
 
 	return (
-		<div className={`nodrag absolute z-40 ${sideClass[side]}`}>
+		<div className={`nodrag absolute z-40 ${anchorClass[side]}`}>
 			<button
 				type="button"
 				onClick={(event) => {
@@ -45,7 +51,7 @@ export default function AgentCardSideCreateButton({
 					}
 					onOpen()
 				}}
-				className="polished-button flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-neutral-400 opacity-35 hover:scale-110 hover:text-white hover:opacity-100 group-hover/card:opacity-70"
+				className="polished-button absolute flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-transparent text-neutral-400 opacity-35 hover:scale-110 hover:text-white hover:opacity-100 group-hover/card:opacity-70"
 				aria-label={side === "top" || side === "bottom" ? "Create workspace" : "Create card"}
 				title={side === "top" || side === "bottom" ? "Create workspace" : "Create card"}
 			>
@@ -55,9 +61,10 @@ export default function AgentCardSideCreateButton({
 				<CreateCardOptionsPopover
 					onClose={onClose}
 					onCreateCard={onCreateCard}
+					anchor="center"
 					side={side}
 					sourceCardId={sourceCardId}
-					className="absolute top-1/2 left-1/2"
+					className={popoverClass[side]}
 				/>
 			) : null}
 		</div>
