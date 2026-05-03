@@ -1,6 +1,7 @@
 import * as sqlite3 from "sqlite3"
 import { randomUUID } from "node:crypto"
 import type { TaskRow } from "./contracts"
+import type { AgentPlan } from "../agent/contracts"
 
 export interface CreateTaskInput {
 	agent_id: string
@@ -25,7 +26,7 @@ export class TaskService {
 		const batchId = input.batch_id ?? `batch:${randomUUID()}`
 		const task: TaskRow = {
 			id: `task:${randomUUID()}`,
-			batch_id: input.batch_id ?? `batch:${randomUUID()}`,
+			batch_id: batchId,
 			agent_id: input.agent_id,
 			turn_id: input.turn_id ?? null,
 			status: input.status,
@@ -42,6 +43,27 @@ export class TaskService {
 			[task.id, task.batch_id, task.agent_id, task.turn_id, task.status, task.description]
 		)
 		return task
+	}
+
+	async syncPlan(agentId: string, turnId: string | null, plan: AgentPlan): Promise<void> {
+		const batchId = `batch:${agentId}:${turnId ?? "plan"}`
+		await this.run(`INSERT OR IGNORE INTO batch (id, agent_id, summary) VALUES (?, ?, ?)`, [
+			batchId,
+			agentId,
+			"Agent plan"
+		])
+
+		await this.run(`DELETE FROM task WHERE batch_id = ?`, [batchId])
+		for (const item of plan.items) {
+			await this.run(
+				`INSERT INTO task (id, batch_id, agent_id, turn_id, status, description)
+				 VALUES (?, ?, ?, ?, ?, ?)`,
+				[`task:${agentId}:${item.id}`, batchId, agentId, turnId, item.status, item.title]
+			)
+		}
+		if (plan.items.length === 0) {
+			await this.run(`DELETE FROM batch WHERE id = ?`, [batchId])
+		}
 	}
 
 	private async run(sql: string, params: unknown[]): Promise<void> {

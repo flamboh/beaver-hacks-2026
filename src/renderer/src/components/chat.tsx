@@ -94,7 +94,10 @@ export function Chat({
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<section className="nowheel nodrag min-h-0 flex-1 overflow-y-auto px-4 py-5">
+			<section
+				data-selectable-text
+				className="nowheel nodrag min-h-0 flex-1 select-text overflow-y-auto px-4 py-5"
+			>
 				<div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
 					{thread ? (
 						transcript.map((block) => <TranscriptBlockView key={block.id} block={block} />)
@@ -201,14 +204,6 @@ function appendMessageBlock(blocks: TranscriptBlock[], message: AgentMessage): v
 	}
 
 	const block = assistantBlockFor(blocks, message.turnId, message.id, message.createdAt)
-	const lastItem = block.items.at(-1)
-	if (lastItem?.kind === "text") {
-		lastItem.text += message.text
-		lastItem.streaming ||= message.streaming
-		block.streaming ||= message.streaming
-		return
-	}
-
 	block.items.push({
 		kind: "text",
 		id: message.id,
@@ -260,14 +255,20 @@ function shouldMergeActivities(current: AgentActivity, next: AgentActivity): boo
 function TranscriptBlockView({ block }: { block: TranscriptBlock }): JSX.Element {
 	if (block.kind === "user") {
 		return (
-			<article className="ml-auto max-w-[78%] rounded-lg bg-white px-3 py-2 text-sm text-zinc-950">
+			<article
+				data-selectable-text
+				className="ml-auto max-w-[78%] select-text rounded-lg bg-white px-3 py-2 text-sm text-zinc-950"
+			>
 				<p className="whitespace-pre-wrap">{block.message.text}</p>
 			</article>
 		)
 	}
 
 	return (
-		<article className="mr-auto flex max-w-[86%] flex-col gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm leading-6 text-zinc-100">
+		<article
+			data-selectable-text
+			className="mr-auto flex max-w-[86%] select-text flex-col gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm leading-6 text-zinc-100"
+		>
 			{block.items.map((item) => {
 				if (item.kind === "text") {
 					return (
@@ -290,6 +291,7 @@ function ActivityInline({ activity }: { activity: AgentActivity }): JSX.Element 
 
 	return (
 		<div
+			data-selectable-text
 			className={`inline-flex max-w-full items-start gap-2 rounded-md border px-2.5 py-1.5 text-xs leading-5 ${meta.className}`}
 		>
 			<Icon size={13} className="mt-1 shrink-0" />

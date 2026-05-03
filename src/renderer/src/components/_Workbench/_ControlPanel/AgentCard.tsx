@@ -247,7 +247,7 @@ export default function AgentCard({
 
 				<div className="flex flex-1 overflow-hidden">
 					<div className="flex w-[28%] shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
-						<TaskList />
+						<TaskList plan={thread?.plan ?? null} />
 
 						<div className="flex flex-col gap-1">
 							<span className="text-[10px] font-medium tracking-widest text-neutral-600 uppercase">

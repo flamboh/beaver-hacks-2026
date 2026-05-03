@@ -10,6 +10,8 @@ import {
 } from "@anthropic-ai/claude-agent-sdk"
 import { ClaudePromptQueue } from "./claudePromptQueue"
 import type {
+	AgentPlan,
+	AgentPlanItemStatus,
 	AgentRuntimeMode,
 	AgentSession,
 	ProviderAdapter,
@@ -82,6 +84,55 @@ function toolUseSummaries(message: SDKMessage): string[] {
 		const name = "name" in block ? String(block.name) : "tool"
 		return [`Claude used ${name}`]
 	})
+}
+
+function readPath(payload: unknown, path: string[]): unknown {
+	let cursor = payload as Record<string, unknown> | undefined | null
+	for (const segment of path) {
+		cursor = cursor?.[segment] as Record<string, unknown> | undefined | null
+	}
+	return cursor
+}
+
+function readText(value: unknown): string | undefined {
+	return value === undefined || value === null ? undefined : String(value)
+}
+
+function todoStatus(value: unknown): AgentPlanItemStatus {
+	const status = readText(value)
+	if (status === "in_progress") return "in_progress"
+	if (status === "completed") return "completed"
+	if (status === "cancelled") return "cancelled"
+	return "pending"
+}
+
+function planFromClaudeToolUse(message: SDKMessage, createdAt: string): AgentPlan | null {
+	if (message.type !== "assistant") return null
+	const content = message.message.content
+	if (!Array.isArray(content)) return null
+
+	for (const block of content) {
+		if (!(block instanceof Object)) continue
+		if (!("type" in block) || block.type !== "tool_use") continue
+		if (!("name" in block) || String(block.name) !== "TodoWrite") continue
+		const todos = readPath(block, ["input", "todos"])
+		if (!Array.isArray(todos)) return null
+		return {
+			items: todos.map((todo, index) => ({
+				id: readText(readPath(todo, ["id"])) ?? `claude-plan-item:${index}`,
+				title:
+					readText(readPath(todo, ["content"]) ?? readPath(todo, ["title"]))?.trim() ||
+					`Plan item ${index + 1}`,
+				status: todoStatus(readPath(todo, ["status"])),
+				detail: readText(readPath(todo, ["activeForm"]) ?? readPath(todo, ["detail"])) ?? null,
+				updatedAt: createdAt
+			})),
+			source: "claude",
+			updatedAt: createdAt
+		}
+	}
+
+	return null
 }
 
 function partialText(message: SDKPartialAssistantMessage): string {
@@ -262,12 +313,24 @@ export class ClaudeAdapter implements ProviderAdapter {
 		}
 
 		if (message.type === "assistant") {
+			const createdAt = nowIso()
+			const plan = planFromClaudeToolUse(message, createdAt)
+			if (plan) {
+				this.emit({
+					type: "plan.updated",
+					threadId: thread.appThreadId,
+					turnId,
+					createdAt,
+					payload: { plan }
+				})
+			}
+
 			for (const summary of toolUseSummaries(message)) {
 				this.emit({
 					type: "activity",
 					threadId: thread.appThreadId,
 					turnId,
-					createdAt: nowIso(),
+					createdAt,
 					payload: { kind: "tool.use", summary, detail: message.message.content }
 				})
 			}
