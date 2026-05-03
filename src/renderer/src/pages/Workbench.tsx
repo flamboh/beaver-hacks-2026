@@ -4,6 +4,7 @@ import ControlPanel from "@renderer/components/_Workbench/_ControlPanel/main/Con
 import Review from "@renderer/components/_Workbench/_Review/main/Review"
 import Agents from "@renderer/components/_Workbench/_Agents/main/Agents"
 import Settings from "@renderer/components/_Workbench/_Settings/main/Settings"
+import { useAgentSnapshot } from "@renderer/agentStore"
 import { useSessionData } from "@renderer/hooks/useSessionData"
 import { WorkbenchTab } from "@renderer/types/models"
 import { useQuery } from "@tanstack/react-query"
@@ -15,6 +16,7 @@ const WORKBENCH_TABS: WorkbenchTab[] = ["control-panel", "review", "agents", "se
 export default function Workbench() {
 	const { projectId, tab } = useParams()
 	const navigate = useNavigate()
+	const snapshot = useAgentSnapshot()
 	const { project: sessionProject } = useSessionData()
 	const initialPage = WORKBENCH_TABS.includes(tab as WorkbenchTab)
 		? (tab as WorkbenchTab)
@@ -26,23 +28,54 @@ export default function Workbench() {
 		queryFn: () => window.api.projects.get({ id: projectId ?? "" })
 	})
 	const project = projectQuery.data ?? (sessionProject?.id === projectId ? sessionProject : null)
+	const workspacesQuery = useQuery({
+		queryKey: ["workspaces", projectId],
+		queryFn: () => window.api.workspaces.list({ projectId: projectId ?? "" }),
+		enabled: Boolean(projectId)
+	})
+	const workspaces = workspacesQuery.data ?? []
+	const activeWorkspace = workspaces.find((workspace) => workspace.active) ?? workspaces[0] ?? null
+	const activeAgentCount = activeWorkspace
+		? snapshot.threads.filter((thread) => {
+				const status = thread.session?.status
+				return (
+					thread.cwd === activeWorkspace.path && (status === "starting" || status === "running")
+				)
+			}).length
+		: 0
 
 	const setProjectPage = (nextTab: WorkbenchTab) => {
 		if (projectId) navigate(`/project/${encodeURIComponent(projectId)}/workbench/${nextTab}`)
 	}
 
+	const setWorkspace = (workspaceId: string) => {
+		if (!workspaceId) return
+		void window.api.workspaces
+			.activate({ id: workspaceId })
+			.then(() => workspacesQuery.refetch())
+			.catch(() => undefined)
+	}
+
 	const renderPage = () => {
-		if (!project) return null
+		if (!project || !activeWorkspace) return null
 
 		switch (currentPage) {
 			case "control-panel":
-				return <ControlPanel projectCwd={project.path} />
+				return <ControlPanel workspacePath={activeWorkspace.path} />
 			case "review":
-				return <Review projectCwd={project.path} projectName={project.name} />
+				return (
+					<Review
+						projectName={project.name}
+						workspaceId={activeWorkspace.id}
+						workspacePath={activeWorkspace.path}
+					/>
+				)
 			case "agents":
 				return <Agents projectPath={project.path} />
 			case "settings":
-				return <Settings />
+				return (
+					<Settings projectId={project.id} onWorkspacesChanged={() => workspacesQuery.refetch()} />
+				)
 			default:
 				return null
 		}
@@ -52,7 +85,13 @@ export default function Workbench() {
 
 	return (
 		<div className="flex h-screen flex-col bg-neutral-950 text-white">
-			<TopBar onToggleSidebar={() => setSidebarOpen((open) => !open)} />
+			<TopBar
+				activeAgentCount={activeAgentCount}
+				activeWorkspace={activeWorkspace}
+				onToggleSidebar={() => setSidebarOpen((open) => !open)}
+				onWorkspaceChange={setWorkspace}
+				workspaces={workspaces}
+			/>
 			<div className="flex flex-1 overflow-hidden">
 				<SideBar
 					currentPage={currentPage}
@@ -61,15 +100,18 @@ export default function Workbench() {
 					open={sidebarOpen}
 				/>
 				<main className={`flex-1 overflow-hidden ${isCanvas ? "" : "overflow-auto p-6"}`}>
-					{projectQuery.isLoading && !project ? (
+					{(projectQuery.isLoading || workspacesQuery.isLoading) &&
+					(!project || !activeWorkspace) ? (
 						<div className="flex h-full items-center justify-center text-xs text-neutral-500">
 							Loading project.
 						</div>
-					) : projectQuery.error ? (
+					) : projectQuery.error || workspacesQuery.error ? (
 						<div className="flex h-full items-center justify-center px-4 text-center text-xs text-red-300/80">
 							{projectQuery.error instanceof Error
 								? projectQuery.error.message
-								: "Project unavailable."}
+								: workspacesQuery.error instanceof Error
+									? workspacesQuery.error.message
+									: "Project unavailable."}
 						</div>
 					) : (
 						renderPage()
