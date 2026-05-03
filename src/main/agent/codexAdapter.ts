@@ -254,6 +254,7 @@ export class CodexAdapter implements ProviderAdapter {
 			void this.startSession({
 				threadId,
 				cwd: input.cwd,
+				provider: "codex",
 				model: input.model,
 				runtimeMode: input.runtimeMode
 			})
@@ -334,8 +335,4 @@ export class CodexAdapter implements ProviderAdapter {
 		}
 		return null
 	}
-}
-
-export function assistantMessageId(turnId: string | null, itemId: string | null): string {
-	return `assistant:${itemId ?? turnId ?? generatedId("message")}`
 }

@@ -1,10 +1,13 @@
-import { Chat } from "@renderer/components/chat"
+import { type FormEvent, type MouseEvent, useCallback, useRef, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useAgentSnapshot } from "@renderer/agentStore"
+import { Chat } from "@renderer/components/chat"
+import { ChevronDown, Plus } from "lucide-react"
 import type { AgentRow } from "@renderer/types/models"
+import { ProviderIcon } from "./ControlPanelAgentLauncher"
 import TaskList from "./TaskList"
 import { CARD_H, CARD_W } from "./controlPanelLayout"
-import { type FormEvent, type MouseEvent, useState } from "react"
-import { ChevronDown } from "lucide-react"
+import { agentNameForPrompt, type StartAgentInput } from "./useControlPanelAgents"
 
 function parseScopePath(path: string): string {
 	if (!path) return ""
@@ -29,6 +32,7 @@ const MODEL_OPTIONS: { group: string; models: { value: string; label: string }[]
 	{
 		group: "OpenAI",
 		models: [
+			{ value: "gpt-5.5", label: "GPT-5.5" },
 			{ value: "gpt-4o", label: "GPT-4o" },
 			{ value: "gpt-4o-mini", label: "GPT-4o mini" },
 			{ value: "o3", label: "o3" },
@@ -45,19 +49,34 @@ const EFFORT_STYLES: Record<string, string> = {
 
 interface Props {
 	agent: AgentRow
+	availableCreateSides: CreateSide[]
+	isDeleting: boolean
+	onCreateAgent: (input: StartAgentInput) => Promise<void>
 	onDeleted: () => void
+	onDeleteAgent: (id: string) => Promise<void>
 	workspaceId: string
 	workspacePath: string
 }
 
-export default function AgentCard({ agent, onDeleted, workspaceId, workspacePath }: Props) {
+export default function AgentCard({
+	agent,
+	availableCreateSides,
+	isDeleting,
+	onCreateAgent,
+	onDeleted,
+	onDeleteAgent,
+	workspaceId,
+	workspacePath
+}: Props) {
+	const [activeCreateSide, setActiveCreateSide] = useState<CreateSide | null>(null)
 	const [name, setName] = useState(agent.name)
 	const [effort, setEffort] = useState(agent.effort)
 	const [model, setModel] = useState(agent.model)
 	const [scopePath, setScopePath] = useState(agent.scope_path)
 	const [scopeModalOpen, setScopeModalOpen] = useState(false)
-	const [terminateArmed, setTerminateArmed] = useState(false)
-	const [terminating, setTerminating] = useState(false)
+	const [deleteArmed, setDeleteArmed] = useState(false)
+	const [deleting, setDeleting] = useState(false)
+	const queryClient = useQueryClient()
 	const snapshot = useAgentSnapshot()
 	const activeThread =
 		snapshot.threads.find((thread) => thread.id === snapshot.activeThreadId) ?? null
@@ -102,16 +121,18 @@ export default function AgentCard({ agent, onDeleted, workspaceId, workspacePath
 		})
 		setScopePath(updatedAgent.scope_path)
 	}
-	const terminateAgent = () => {
-		setTerminating(true)
-		void window.api.agents.delete(agent.id).then(onDeleted)
+	const deleteAgent = () => {
+		setDeleting(true)
+		void onDeleteAgent(agent.id)
+			.then(onDeleted)
+			.finally(() => setDeleting(false))
 	}
-	const requestTerminate = () => {
-		if (terminateArmed) {
-			terminateAgent()
+	const requestDelete = () => {
+		if (deleteArmed) {
+			deleteAgent()
 			return
 		}
-		setTerminateArmed(true)
+		setDeleteArmed(true)
 	}
 	const clearSelectionOutsideText = (event: MouseEvent<HTMLDivElement>) => {
 		const target = event.target as Element | null
@@ -119,115 +140,151 @@ export default function AgentCard({ agent, onDeleted, workspaceId, workspacePath
 		window.getSelection()?.removeAllRanges()
 	}
 
+	async function handleFirstMessage(prompt: string): Promise<void> {
+		await window.api.tasks.create({
+			agent_id: agent.id,
+			status: "working",
+			description: prompt
+		})
+		if (name === "New Agent") {
+			const nextName = agentNameForPrompt(prompt)
+			await window.api.agents.update({
+				id: agent.id,
+				name: nextName
+			})
+			setName(nextName)
+			await queryClient.invalidateQueries({ queryKey: ["agents"] })
+		}
+		await queryClient.invalidateQueries({ queryKey: ["tasks", agent.id] })
+	}
+
 	return (
 		<div
-			className="nodrag relative flex cursor-default flex-col overflow-hidden rounded-xl border border-white/8 bg-neutral-900 text-white shadow-2xl shadow-black/40"
+			className="group/card nodrag relative cursor-default text-white"
 			style={{ width: CARD_W, height: CARD_H }}
 			onMouseDown={clearSelectionOutsideText}
 			onWheel={(event) => event.stopPropagation()}
 		>
-			<div className="flex h-11 shrink-0 items-center justify-between border-b border-white/5 bg-neutral-800/60 px-5">
-				<input
-					type="text"
-					value={name}
-					onChange={(event) => setName(event.currentTarget.value)}
-					onBlur={updateName}
-					onKeyDown={(event) => {
-						if (event.key === "Enter") event.currentTarget.blur()
-					}}
-					className="min-w-0 flex-1 cursor-text truncate bg-transparent pr-4 text-sm font-semibold tracking-wide text-neutral-100 outline-none transition-colors duration-150 hover:text-white focus:text-white"
+			{availableCreateSides.map((side) => (
+				<SideCreateButton
+					key={side}
+					active={activeCreateSide === side}
+					onClose={() => setActiveCreateSide(null)}
+					onCreateAgent={onCreateAgent}
+					onOpen={() => setActiveCreateSide(side)}
+					side={side}
+					sourceAgentId={agent.id}
 				/>
-				<button
-					type="button"
-					onClick={requestTerminate}
-					onBlur={() => setTerminateArmed(false)}
-					onMouseLeave={() => setTerminateArmed(false)}
-					disabled={terminating}
-					className={`min-w-20 cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${
-						terminateArmed
-							? "border-red-500/60 bg-red-500/10 text-red-300"
-							: "border-red-500/40 text-red-400 hover:border-red-500/60 hover:bg-red-500/10"
-					}`}
-				>
-					{terminating ? "Terminating..." : terminateArmed ? "Confirm" : "Terminate"}
-				</button>
-			</div>
+			))}
 
-			<div className="flex flex-1 overflow-hidden">
-				<div className="flex w-[28%] shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
-					<TaskList />
+			<div className="flex h-full flex-col overflow-hidden rounded-xl border border-white/8 bg-neutral-900 shadow-2xl shadow-black/40">
+				<div className="flex h-11 shrink-0 items-center justify-between border-b border-white/5 bg-neutral-800/60 px-5">
+					<input
+						type="text"
+						value={name}
+						onChange={(event) => setName(event.currentTarget.value)}
+						onBlur={updateName}
+						onKeyDown={(event) => {
+							if (event.key === "Enter") event.currentTarget.blur()
+						}}
+						className="min-w-0 flex-1 cursor-text truncate bg-transparent pr-4 text-sm font-semibold tracking-wide text-neutral-100 outline-none transition-colors duration-150 hover:text-white focus:text-white"
+					/>
+					<button
+						type="button"
+						onClick={requestDelete}
+						onBlur={() => setDeleteArmed(false)}
+						onMouseLeave={() => setDeleteArmed(false)}
+						disabled={deleting || isDeleting}
+						className={`min-w-20 cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${
+							deleteArmed
+								? "border-red-500/60 bg-red-500/10 text-red-300"
+								: "border-red-500/40 text-red-400 hover:border-red-500/60 hover:bg-red-500/10"
+						}`}
+					>
+						{deleting || isDeleting ? "Deleting..." : deleteArmed ? "Confirm" : "Delete"}
+					</button>
+				</div>
 
-					<div className="flex flex-col gap-1">
-						<span className="text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
-							Model
-						</span>
-						<div className="relative">
-							<select
-								value={model}
-								onChange={(event) => updateModel(event.currentTarget.value)}
-								className="w-full cursor-pointer appearance-none rounded-md border border-white/5 bg-white/[0.03] px-2 py-1.5 pr-7 font-mono text-xs text-neutral-400 outline-none transition-colors duration-150 hover:border-white/10 hover:text-neutral-200 focus:border-white/20"
-							>
-								{MODEL_OPTIONS.map((group) => (
-									<optgroup key={group.group} label={group.group}>
-										{group.models.map((option) => (
-											<option key={option.value} value={option.value}>
-												{option.label}
-											</option>
-										))}
-									</optgroup>
+				<div className="flex flex-1 overflow-hidden">
+					<div className="flex w-[28%] shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
+						<TaskList />
+
+						<div className="flex flex-col gap-1">
+							<span className="text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
+								Model
+							</span>
+							<div className="relative">
+								<select
+									value={model}
+									onChange={(event) => updateModel(event.currentTarget.value)}
+									className="w-full cursor-pointer appearance-none rounded-md border border-white/5 bg-white/[0.03] px-2 py-1.5 pr-7 font-mono text-xs text-neutral-400 outline-none transition-colors duration-150 hover:border-white/10 hover:text-neutral-200 focus:border-white/20"
+								>
+									{MODEL_OPTIONS.map((group) => (
+										<optgroup key={group.group} label={group.group}>
+											{group.models.map((option) => (
+												<option key={option.value} value={option.value}>
+													{option.label}
+												</option>
+											))}
+										</optgroup>
+									))}
+								</select>
+								<ChevronDown
+									size={12}
+									className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-neutral-600"
+								/>
+							</div>
+						</div>
+					</div>
+
+					<div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+						<div className="flex shrink-0 items-center gap-3 border-b border-white/5 px-4 py-3">
+							<div className="flex items-center gap-1">
+								{PRIORITY_LEVELS.map((level) => (
+									<button
+										type="button"
+										key={level}
+										onClick={() => updateEffort(level)}
+										className={`cursor-pointer rounded-md border px-2 py-0.5 text-[11px] capitalize transition-colors ${
+											effort === level
+												? EFFORT_STYLES[level]
+												: "border-white/5 bg-transparent text-neutral-700 hover:border-white/10 hover:text-neutral-500"
+										}`}
+									>
+										{level}
+									</button>
 								))}
-							</select>
-							<ChevronDown
-								size={12}
-								className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-neutral-600"
+							</div>
+							{scopeDisplay ? (
+								<span className="min-w-0 truncate text-xs text-neutral-600">
+									Scope:{" "}
+									<button
+										type="button"
+										onClick={() => setScopeModalOpen(true)}
+										className="max-w-[260px] cursor-pointer truncate align-bottom font-mono text-blue-400/80 transition-colors duration-150 hover:text-blue-300"
+										title={scopePath}
+									>
+										{scopeDisplay}
+									</button>
+								</span>
+							) : null}
+						</div>
+
+						<div className="min-h-0 flex-1">
+							<Chat
+								thread={activeThread}
+								isRunning={isRunning}
+								cwd={workspacePath}
+								model={model}
+								onFirstMessage={handleFirstMessage}
+								provider={agent.provider}
+								workspaceId={workspaceId}
 							/>
 						</div>
 					</div>
 				</div>
-
-				<div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-					<div className="flex shrink-0 items-center gap-3 border-b border-white/5 px-4 py-3">
-						<div className="flex items-center gap-1">
-							{PRIORITY_LEVELS.map((level) => (
-								<button
-									type="button"
-									key={level}
-									onClick={() => updateEffort(level)}
-									className={`cursor-pointer rounded-md border px-2 py-0.5 text-[11px] capitalize transition-colors ${
-										effort === level
-											? EFFORT_STYLES[level]
-											: "border-white/5 bg-transparent text-neutral-700 hover:border-white/10 hover:text-neutral-500"
-									}`}
-								>
-									{level}
-								</button>
-							))}
-						</div>
-						{scopeDisplay ? (
-							<span className="min-w-0 truncate text-xs text-neutral-600">
-								Scope:{" "}
-								<button
-									type="button"
-									onClick={() => setScopeModalOpen(true)}
-									className="max-w-[260px] cursor-pointer truncate align-bottom font-mono text-blue-400/80 transition-colors duration-150 hover:text-blue-300"
-									title={scopePath}
-								>
-									{scopeDisplay}
-								</button>
-							</span>
-						) : null}
-					</div>
-
-					<div className="min-h-0 flex-1">
-						<Chat
-							thread={activeThread}
-							isRunning={isRunning}
-							cwd={workspacePath}
-							workspaceId={workspaceId}
-						/>
-					</div>
-				</div>
 			</div>
+
 			{scopeModalOpen ? (
 				<ScopeModal
 					agentName={name}
@@ -367,6 +424,108 @@ function ScopeModal({
 					</button>
 				</div>
 			</form>
+		</div>
+	)
+}
+
+export type CreateSide = "left" | "right" | "top" | "bottom"
+
+const PROVIDERS: StartAgentInput[] = [{ provider: "codex" }, { provider: "claude" }]
+
+function SideCreateButton({
+	active,
+	onClose,
+	onCreateAgent,
+	onOpen,
+	side,
+	sourceAgentId
+}: {
+	active: boolean
+	onClose: () => void
+	onCreateAgent: (input: StartAgentInput) => Promise<void>
+	onOpen: () => void
+	side: CreateSide
+	sourceAgentId: string
+}) {
+	const lightDismissCleanup = useRef<(() => void) | null>(null)
+	const sideClass: Record<CreateSide, string> = {
+		left: "left-[-62px] top-1/2 -translate-y-1/2",
+		right: "right-[-62px] top-1/2 -translate-y-1/2",
+		top: "left-1/2 top-[-62px] -translate-x-1/2",
+		bottom: "bottom-[-62px] left-1/2 -translate-x-1/2"
+	}
+	const setPopoverRef = useCallback(
+		(node: HTMLDivElement | null) => {
+			lightDismissCleanup.current?.()
+			lightDismissCleanup.current = null
+			if (!node) return
+			const popover = node
+
+			function handlePointerDown(event: PointerEvent): void {
+				if (popover.contains(event.target as Node | null)) return
+				lightDismissCleanup.current?.()
+				lightDismissCleanup.current = null
+				onClose()
+			}
+
+			const timer = window.setTimeout(() => {
+				document.addEventListener("pointerdown", handlePointerDown, true)
+			}, 0)
+			lightDismissCleanup.current = () => {
+				window.clearTimeout(timer)
+				document.removeEventListener("pointerdown", handlePointerDown, true)
+			}
+		},
+		[onClose]
+	)
+
+	return (
+		<div className={`nodrag absolute z-40 ${sideClass[side]}`}>
+			<button
+				type="button"
+				onClick={(event) => {
+					event.preventDefault()
+					event.stopPropagation()
+					if (active) {
+						onClose()
+						return
+					}
+					onOpen()
+				}}
+				className="flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-neutral-400 opacity-35 transition-all duration-150 hover:scale-110 hover:text-white hover:opacity-100 group-hover/card:opacity-70"
+				aria-label="Start another agent"
+				title="Start another agent"
+			>
+				<Plus size={17} />
+			</button>
+			{active ? (
+				<div
+					ref={setPopoverRef}
+					className="agent-create-popover absolute top-1/2 left-1/2 z-50 flex w-[120px] items-center gap-2 rounded-lg border border-white/10 bg-neutral-900 p-2 shadow-2xl shadow-black/50"
+					onClick={(event) => event.stopPropagation()}
+				>
+					{PROVIDERS.map((provider) => (
+						<button
+							key={provider.provider}
+							type="button"
+							onClick={(event) => {
+								event.preventDefault()
+								event.stopPropagation()
+								void onCreateAgent({
+									...provider,
+									sourceAgentId,
+									side
+								}).then(onClose)
+							}}
+							className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-white/8 bg-neutral-950 text-neutral-400 transition-colors duration-150 hover:border-white/15 hover:bg-white/8 hover:text-white"
+							aria-label={`Start ${provider.provider} agent`}
+							title={provider.provider}
+						>
+							<ProviderIcon provider={provider.provider} />
+						</button>
+					))}
+				</div>
+			) : null}
 		</div>
 	)
 }

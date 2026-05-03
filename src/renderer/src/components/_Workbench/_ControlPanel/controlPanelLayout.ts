@@ -7,70 +7,111 @@ export const PADDING = 80
 export const COLS = 2
 export const MIN_ZOOM = 0.42
 export const MAX_ZOOM = 1.15
+export const STEP_X = CARD_W + GAP
+export const STEP_Y = CARD_H + GAP
+
+export interface CanvasLayout {
+	w: number
+	h: number
+	minX: number
+	minY: number
+}
 
 export const PLACEHOLDER_AGENTS: AgentRow[] = [
 	{
 		id: "1",
 		name: "Auth Refactor",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "claude",
 		model: "claude-opus-4-7",
 		scope_path: "@Pipeline.md",
-		effort: "high"
+		effort: "high",
+		layout_x: 0,
+		layout_y: 0
 	},
 	{
 		id: "2",
 		name: "Test Coverage",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "codex",
 		model: "gpt-4o-mini",
 		scope_path: "@tests/README.md",
-		effort: "medium"
+		effort: "medium",
+		layout_x: 1,
+		layout_y: 0
 	},
 	{
 		id: "3",
 		name: "Docs Generator",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "claude",
 		model: "claude-sonnet-4-6",
 		scope_path: "",
-		effort: "low"
+		effort: "low",
+		layout_x: 0,
+		layout_y: 1
 	},
 	{
 		id: "4",
 		name: "Lint Fixer",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "codex",
 		model: "gpt-4o",
 		scope_path: "@.eslintrc.md",
-		effort: "low"
+		effort: "low",
+		layout_x: 1,
+		layout_y: 1
 	},
 	{
 		id: "5",
 		name: "Schema Migrator",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "claude",
 		model: "claude-haiku-4-5",
 		scope_path: "@schema.md",
-		effort: "medium"
+		effort: "medium",
+		layout_x: 0,
+		layout_y: 2
 	},
 	{
 		id: "6",
 		name: "CI Optimizer",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "codex",
 		model: "o3",
 		scope_path: "",
-		effort: "high"
+		effort: "high",
+		layout_x: 1,
+		layout_y: 2
 	}
 ]
 
-export function canvasSize(count: number): { w: number; h: number } {
-	const rows = Math.ceil(count / COLS)
+export function canvasSize(agents: AgentRow[]): CanvasLayout {
+	if (agents.length === 0) return { w: PADDING * 2, h: PADDING * 2, minX: 0, minY: 0 }
+	const xs = agents.map((agent) => agent.layout_x)
+	const ys = agents.map((agent) => agent.layout_y)
+	const minX = Math.min(...xs)
+	const maxX = Math.max(...xs)
+	const minY = Math.min(...ys)
+	const maxY = Math.max(...ys)
 	return {
-		w: COLS * CARD_W + (COLS - 1) * GAP + PADDING * 2,
-		h: rows * CARD_H + (rows - 1) * GAP + PADDING * 2
+		w: (maxX - minX + 1) * CARD_W + (maxX - minX) * GAP + PADDING * 2,
+		h: (maxY - minY + 1) * CARD_H + (maxY - minY) * GAP + PADDING * 2,
+		minX,
+		minY
 	}
 }
 
-export function cardPos(idx: number): { x: number; y: number } {
+export function cardPos(agent: AgentRow, layout: CanvasLayout): { x: number; y: number } {
 	return {
-		x: PADDING + (idx % COLS) * (CARD_W + GAP),
-		y: PADDING + Math.floor(idx / COLS) * (CARD_H + GAP)
+		x: PADDING + (agent.layout_x - layout.minX) * STEP_X,
+		y: PADDING + (agent.layout_y - layout.minY) * STEP_Y
 	}
 }
 
@@ -116,16 +157,20 @@ export function centerOffset(
 	)
 }
 
-export function cardCenter(idx: number): { x: number; y: number } {
-	const pos = cardPos(idx)
+export function cardCenter(agent: AgentRow, layout: CanvasLayout): { x: number; y: number } {
+	const pos = cardPos(agent, layout)
 	return { x: pos.x + CARD_W / 2, y: pos.y + CARD_H / 2 }
 }
 
-export function nearestCardIndex(center: { x: number; y: number }, count: number): number {
+export function nearestCardIndex(
+	center: { x: number; y: number },
+	agents: AgentRow[],
+	layout: CanvasLayout
+): number {
 	let nearest = 0
 	let nearestDistance = Number.POSITIVE_INFINITY
-	for (let i = 0; i < count; i += 1) {
-		const card = cardCenter(i)
+	for (let i = 0; i < agents.length; i += 1) {
+		const card = cardCenter(agents[i], layout)
 		const distance = Math.abs(card.x - center.x) + Math.abs(card.y - center.y)
 		if (distance < nearestDistance) {
 			nearest = i
@@ -137,13 +182,14 @@ export function nearestCardIndex(center: { x: number; y: number }, count: number
 
 export function nearestCardInDirection(
 	center: { x: number; y: number },
-	count: number,
+	agents: AgentRow[],
+	layout: CanvasLayout,
 	direction: "left" | "right" | "up" | "down"
 ): number {
-	let nearest = nearestCardIndex(center, count)
+	let nearest = nearestCardIndex(center, agents, layout)
 	let nearestDistance = Number.POSITIVE_INFINITY
-	for (let i = 0; i < count; i += 1) {
-		const card = cardCenter(i)
+	for (let i = 0; i < agents.length; i += 1) {
+		const card = cardCenter(agents[i], layout)
 		const primaryDistance =
 			direction === "left"
 				? center.x - card.x

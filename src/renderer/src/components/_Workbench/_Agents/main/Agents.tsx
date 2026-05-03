@@ -11,7 +11,7 @@ type AgentCardRow = AgentRow & {
 	status: AgentStatus
 }
 
-type AgentProvider = "claudeCode" | "codex"
+type AgentLogoProvider = "claudeCode" | "codex"
 
 // ── placeholder data ──────────────────────────────────────────────
 const PLACEHOLDER_AGENTS: AgentCardRow[] = [
@@ -19,9 +19,13 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		id: "1",
 		name: "Auth Refactor",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "claude",
 		model: "claude-opus-4-7",
 		scope_path: "@Pipeline.md",
 		effort: "high",
+		layout_x: 0,
+		layout_y: 0,
 		status: "working",
 		current_task: "Extracting auth middleware boundaries"
 	},
@@ -29,9 +33,13 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		id: "2",
 		name: "Test Coverage",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "codex",
 		model: "gpt-4o-mini",
 		scope_path: "@tests/README.md",
 		effort: "medium",
+		layout_x: 1,
+		layout_y: 0,
 		status: "pending",
 		current_task: "Writing renderer smoke tests"
 	},
@@ -39,9 +47,13 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		id: "3",
 		name: "Docs Generator",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "claude",
 		model: "claude-sonnet-4-6",
 		scope_path: "@docs",
 		effort: "low",
+		layout_x: 0,
+		layout_y: 1,
 		status: "idle",
 		current_task: "Summarizing review workflow"
 	},
@@ -49,9 +61,13 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		id: "4",
 		name: "Merge Steward",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "codex",
 		model: "o4-mini",
 		scope_path: "@src/main/git",
 		effort: "medium",
+		layout_x: 1,
+		layout_y: 1,
 		status: "failure",
 		current_task: "Checking branch isolation rules"
 	},
@@ -59,9 +75,13 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		id: "5",
 		name: "UI Polish",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "claude",
 		model: "claude-haiku-4-5",
 		scope_path: "@src/renderer",
 		effort: "low",
+		layout_x: 0,
+		layout_y: 2,
 		status: "working",
 		current_task: "Tightening sidebar spacing"
 	}
@@ -91,14 +111,13 @@ const STATUS_BORDER_STYLES: Record<AgentStatus, string> = {
 }
 
 function agentImage(agent: AgentCardRow) {
-	const isClaude = agent.model.includes("claude")
 	return {
-		label: isClaude ? "Claude Code" : "Codex",
-		provider: (isClaude ? "claudeCode" : "codex") as AgentProvider
+		label: agent.provider === "claude" ? "Claude Code" : "Codex",
+		provider: (agent.provider === "claude" ? "claudeCode" : "codex") as AgentLogoProvider
 	}
 }
 
-function AgentLogo({ label, provider }: { label: string; provider: AgentProvider }) {
+function AgentLogo({ label, provider }: { label: string; provider: AgentLogoProvider }) {
 	if (provider === "claudeCode") {
 		return (
 			<svg role="img" aria-label={label} viewBox="0 0 24 24" className="h-16 w-16">
@@ -160,9 +179,13 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 			id: crypto.randomUUID(),
 			name: input.name || "Unnamed Agent",
 			project_id: project?.id ?? "",
+			workspace_id: null,
+			provider: input.provider,
 			model: input.model,
 			scope_path: input.scopePath,
 			effort: input.effort,
+			layout_x: 0,
+			layout_y: 0,
 			status: "idle",
 			current_task: "Waiting for task"
 		}
@@ -179,6 +202,7 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 					? {
 							...agent,
 							name: input.name || "Unnamed Agent",
+							provider: input.provider,
 							model: input.model,
 							scope_path: input.scopePath,
 							effort: input.effort

@@ -1,9 +1,16 @@
 import { type FormEvent, type ReactNode, useState } from "react"
 import { AlignLeft, ChevronDown, FolderOpen, X } from "lucide-react"
 
-const MODEL_OPTIONS: { group: string; models: { value: string; label: string }[] }[] = [
+type AgentProvider = "codex" | "claude"
+
+const MODEL_OPTIONS: {
+	group: string
+	provider: AgentProvider
+	models: { value: string; label: string }[]
+}[] = [
 	{
 		group: "Anthropic",
+		provider: "claude",
 		models: [
 			{ value: "claude-opus-4-7", label: "Claude Opus 4.7" },
 			{ value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
@@ -12,6 +19,7 @@ const MODEL_OPTIONS: { group: string; models: { value: string; label: string }[]
 	},
 	{
 		group: "OpenAI",
+		provider: "codex",
 		models: [
 			{ value: "gpt-4o", label: "GPT-4o" },
 			{ value: "gpt-4o-mini", label: "GPT-4o mini" },
@@ -22,6 +30,10 @@ const MODEL_OPTIONS: { group: string; models: { value: string; label: string }[]
 ]
 
 const EFFORT_OPTIONS = ["low", "medium", "high"] as const
+const PROVIDER_OPTIONS: { value: AgentProvider; label: string }[] = [
+	{ value: "claude", label: "Claude" },
+	{ value: "codex", label: "Codex" }
+]
 
 const EFFORT_STYLES: Record<(typeof EFFORT_OPTIONS)[number], string> = {
 	low: "border-white/10 bg-white/8 text-neutral-200",
@@ -31,6 +43,7 @@ const EFFORT_STYLES: Record<(typeof EFFORT_OPTIONS)[number], string> = {
 
 const DEFAULT_FORM = {
 	name: "",
+	provider: "claude" as AgentProvider,
 	model: "claude-sonnet-4-6",
 	effort: "medium" as (typeof EFFORT_OPTIONS)[number],
 	instructionMode: "text" as "text" | "path",
@@ -47,6 +60,7 @@ type NewAgentModalProps = {
 	projectPath: string
 	initialAgent?: {
 		name: string
+		provider: AgentProvider
 		model: string
 		effort: string
 		scope_path: string
@@ -63,6 +77,7 @@ export default function NewAgentModal({
 	const [form, setForm] = useState<NewAgentInput>({
 		...DEFAULT_FORM,
 		name: initialAgent?.name ?? DEFAULT_FORM.name,
+		provider: initialAgent?.provider ?? DEFAULT_FORM.provider,
 		model: initialAgent?.model ?? DEFAULT_FORM.model,
 		effort: (initialAgent?.effort ?? DEFAULT_FORM.effort) as NewAgentInput["effort"],
 		instructionMode: initialAgent ? "path" : DEFAULT_FORM.instructionMode,
@@ -72,6 +87,17 @@ export default function NewAgentModal({
 
 	const set = <K extends keyof NewAgentInput>(key: K, value: NewAgentInput[K]) =>
 		setForm((prev) => ({ ...prev, [key]: value }))
+
+	const modelOptions = MODEL_OPTIONS.filter((group) => group.provider === form.provider)
+
+	function setProvider(provider: AgentProvider): void {
+		const firstModel = MODEL_OPTIONS.find((group) => group.provider === provider)?.models[0]
+		setForm((prev) => ({
+			...prev,
+			provider,
+			model: firstModel?.value ?? prev.model
+		}))
+	}
 
 	const scopePathFromFileName = `./scopes/${form.scopeFileName.trim() || "agent-scope"}.md`
 
@@ -138,6 +164,26 @@ export default function NewAgentModal({
 							/>
 						</Field>
 
+						<Field label="Provider">
+							<div className="grid grid-cols-2 gap-1.5">
+								{PROVIDER_OPTIONS.map((provider) => (
+									<button
+										key={provider.value}
+										type="button"
+										onClick={() => setProvider(provider.value)}
+										disabled={isSubmitting}
+										className={`cursor-pointer rounded-md border py-1.5 text-xs transition-colors duration-300 disabled:cursor-not-allowed disabled:opacity-60 ${
+											form.provider === provider.value
+												? "border-white/10 bg-white/8 text-neutral-200"
+												: "border-white/5 text-neutral-600 hover:border-white/10 hover:text-neutral-400"
+										}`}
+									>
+										{provider.label}
+									</button>
+								))}
+							</div>
+						</Field>
+
 						<Field label="Model">
 							<div className="relative">
 								<select
@@ -146,7 +192,7 @@ export default function NewAgentModal({
 									disabled={isSubmitting}
 									className="cursor-pointer w-full appearance-none rounded-md border border-white/8 bg-neutral-800/60 px-3 py-2 pr-9 text-sm text-white transition-colors duration-300 focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
 								>
-									{MODEL_OPTIONS.map((group) => (
+									{modelOptions.map((group) => (
 										<optgroup key={group.group} label={group.group}>
 											{group.models.map((model) => (
 												<option key={model.value} value={model.value}>

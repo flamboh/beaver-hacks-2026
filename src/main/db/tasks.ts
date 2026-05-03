@@ -4,6 +4,8 @@ import type { TaskRow } from "./contracts"
 
 export interface CreateTaskInput {
 	agent_id: string
+	batch_id?: string
+	turn_id?: string | null
 	status: string
 	description?: string
 }
@@ -13,22 +15,31 @@ export class TaskService {
 
 	async listTasks(agentId: string): Promise<TaskRow[]> {
 		return this.all<TaskRow>(
-			`SELECT id, agent_id, status, COALESCE(description, '') AS description
+			`SELECT id, batch_id, agent_id, turn_id, status, COALESCE(description, '') AS description
 			 FROM task WHERE agent_id = ? ORDER BY rowid ASC`,
 			[agentId]
 		)
 	}
 
 	async createTask(input: CreateTaskInput): Promise<TaskRow> {
+		const batchId = input.batch_id ?? `batch:${randomUUID()}`
 		const task: TaskRow = {
 			id: `task:${randomUUID()}`,
+			batch_id: batchId,
 			agent_id: input.agent_id,
+			turn_id: input.turn_id ?? null,
 			status: input.status,
 			description: input.description ?? ""
 		}
+		await this.run(`INSERT OR IGNORE INTO batch (id, agent_id, summary) VALUES (?, ?, ?)`, [
+			batchId,
+			task.agent_id,
+			task.description || "Task batch"
+		])
 		await this.run(
-			`INSERT INTO task (id, batch_id, agent_id, status, description) VALUES (?, ?, ?, ?, ?)`,
-			[task.id, `batch:${randomUUID()}`, task.agent_id, task.status, task.description]
+			`INSERT INTO task (id, batch_id, agent_id, turn_id, status, description)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			[task.id, task.batch_id, task.agent_id, task.turn_id, task.status, task.description]
 		)
 		return task
 	}

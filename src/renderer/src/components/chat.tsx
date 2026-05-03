@@ -11,10 +11,21 @@ interface ChatProps {
 	thread: AgentThread | null
 	isRunning: boolean
 	cwd: string
+	model?: string
+	onFirstMessage?: (prompt: string) => Promise<void>
+	provider?: AgentThread["provider"]
 	workspaceId: string
 }
 
-export function Chat({ thread, isRunning, cwd, workspaceId }: ChatProps): JSX.Element {
+export function Chat({
+	thread,
+	isRunning,
+	cwd,
+	model,
+	onFirstMessage,
+	provider,
+	workspaceId
+}: ChatProps): JSX.Element {
 	const [draft, setDraft] = useState("")
 	const [isSending, setIsSending] = useState(false)
 	const [error, setError] = useState<string | null>(null)
@@ -29,11 +40,17 @@ export function Chat({ thread, isRunning, cwd, workspaceId }: ChatProps): JSX.El
 		setDraft("")
 		setError(null)
 		setIsSending(true)
-		void sendAgentMessage({
-			prompt,
-			cwd,
-			...(thread ? { threadId: thread.id } : {})
-		})
+		void Promise.resolve()
+			.then(() => (thread ? undefined : onFirstMessage?.(prompt)))
+			.then(() =>
+				sendAgentMessage({
+					prompt,
+					cwd,
+					...(thread ? { threadId: thread.id } : {}),
+					...(thread || !provider ? {} : { provider }),
+					...(thread || !model ? {} : { model })
+				})
+			)
 			.catch((cause: unknown) => {
 				setError(cause instanceof Error ? cause.message : String(cause))
 				setDraft(prompt)

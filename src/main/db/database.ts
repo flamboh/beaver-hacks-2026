@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto"
-import { existsSync, mkdirSync } from "node:fs"
-import { basename, dirname, isAbsolute, resolve } from "node:path"
+import { mkdirSync } from "node:fs"
+import { dirname } from "node:path"
 import * as sqlite3 from "sqlite3"
 import type {
 	CreateWorkspaceInput,
 	CreateProjectInput,
 	DatabaseInfo,
+	DeleteWorkspaceResult,
 	ProjectIdInput,
 	ProjectRow,
 	ProjectWorkspaceInput,
@@ -16,20 +17,13 @@ import type {
 	UpdateProjectInput
 } from "./contracts"
 
-import type { ProjectTableRow, WorkspaceTableRow } from "./rowMappers"
-import { toProjectRow, toWorkspaceRow } from "./rowMappers"
+import type { ProjectTableRow } from "./rowMappers"
+import { toProjectRow } from "./rowMappers"
 import { INITIALIZE_SCHEMA_SQL } from "./schema"
-import {
-	assertDirectory,
-	canonicalPath,
-	DEFAULT_WORKSPACE_TEMPLATE,
-	expandHomePath,
-	resolveGitRoot,
-	runGit,
-	slugify
-} from "./workspaceUtils"
+import { assertDirectory, assertWorkspaceTemplate, canonicalPath } from "./workspaceUtils"
+import { WorkspaceService } from "./workspaces"
 
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 4
 
 function nowIso(): string {
 	return new Date().toISOString()
@@ -42,11 +36,13 @@ function isUniqueProjectPathError(error: unknown): boolean {
 
 export class DatabaseService {
 	readonly db: sqlite3.Database
+	private readonly workspaces: WorkspaceService
 
 	constructor(private readonly path: string) {
 		mkdirSync(dirname(path), { recursive: true })
 		this.db = new sqlite3.Database(path)
 		this.db.configure("busyTimeout", 5000)
+		this.workspaces = new WorkspaceService(this.db)
 	}
 
 	async initialize(): Promise<void> {
@@ -75,15 +71,20 @@ export class DatabaseService {
 				id TEXT PRIMARY KEY,
 				project_id TEXT NOT NULL,
 				name TEXT NOT NULL DEFAULT '',
+				workspace_id TEXT,
+				provider TEXT NOT NULL DEFAULT 'codex',
 				model TEXT NOT NULL,
 				scope_path TEXT,
-				effort TEXT NOT NULL
+				effort TEXT NOT NULL,
+				layout_x INTEGER NOT NULL DEFAULT 0,
+				layout_y INTEGER NOT NULL DEFAULT 0
 			);
 
 			CREATE TABLE IF NOT EXISTS task (
 				id TEXT PRIMARY KEY,
 				batch_id TEXT NOT NULL,
 				agent_id TEXT NOT NULL,
+				turn_id TEXT,
 				status TEXT NOT NULL,
 				description TEXT
 			);
@@ -113,18 +114,71 @@ export class DatabaseService {
 					id TEXT PRIMARY KEY,
 					project_id TEXT NOT NULL,
 					name TEXT NOT NULL DEFAULT '',
+					workspace_id TEXT,
+					provider TEXT NOT NULL DEFAULT 'codex',
 					model TEXT NOT NULL,
 					scope_path TEXT,
 					effort TEXT NOT NULL,
-					FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+					FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+					FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE SET NULL
 				);
-				INSERT INTO agents_new (id, project_id, name, model, scope_path, effort)
-					SELECT id, project_id, '', model, scope_path, effort FROM agents;
+				INSERT INTO agents_new (id, project_id, name, workspace_id, provider, model, scope_path, effort)
+					SELECT id, project_id, '', NULL, 'codex', model, scope_path, effort FROM agents;
 				DROP TABLE agents;
 				ALTER TABLE agents_new RENAME TO agents;
 				COMMIT;
 			`)
 		}
+
+		if (storedVersion >= 2 && storedVersion < 3) {
+			await this.exec(`
+				BEGIN TRANSACTION;
+				CREATE TABLE agents_new (
+					id TEXT PRIMARY KEY,
+					project_id TEXT NOT NULL,
+					name TEXT NOT NULL DEFAULT '',
+					workspace_id TEXT,
+					provider TEXT NOT NULL DEFAULT 'codex',
+					model TEXT NOT NULL,
+					scope_path TEXT,
+					effort TEXT NOT NULL,
+					FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+					FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE SET NULL
+				);
+				INSERT INTO agents_new (id, project_id, name, workspace_id, provider, model, scope_path, effort)
+					SELECT id, project_id, name, NULL, 'codex', model, scope_path, effort FROM agents;
+				DROP TABLE agents;
+				ALTER TABLE agents_new RENAME TO agents;
+				COMMIT;
+			`)
+		}
+
+		if (storedVersion < 3) {
+			await this.exec(`
+				BEGIN TRANSACTION;
+				CREATE TABLE task_new (
+					id TEXT PRIMARY KEY,
+					batch_id TEXT NOT NULL,
+					agent_id TEXT NOT NULL,
+					turn_id TEXT,
+					status TEXT NOT NULL,
+					description TEXT,
+					FOREIGN KEY(batch_id) REFERENCES batch(id) ON DELETE CASCADE,
+					FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
+				);
+				INSERT INTO task_new (id, batch_id, agent_id, turn_id, status, description)
+					SELECT id, batch_id, agent_id, NULL, status, description FROM task;
+				DROP TABLE task;
+				ALTER TABLE task_new RENAME TO task;
+				COMMIT;
+			`)
+		}
+
+		if (storedVersion < 4) {
+			await this.ensureAgentLayoutColumns()
+		}
+
+		await this.ensureAgentLayoutColumns()
 
 		await this.run(
 			`INSERT INTO app_meta (key, value) VALUES ('schema_version', ?)
@@ -147,6 +201,29 @@ export class DatabaseService {
 		}
 	}
 
+	private async ensureAgentLayoutColumns(): Promise<void> {
+		const columns = await this.all<{ name: string }>(`PRAGMA table_info(agents)`, [])
+		const columnNames = new Set(columns.map((column) => column.name))
+		if (!columnNames.has("layout_x")) {
+			await this.run(`ALTER TABLE agents ADD COLUMN layout_x INTEGER NOT NULL DEFAULT 0`, [])
+		}
+		if (!columnNames.has("layout_y")) {
+			await this.run(`ALTER TABLE agents ADD COLUMN layout_y INTEGER NOT NULL DEFAULT 0`, [])
+		}
+		await this.exec(`
+			WITH ordered AS (
+				SELECT id, ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY rowid) - 1 AS idx
+				FROM agents
+				WHERE layout_x = 0 AND layout_y = 0
+			)
+			UPDATE agents
+			SET
+				layout_x = (SELECT idx % 2 FROM ordered WHERE ordered.id = agents.id),
+				layout_y = (SELECT idx / 2 FROM ordered WHERE ordered.id = agents.id)
+			WHERE id IN (SELECT id FROM ordered);
+		`)
+	}
+
 	async listProjects(): Promise<ProjectRow[]> {
 		const rows = await this.all<ProjectTableRow>(
 			`
@@ -161,11 +238,13 @@ export class DatabaseService {
 
 	async createProject(input: CreateProjectInput): Promise<ProjectRow> {
 		const timestamp = nowIso()
+		const name = input.name.trim()
+		if (!name) throw new Error("Project name is required.")
 		const path = canonicalPath(input.path)
 		assertDirectory(path)
 		const project: ProjectRow = {
 			id: `project:${randomUUID()}`,
-			name: input.name.trim(),
+			name,
 			path,
 			createdAt: timestamp,
 			accessed: timestamp
@@ -196,15 +275,17 @@ export class DatabaseService {
 	}
 
 	async updateProject(input: UpdateProjectInput): Promise<ProjectRow> {
+		const name = input.name.trim()
+		if (!name) throw new Error("Project name is required.")
 		const path = canonicalPath(input.path)
 		assertDirectory(path)
 		await this.run(
 			`
 				UPDATE projects
 				SET name = ?, path = ?
-				WHERE id = ?
+			WHERE id = ?
 			`,
-			[input.name.trim(), path, input.id]
+			[name, path, input.id]
 		)
 
 		return this.getProject(input)
@@ -242,112 +323,31 @@ export class DatabaseService {
 	}
 
 	async listWorkspaces(input: ProjectWorkspaceInput): Promise<WorkspaceRow[]> {
-		const rows = await this.all<WorkspaceTableRow>(
-			`
-				SELECT id, project_id, name, path, git_root, active, created_at, accessed
-				FROM workspaces
-				WHERE project_id = ?
-				ORDER BY active DESC, accessed DESC
-			`,
-			[input.projectId]
-		)
-		return rows.map(toWorkspaceRow)
+		return this.workspaces.list(input)
 	}
 
 	async getWorkspace(input: WorkspaceIdInput): Promise<WorkspaceRow> {
-		const row = await this.get<WorkspaceTableRow>(
-			`
-				SELECT id, project_id, name, path, git_root, active, created_at, accessed
-				FROM workspaces
-				WHERE id = ?
-			`,
-			[input.id]
-		)
-		if (!row) throw new Error("Workspace not found.")
-		return toWorkspaceRow(row)
+		return this.workspaces.get(input)
 	}
 
 	async getActiveWorkspace(input: ProjectWorkspaceInput): Promise<WorkspaceRow> {
-		const rows = await this.listWorkspaces(input)
-		const workspace = rows[0]
-		if (!workspace) throw new Error("Workspace not found.")
-		return workspace
+		return this.workspaces.getActive(input)
 	}
 
 	async createWorkspace(input: CreateWorkspaceInput): Promise<WorkspaceRow> {
-		const project = await this.getProject({ id: input.projectId })
-		const timestamp = nowIso()
-		const customPath = input.path?.trim()
-		const path = customPath
-			? canonicalPath(customPath)
-			: await this.nextDefaultWorkspacePath(project, input.name)
-		if (customPath) {
-			mkdirSync(path, { recursive: true })
-		} else {
-			const projectGitRoot = await resolveGitRoot(project.path)
-			if (projectGitRoot) {
-				await runGit(projectGitRoot, ["worktree", "add", "-b", slugify(input.name), path, "HEAD"])
-			} else {
-				mkdirSync(path, { recursive: true })
-			}
-		}
-		assertDirectory(path)
-		const gitRoot = await resolveGitRoot(path)
-		const existing = await this.listWorkspaces({ projectId: input.projectId })
-		const workspace: WorkspaceRow = {
-			id: `workspace:${randomUUID()}`,
-			projectId: input.projectId,
-			name: input.name.trim() || basename(path),
-			path,
-			gitRoot,
-			active: existing.length === 0,
-			createdAt: timestamp,
-			accessed: timestamp
-		}
-
-		await this.run(
-			`
-				INSERT INTO workspaces (id, project_id, name, path, git_root, active, created_at, accessed)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-			`,
-			[
-				workspace.id,
-				workspace.projectId,
-				workspace.name,
-				workspace.path,
-				workspace.gitRoot,
-				workspace.active ? 1 : 0,
-				workspace.createdAt,
-				workspace.accessed
-			]
-		)
-		return workspace
+		return this.workspaces.create(input)
 	}
 
 	async updateWorkspace(input: UpdateWorkspaceInput): Promise<WorkspaceRow> {
-		const path = canonicalPath(input.path)
-		assertDirectory(path)
-		const gitRoot = await resolveGitRoot(path)
-		await this.run(
-			`
-				UPDATE workspaces
-				SET name = ?, path = ?, git_root = ?
-				WHERE id = ?
-			`,
-			[input.name.trim(), path, gitRoot, input.id]
-		)
-		return this.getWorkspace(input)
+		return this.workspaces.update(input)
 	}
 
 	async activateWorkspace(input: WorkspaceIdInput): Promise<WorkspaceRow> {
-		const workspace = await this.getWorkspace(input)
-		const timestamp = nowIso()
-		await this.run(`UPDATE workspaces SET active = 0 WHERE project_id = ?`, [workspace.projectId])
-		await this.run(`UPDATE workspaces SET active = 1, accessed = ? WHERE id = ?`, [
-			timestamp,
-			input.id
-		])
-		return this.getWorkspace(input)
+		return this.workspaces.activate(input)
+	}
+
+	async deleteWorkspace(input: WorkspaceIdInput): Promise<DeleteWorkspaceResult> {
+		return this.workspaces.delete(input)
 	}
 
 	async getSetting(key: string): Promise<string> {
@@ -356,6 +356,7 @@ export class DatabaseService {
 	}
 
 	async updateSetting(input: UpdateSettingInput): Promise<string> {
+		if (input.key === "workspace.default_template") assertWorkspaceTemplate(input.value)
 		await this.run(
 			`
 				INSERT INTO app_meta (key, value)
@@ -381,38 +382,7 @@ export class DatabaseService {
 
 	private async backfillProjectWorkspaces(): Promise<void> {
 		const projects = await this.listProjects()
-		for (const project of projects) {
-			const existing = await this.listWorkspaces({ projectId: project.id })
-			if (existing.length > 0) continue
-			await this.createWorkspace({
-				projectId: project.id,
-				name: "Source",
-				path: project.path
-			})
-		}
-	}
-
-	private async nextDefaultWorkspacePath(
-		project: ProjectRow,
-		workspaceName: string
-	): Promise<string> {
-		const template =
-			(await this.getSetting("workspace.default_template")) || DEFAULT_WORKSPACE_TEMPLATE
-		const workspaceSlug = slugify(workspaceName)
-		const projectSlug = slugify(project.name || basename(project.path))
-		const projectParent = dirname(project.path)
-		const expanded = template
-			.replaceAll("{projectSlug}", projectSlug)
-			.replaceAll("{workspaceSlug}", workspaceSlug)
-		const expandedPath = expandHomePath(expanded)
-		const basePath = isAbsolute(expandedPath) ? expandedPath : resolve(projectParent, expandedPath)
-		let candidate = basePath
-		let suffix = 2
-		while (existsSync(candidate)) {
-			candidate = `${basePath}-${suffix}`
-			suffix += 1
-		}
-		return candidate
+		await this.workspaces.backfill(projects)
 	}
 
 	private async exec(sql: string): Promise<void> {
