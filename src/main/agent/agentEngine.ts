@@ -1,6 +1,8 @@
 import { EventEmitter } from "node:events"
 import { randomUUID } from "node:crypto"
-import { CodexAdapter, assistantMessageId } from "./codexAdapter"
+import { ClaudeAdapter } from "./claudeAdapter"
+import { CodexAdapter } from "./codexAdapter"
+import { assistantMessageId } from "./runtimeIds"
 import { recommendProjectSkills } from "../skills/skillRecommender"
 import { installProjectSkill } from "../skills/skillInstaller"
 import { listInstalledSkillKeys, matchesInstalledSkill } from "../skills/installedSkills"
@@ -16,6 +18,7 @@ import type {
 	ProviderRuntimeEvent,
 	FindSkillsInput,
 	InstallSkillInput,
+	ProviderAdapter,
 	StartTurnInput
 } from "./contracts"
 
@@ -55,13 +58,20 @@ function newMessage(input: {
 
 export class AgentEngine {
 	private readonly events = new EventEmitter()
-	private readonly provider: CodexAdapter
+	private readonly codexProvider: CodexAdapter
+	private readonly providers: Record<AgentProvider, ProviderAdapter>
 	private threads = new Map<string, AgentThread>()
 	private activeThreadId: string | null = null
 
 	constructor(options: { cwd: string }) {
-		this.provider = new CodexAdapter({ cwd: options.cwd })
-		this.provider.onEvent((event) => this.ingestProviderEvent(event))
+		this.codexProvider = new CodexAdapter({ cwd: options.cwd })
+		this.providers = {
+			codex: this.codexProvider,
+			claude: new ClaudeAdapter()
+		}
+		for (const provider of Object.values(this.providers)) {
+			provider.onEvent((event) => this.ingestProviderEvent(event))
+		}
 	}
 
 	getSnapshot(): AgentSnapshot {
@@ -86,7 +96,8 @@ export class AgentEngine {
 		this.emitSnapshot()
 
 		try {
-			const session = await this.provider.startSession({
+			const provider = this.providers[providerForThread(thread)]
+			const session = await provider.startSession({
 				threadId: thread.id,
 				cwd: thread.cwd,
 				provider: providerForThread(thread),
@@ -95,7 +106,7 @@ export class AgentEngine {
 			})
 			this.setThreadSession(thread.id, session)
 
-			await this.provider.sendTurn({
+			await provider.sendTurn({
 				threadId: thread.id,
 				prompt: input.prompt,
 				...(input.model ? { model: input.model } : {})
@@ -174,7 +185,7 @@ export class AgentEngine {
 		runtimeMode: AgentRuntimeMode
 		timeoutMs?: number
 	}): Promise<string> {
-		return this.provider.runOneShot(input)
+		return this.codexProvider.runOneShot(input)
 	}
 
 	private ensureThread(input: StartTurnInput): AgentThread {
@@ -314,7 +325,7 @@ export class AgentEngine {
 	private async updateSkillSuggestions(thread: AgentThread, prompt: string): Promise<void> {
 		const recommendation = await recommendProjectSkills(thread.cwd, prompt, {
 			runCodexPrompt: (input) =>
-				this.provider.runOneShot({
+				this.codexProvider.runOneShot({
 					cwd: thread.cwd,
 					prompt: input.prompt,
 					model: input.model,
