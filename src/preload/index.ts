@@ -10,6 +10,11 @@ import type {
 	StartTurnInput
 } from "../main/agent/ipc"
 import type {
+	ComposerFileSuggestion,
+	ComposerMentionSuggestion,
+	ComposerSearchFilesInput
+} from "../main/composer/ipc"
+import type {
 	AgentRow,
 	CreateAgentInput,
 	CreateProjectInput,
@@ -21,11 +26,13 @@ import type {
 	WorkspaceIdInput,
 	WorkspaceRow,
 	CreateTaskInput,
+	CreateToolCardInput,
 	DatabaseInfo,
 	DeleteWorkspaceResult,
 	ProjectIdInput,
 	ProjectRow,
 	TaskRow,
+	ToolCardRow,
 	UpdateProjectInput
 } from "../main/db/ipc"
 import type {
@@ -78,6 +85,12 @@ const api = {
 			ipcRenderer.on("agent:snapshot", handler)
 			return () => ipcRenderer.off("agent:snapshot", handler)
 		}
+	},
+	composer: {
+		searchFiles: (input: ComposerSearchFilesInput): Promise<ComposerFileSuggestion[]> =>
+			ipcRenderer.invoke("composer:search-files", input),
+		listMentions: (cwd: string): Promise<ComposerMentionSuggestion[]> =>
+			ipcRenderer.invoke("composer:list-mentions", cwd)
 	},
 	git: {
 		getStatus: (workspaceId: string): Promise<GitStatusSnapshot> =>
@@ -138,6 +151,8 @@ const api = {
 			ipcRenderer.invoke("workspace:update", input),
 		activate: (input: WorkspaceIdInput): Promise<WorkspaceRow> =>
 			ipcRenderer.invoke("workspace:activate", input),
+		touchPrompted: (input: WorkspaceIdInput): Promise<WorkspaceRow> =>
+			ipcRenderer.invoke("workspace:touch-prompted", input),
 		delete: (input: WorkspaceIdInput): Promise<DeleteWorkspaceResult> =>
 			ipcRenderer.invoke("workspace:delete", input)
 	},
@@ -153,6 +168,13 @@ const api = {
 		update: (input: UpdateAgentInput): Promise<AgentRow> =>
 			ipcRenderer.invoke("agent:update", input),
 		delete: (id: string): Promise<void> => ipcRenderer.invoke("agent:delete", id)
+	},
+	toolCards: {
+		list: (projectId: string): Promise<ToolCardRow[]> =>
+			ipcRenderer.invoke("tool-card:list", projectId),
+		create: (input: CreateToolCardInput): Promise<ToolCardRow> =>
+			ipcRenderer.invoke("tool-card:create", input),
+		delete: (id: string): Promise<void> => ipcRenderer.invoke("tool-card:delete", id)
 	},
 	tasks: {
 		list: (agentId: string): Promise<TaskRow[]> => ipcRenderer.invoke("task:list", agentId),

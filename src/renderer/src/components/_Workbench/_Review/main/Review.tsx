@@ -49,6 +49,7 @@ function getRenderablePatch(
 }
 
 interface ReviewProps {
+	enterDevAction: string
 	projectName: string
 	workspaceId: string
 	workspacePath: string
@@ -57,7 +58,12 @@ interface ReviewProps {
 const INITIAL_EMPTY_TOUR_PANEL_HEIGHT = 100
 const EXPANDED_TOUR_PANEL_HEIGHT = 440
 
-export default function Review({ projectName, workspaceId, workspacePath }: ReviewProps) {
+export default function Review({
+	enterDevAction,
+	projectName,
+	workspaceId,
+	workspacePath
+}: ReviewProps) {
 	const gitStatus = useGitStatus(workspaceId)
 	const savedTour = useReviewTour(workspaceId)
 	const [launching, setLaunching] = useState(false)
@@ -67,8 +73,8 @@ export default function Review({ projectName, workspaceId, workspacePath }: Revi
 	)
 	const [message, setMessage] = useState("Review workspace ready")
 	const devServerQuery = useQuery({
-		queryKey: ["dev-server", "project-status", workspacePath],
-		queryFn: () => window.api.devServer.getProjectStatus({ cwd: workspacePath }),
+		queryKey: ["dev-server", "project-status", workspacePath, projectName],
+		queryFn: () => window.api.devServer.getProjectStatus({ cwd: workspacePath, name: projectName }),
 		refetchInterval: 2000
 	})
 	const devServerRunning = devServerQuery.data?.status === "running"
@@ -94,16 +100,13 @@ export default function Review({ projectName, workspaceId, workspacePath }: Revi
 	)
 
 	const launchDevServer = async () => {
-		if (devServerRunning && devServerQuery.data?.url) {
-			window.open(devServerQuery.data.url, "_blank", "noopener,noreferrer")
-			return
-		}
-
 		setLaunching(true)
 		try {
 			const result = await window.api.devServer.launchProject({
 				cwd: workspacePath,
-				name: projectName
+				name: projectName,
+				enterDevAction,
+				openExternal: true
 			})
 			setMessage(result.message)
 			void devServerQuery.refetch()
@@ -117,7 +120,10 @@ export default function Review({ projectName, workspaceId, workspacePath }: Revi
 	const stopDevServer = async () => {
 		setStopping(true)
 		try {
-			const result = await window.api.devServer.stopProject({ cwd: workspacePath })
+			const result = await window.api.devServer.stopProject({
+				cwd: workspacePath,
+				name: projectName
+			})
 			setMessage(
 				result.status === "stopped" ? "Project dev server stopped." : "Project dev server stopping."
 			)

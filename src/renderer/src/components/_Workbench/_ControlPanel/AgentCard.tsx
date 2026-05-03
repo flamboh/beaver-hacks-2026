@@ -15,8 +15,10 @@ interface Props {
 	availableCreateSides: CreateSide[]
 	isDeleting: boolean
 	onCreateCard: (input: StartCardInput) => Promise<void>
+	onCreateWorkspace: (sourceCardId: string, side: "top" | "bottom") => void
 	onDeleteCard: (id: string) => Promise<void>
 	workspaceId: string
+	workspaceName: string
 	workspacePath: string
 }
 
@@ -25,8 +27,10 @@ export default function AgentCard({
 	availableCreateSides,
 	isDeleting,
 	onCreateCard,
+	onCreateWorkspace,
 	onDeleteCard,
 	workspaceId,
+	workspaceName,
 	workspacePath
 }: Props) {
 	const [activeCreateSide, setActiveCreateSide] = useState<CreateSide | null>(null)
@@ -45,6 +49,7 @@ export default function AgentCard({
 	const thread = snapshot.threads.find((agentThread) => agentThread.id === agentThreadId) ?? null
 	const session = thread?.session ?? null
 	const runtimeModel = session?.model ?? null
+	const hasPlan = (thread?.plan.items.length ?? 0) > 0
 	const isRunning =
 		session !== null &&
 		(session.status === "starting" || session.status === "running" || session.activeTurnId !== null)
@@ -111,6 +116,19 @@ export default function AgentCard({
 		await queryClient.invalidateQueries({ queryKey: ["tasks", agent.id] })
 	}
 
+	async function handleMessageSent(prompt: string): Promise<void> {
+		await window.api.workspaces.touchPrompted({ id: workspaceId })
+		const nextWorkspaceName = workspaceNameForPrompt(workspaceName, prompt)
+		if (nextWorkspaceName && nextWorkspaceName !== workspaceName) {
+			await window.api.workspaces.update({
+				id: workspaceId,
+				name: nextWorkspaceName,
+				path: workspacePath
+			})
+		}
+		await queryClient.invalidateQueries({ queryKey: ["workspaces"] })
+	}
+
 	async function commitName(): Promise<void> {
 		if (skipNameCommitRef.current) {
 			skipNameCommitRef.current = false
@@ -145,6 +163,7 @@ export default function AgentCard({
 					active={activeCreateSide === side}
 					onClose={() => setActiveCreateSide(null)}
 					onCreateCard={onCreateCard}
+					onCreateWorkspace={onCreateWorkspace}
 					onOpen={() => setActiveCreateSide(side)}
 					side={side}
 					sourceCardId={agent.id}
@@ -205,9 +224,11 @@ export default function AgentCard({
 				</div>
 
 				<div className="flex flex-1 overflow-hidden">
-					<div className="flex w-[28%] shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
-						<TaskList plan={thread?.plan ?? null} />
-					</div>
+					{hasPlan ? (
+						<div className="flex w-[28%] shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
+							<TaskList plan={thread?.plan ?? null} />
+						</div>
+					) : null}
 
 					<div className="flex min-w-0 flex-1 flex-col overflow-hidden">
 						<div className="min-h-0 flex-1">
@@ -221,6 +242,7 @@ export default function AgentCard({
 								effort={effort}
 								speedTier={speedTier}
 								onModelChange={updateModel}
+								onMessageSent={handleMessageSent}
 								onEffortChange={updateEffort}
 								onSpeedTierChange={setSpeedTier}
 								onFirstMessage={handleFirstMessage}
@@ -232,5 +254,46 @@ export default function AgentCard({
 				</div>
 			</div>
 		</div>
+	)
+}
+
+const WORKSPACE_NAME_STOP_WORDS = new Set([
+	"a",
+	"add",
+	"an",
+	"and",
+	"build",
+	"can",
+	"for",
+	"i",
+	"in",
+	"make",
+	"me",
+	"of",
+	"on",
+	"the",
+	"this",
+	"to",
+	"with"
+])
+
+function workspaceNameForPrompt(currentName: string, prompt: string): string | null {
+	if (!isProvisionalWorkspaceName(currentName)) return null
+	const words = prompt.toLowerCase().match(/[a-z0-9][a-z0-9'-]*/g) ?? []
+	const topicWords = words
+		.filter((word) => !WORKSPACE_NAME_STOP_WORDS.has(word))
+		.slice(0, 4)
+		.map((word) => word.replace(/'/g, ""))
+	const name = topicWords.join("-")
+	return name || null
+}
+
+function isProvisionalWorkspaceName(name: string): boolean {
+	const normalized = name.toLowerCase()
+	return (
+		normalized === "source" ||
+		normalized === "main" ||
+		normalized.includes("-work-") ||
+		/^source-\d+$/.test(normalized)
 	)
 }

@@ -9,10 +9,16 @@ import type {
 	StartTurnInput
 } from "../main/agent/ipc"
 import type {
+	ComposerFileSuggestion,
+	ComposerMentionSuggestion,
+	ComposerSearchFilesInput
+} from "../main/composer/ipc"
+import type {
 	AgentRow,
 	CreateAgentInput,
 	CreateProjectInput,
 	CreateTaskInput,
+	CreateToolCardInput,
 	CreateWorkspaceInput,
 	DatabaseInfo,
 	DeleteWorkspaceResult,
@@ -20,6 +26,7 @@ import type {
 	ProjectRow,
 	ProjectWorkspaceInput,
 	TaskRow,
+	ToolCardRow,
 	UpdateAgentInput,
 	UpdateProjectInput,
 	UpdateSettingInput,
@@ -66,6 +73,10 @@ interface BeaverApi {
 		spawnThread: (input: SpawnThreadInput) => Promise<AgentSnapshot>
 		onSnapshot: (listener: (snapshot: AgentSnapshot) => void) => () => void
 	}
+	composer: {
+		searchFiles: (input: ComposerSearchFilesInput) => Promise<ComposerFileSuggestion[]>
+		listMentions: (cwd: string) => Promise<ComposerMentionSuggestion[]>
+	}
 	git: {
 		getStatus: (workspaceId: string) => Promise<GitStatusSnapshot>
 		getWorkingTreeDiff: (workspaceId: string) => Promise<GitWorkingTreeDiffSnapshot>
@@ -106,6 +117,7 @@ interface BeaverApi {
 		create: (input: CreateWorkspaceInput) => Promise<WorkspaceRow>
 		update: (input: UpdateWorkspaceInput) => Promise<WorkspaceRow>
 		activate: (input: WorkspaceIdInput) => Promise<WorkspaceRow>
+		touchPrompted: (input: WorkspaceIdInput) => Promise<WorkspaceRow>
 		delete: (input: WorkspaceIdInput) => Promise<DeleteWorkspaceResult>
 	}
 	settings: {
@@ -116,6 +128,11 @@ interface BeaverApi {
 		list: (projectId: string) => Promise<AgentRow[]>
 		create: (input: CreateAgentInput) => Promise<AgentRow>
 		update: (input: UpdateAgentInput) => Promise<AgentRow>
+		delete: (id: string) => Promise<void>
+	}
+	toolCards: {
+		list: (projectId: string) => Promise<ToolCardRow[]>
+		create: (input: CreateToolCardInput) => Promise<ToolCardRow>
 		delete: (id: string) => Promise<void>
 	}
 	tasks: {
