@@ -140,6 +140,7 @@ export class ClaudeAdapter implements ProviderAdapter {
 		const session: AgentSession = {
 			status: "ready",
 			provider: "claude",
+			model: input.model ?? DEFAULT_MODEL,
 			activeTurnId: null,
 			lastError: null,
 			updatedAt: nowIso()
@@ -166,7 +167,7 @@ export class ClaudeAdapter implements ProviderAdapter {
 			type: "session.state.changed",
 			threadId: input.threadId,
 			createdAt: session.updatedAt,
-			payload: { status: "ready", reason: "Claude session ready." }
+			payload: { status: "ready", reason: "Claude session ready.", model: session.model }
 		})
 
 		return session
@@ -188,6 +189,7 @@ export class ClaudeAdapter implements ProviderAdapter {
 		this.setSession(input.threadId, {
 			...thread.session,
 			status: "running",
+			model: thread.model,
 			activeTurnId: turnId,
 			updatedAt: nowIso()
 		})
@@ -217,6 +219,7 @@ export class ClaudeAdapter implements ProviderAdapter {
 		this.setSession(threadId, {
 			...thread.session,
 			status: "stopped",
+			model: thread.model,
 			activeTurnId: null,
 			updatedAt: nowIso()
 		})
@@ -297,6 +300,7 @@ export class ClaudeAdapter implements ProviderAdapter {
 			this.setSession(thread.appThreadId, {
 				...thread.session,
 				status: status === "failed" ? "error" : "ready",
+				model: thread.model,
 				activeTurnId: null,
 				lastError: error ?? null,
 				updatedAt: nowIso()
@@ -348,6 +352,7 @@ export class ClaudeAdapter implements ProviderAdapter {
 		this.setSession(thread.appThreadId, {
 			...thread.session,
 			status: "error",
+			model: thread.model,
 			activeTurnId: null,
 			lastError: message,
 			updatedAt: nowIso()
@@ -362,7 +367,11 @@ export class ClaudeAdapter implements ProviderAdapter {
 			type: "session.state.changed",
 			threadId,
 			createdAt: session.updatedAt,
-			payload: { status: session.status, reason: session.lastError ?? undefined }
+			payload: {
+				status: session.status,
+				reason: session.lastError ?? undefined,
+				model: session.model
+			}
 		})
 	}
 

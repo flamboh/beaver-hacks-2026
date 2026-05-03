@@ -48,9 +48,9 @@ export default function AgentCard({
 	const [activeCreateSide, setActiveCreateSide] = useState<CreateSide | null>(null)
 	const queryClient = useQueryClient()
 	const snapshot = useAgentSnapshot()
-	const activeThread =
-		snapshot.threads.find((thread) => thread.id === snapshot.activeThreadId) ?? null
-	const session = activeThread?.session ?? null
+	const thread = snapshot.threads.find((agentThread) => agentThread.id === agent.id) ?? null
+	const session = thread?.session ?? null
+	const runtimeModel = session?.model ?? null
 	const isRunning =
 		session !== null &&
 		(session.status === "starting" || session.status === "running" || session.activeTurnId !== null)
@@ -141,7 +141,14 @@ export default function AgentCard({
 							<span className="text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
 								Model
 							</span>
-							<span className="break-words font-mono text-xs text-neutral-400">{agent.model}</span>
+							<span className="break-words font-mono text-xs text-neutral-400">
+								{runtimeModel ?? agent.model}
+							</span>
+							{runtimeModel && runtimeModel !== agent.model ? (
+								<span className="break-words font-mono text-[10px] text-neutral-600">
+									requested {agent.model}
+								</span>
+							) : null}
 						</div>
 					</div>
 
@@ -170,7 +177,8 @@ export default function AgentCard({
 
 						<div className="min-h-0 flex-1">
 							<Chat
-								thread={activeThread}
+								thread={thread}
+								threadId={agent.id}
 								isRunning={isRunning}
 								cwd={workspacePath}
 								model={agent.model}
