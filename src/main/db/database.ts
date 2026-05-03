@@ -23,7 +23,7 @@ import { INITIALIZE_SCHEMA_SQL } from "./schema"
 import { assertDirectory, assertWorkspaceTemplate, canonicalPath } from "./workspaceUtils"
 import { WorkspaceService } from "./workspaces"
 
-const SCHEMA_VERSION = 4
+const SCHEMA_VERSION = 5
 
 function nowIso(): string {
 	return new Date().toISOString()
@@ -76,6 +76,7 @@ export class DatabaseService {
 				model TEXT NOT NULL,
 				scope_path TEXT,
 				effort TEXT NOT NULL,
+				thread_id TEXT,
 				layout_x INTEGER NOT NULL DEFAULT 0,
 				layout_y INTEGER NOT NULL DEFAULT 0
 			);
@@ -179,6 +180,7 @@ export class DatabaseService {
 		}
 
 		await this.ensureAgentLayoutColumns()
+		await this.ensureAgentThreadColumn()
 
 		await this.run(
 			`INSERT INTO app_meta (key, value) VALUES ('schema_version', ?)
@@ -222,6 +224,14 @@ export class DatabaseService {
 				layout_y = (SELECT idx / 2 FROM ordered WHERE ordered.id = agents.id)
 			WHERE id IN (SELECT id FROM ordered);
 		`)
+	}
+
+	private async ensureAgentThreadColumn(): Promise<void> {
+		const columns = await this.all<{ name: string }>(`PRAGMA table_info(agents)`, [])
+		const columnNames = new Set(columns.map((column) => column.name))
+		if (!columnNames.has("thread_id")) {
+			await this.run(`ALTER TABLE agents ADD COLUMN thread_id TEXT`, [])
+		}
 	}
 
 	async listProjects(): Promise<ProjectRow[]> {

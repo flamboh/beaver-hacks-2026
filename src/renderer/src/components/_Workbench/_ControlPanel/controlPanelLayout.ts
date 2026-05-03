@@ -27,6 +27,7 @@ export const PLACEHOLDER_AGENTS: AgentRow[] = [
 		model: "claude-opus-4-7",
 		scope_path: "@Pipeline.md",
 		effort: "high",
+		thread_id: null,
 		layout_x: 0,
 		layout_y: 0
 	},
@@ -39,6 +40,7 @@ export const PLACEHOLDER_AGENTS: AgentRow[] = [
 		model: "gpt-4o-mini",
 		scope_path: "@tests/README.md",
 		effort: "medium",
+		thread_id: null,
 		layout_x: 1,
 		layout_y: 0
 	},
@@ -51,6 +53,7 @@ export const PLACEHOLDER_AGENTS: AgentRow[] = [
 		model: "claude-sonnet-4-6",
 		scope_path: "",
 		effort: "low",
+		thread_id: null,
 		layout_x: 0,
 		layout_y: 1
 	},
@@ -63,6 +66,7 @@ export const PLACEHOLDER_AGENTS: AgentRow[] = [
 		model: "gpt-4o",
 		scope_path: "@.eslintrc.md",
 		effort: "low",
+		thread_id: null,
 		layout_x: 1,
 		layout_y: 1
 	},
@@ -75,6 +79,7 @@ export const PLACEHOLDER_AGENTS: AgentRow[] = [
 		model: "claude-haiku-4-5",
 		scope_path: "@schema.md",
 		effort: "medium",
+		thread_id: null,
 		layout_x: 0,
 		layout_y: 2
 	},
@@ -87,6 +92,7 @@ export const PLACEHOLDER_AGENTS: AgentRow[] = [
 		model: "o3",
 		scope_path: "",
 		effort: "high",
+		thread_id: null,
 		layout_x: 1,
 		layout_y: 2
 	}

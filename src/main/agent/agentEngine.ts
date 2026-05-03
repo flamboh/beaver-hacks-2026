@@ -123,6 +123,7 @@ export class AgentEngine {
 			this.setThreadSession(thread.id, {
 				status: "error",
 				provider: providerForThread(thread),
+				model: thread.session?.model ?? thread.model,
 				activeTurnId: null,
 				lastError: error instanceof Error ? error.message : String(error),
 				updatedAt: nowIso()
@@ -240,6 +241,7 @@ export class AgentEngine {
 				this.setThreadSession(event.threadId, {
 					status: event.payload.status,
 					provider: providerForThread(thread),
+					model: event.payload.model ?? thread.session?.model ?? thread.model,
 					activeTurnId: thread.session?.activeTurnId ?? null,
 					lastError:
 						event.payload.status === "error" ? (event.payload.reason ?? "Codex error") : null,
@@ -251,6 +253,7 @@ export class AgentEngine {
 				this.setThreadSession(event.threadId, {
 					status: "running",
 					provider: providerForThread(thread),
+					model: thread.session?.model ?? thread.model,
 					activeTurnId: event.turnId,
 					lastError: null,
 					updatedAt: event.createdAt
@@ -287,6 +290,7 @@ export class AgentEngine {
 				this.setThreadSession(event.threadId, {
 					status: event.payload.status === "failed" ? "error" : "ready",
 					provider: providerForThread(thread),
+					model: thread.session?.model ?? thread.model,
 					activeTurnId: null,
 					lastError: event.payload.error ?? null,
 					updatedAt: event.createdAt

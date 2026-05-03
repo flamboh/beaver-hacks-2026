@@ -73,9 +73,10 @@ export default function AgentCard({
 	const skipNameCommitRef = useRef(false)
 	const queryClient = useQueryClient()
 	const snapshot = useAgentSnapshot()
-	const activeThread =
-		snapshot.threads.find((thread) => thread.id === snapshot.activeThreadId) ?? null
-	const session = activeThread?.session ?? null
+	const agentThreadId = agent.thread_id ?? `thread:${agent.id}`
+	const thread = snapshot.threads.find((agentThread) => agentThread.id === agentThreadId) ?? null
+	const session = thread?.session ?? null
+	const runtimeModel = session?.model ?? null
 	const isRunning =
 		session !== null &&
 		(session.status === "starting" || session.status === "running" || session.activeTurnId !== null)
@@ -129,6 +130,7 @@ export default function AgentCard({
 	async function handleFirstMessage(prompt: string): Promise<void> {
 		await window.api.tasks.create({
 			agent_id: agent.id,
+			turn_id: null,
 			status: "working",
 			description: prompt
 		})
@@ -136,7 +138,8 @@ export default function AgentCard({
 			const seedName = agentNameForPrompt(prompt)
 			await window.api.agents.update({
 				id: agent.id,
-				name: seedName
+				name: seedName,
+				thread_id: agentThreadId
 			})
 			await queryClient.invalidateQueries({ queryKey: ["agents"] })
 			void window.api.agent
@@ -146,11 +149,18 @@ export default function AgentCard({
 					await window.api.agents.update({
 						id: agent.id,
 						name,
+						thread_id: agentThreadId,
 						expectedName: seedName
 					})
 					await queryClient.invalidateQueries({ queryKey: ["agents"] })
 				})
 				.catch(() => undefined)
+		} else if (!agent.thread_id) {
+			await window.api.agents.update({
+				id: agent.id,
+				thread_id: agentThreadId
+			})
+			await queryClient.invalidateQueries({ queryKey: ["agents"] })
 		}
 		await queryClient.invalidateQueries({ queryKey: ["tasks", agent.id] })
 	}
@@ -277,6 +287,11 @@ export default function AgentCard({
 									className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-neutral-600"
 								/>
 							</div>
+							{runtimeModel && runtimeModel !== agent.model ? (
+								<span className="break-words font-mono text-[10px] text-neutral-600">
+									running {runtimeModel}
+								</span>
+							) : null}
 						</div>
 					</div>
 
@@ -315,7 +330,8 @@ export default function AgentCard({
 
 						<div className="min-h-0 flex-1">
 							<Chat
-								thread={activeThread}
+								thread={thread}
+								threadId={agentThreadId}
 								isRunning={isRunning}
 								cwd={workspacePath}
 								model={model}

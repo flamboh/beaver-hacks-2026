@@ -69,7 +69,7 @@ export async function sendAgentMessage(input: {
 	threadId?: string
 	provider?: AgentSnapshot["threads"][number]["provider"]
 	model?: string
-}): Promise<void> {
+}): Promise<AgentSnapshot> {
 	const nextSnapshot = await window.api.agent.startTurn({
 		...(input.threadId ? { threadId: input.threadId } : {}),
 		...(input.provider ? { provider: input.provider } : {}),
@@ -79,6 +79,7 @@ export async function sendAgentMessage(input: {
 		runtimeMode: "full-access"
 	})
 	setSnapshot(nextSnapshot)
+	return nextSnapshot
 }
 
 export async function findProjectSkills(input: {

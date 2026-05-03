@@ -12,6 +12,7 @@ interface AgentTableRow {
 	model: string
 	scope_path: string
 	effort: string
+	thread_id: string | null
 	layout_x: number
 	layout_y: number
 }
@@ -24,6 +25,7 @@ export interface CreateAgentInput {
 	model: string
 	scope_path: string
 	effort: string
+	thread_id?: string | null
 	layout_x?: number
 	layout_y?: number
 }
@@ -34,6 +36,7 @@ export interface UpdateAgentInput {
 	model?: string
 	scope_path?: string
 	effort?: string
+	thread_id?: string | null
 	expectedName?: string
 }
 
@@ -48,6 +51,7 @@ function toAgentRow(row: AgentTableRow): AgentRow {
 		model: row.model,
 		scope_path: row.scope_path,
 		effort: row.effort,
+		thread_id: row.thread_id,
 		layout_x: row.layout_x,
 		layout_y: row.layout_y
 	}
@@ -59,7 +63,7 @@ export class AgentService {
 
 	async listAgents(projectId: string): Promise<AgentRow[]> {
 		const rows = await this.all<AgentTableRow>(
-			`SELECT id, name, project_id, workspace_id, provider, model, scope_path, effort, layout_x, layout_y
+			`SELECT id, name, project_id, workspace_id, provider, model, scope_path, effort, thread_id, layout_x, layout_y
 			 FROM agents
 			 WHERE project_id = ?
 			 ORDER BY layout_y ASC, layout_x ASC, rowid ASC`,
@@ -78,12 +82,13 @@ export class AgentService {
 			model: input.model,
 			scope_path: input.scope_path.trim(),
 			effort: input.effort,
+			thread_id: input.thread_id ?? null,
 			layout_x: input.layout_x ?? 0,
 			layout_y: input.layout_y ?? 0
 		}
 		await this.run(
-			`INSERT INTO agents (id, name, project_id, workspace_id, provider, model, scope_path, effort, layout_x, layout_y)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO agents (id, name, project_id, workspace_id, provider, model, scope_path, effort, thread_id, layout_x, layout_y)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			[
 				agent.id,
 				agent.name,
@@ -93,6 +98,7 @@ export class AgentService {
 				agent.model,
 				agent.scope_path,
 				agent.effort,
+				agent.thread_id,
 				agent.layout_x,
 				agent.layout_y
 			]
@@ -112,10 +118,11 @@ export class AgentService {
 					SET name = COALESCE(?, name),
 						model = COALESCE(?, model),
 						scope_path = COALESCE(?, scope_path),
-						effort = COALESCE(?, effort)
+						effort = COALESCE(?, effort),
+						thread_id = COALESCE(?, thread_id)
 					WHERE id = ?
 				`,
-				[input.name?.trim(), input.model, input.scope_path, input.effort, input.id]
+				[input.name?.trim(), input.model, input.scope_path, input.effort, input.thread_id, input.id]
 			)
 		} else {
 			await this.run(
@@ -124,7 +131,8 @@ export class AgentService {
 					SET name = COALESCE(?, name),
 						model = COALESCE(?, model),
 						scope_path = COALESCE(?, scope_path),
-						effort = COALESCE(?, effort)
+						effort = COALESCE(?, effort),
+						thread_id = COALESCE(?, thread_id)
 					WHERE id = ? AND name = ?
 				`,
 				[
@@ -132,13 +140,14 @@ export class AgentService {
 					input.model,
 					input.scope_path,
 					input.effort,
+					input.thread_id,
 					input.id,
 					input.expectedName
 				]
 			)
 		}
 		const row = await this.get<AgentTableRow>(
-			`SELECT id, name, project_id, workspace_id, provider, model, scope_path, effort, layout_x, layout_y
+			`SELECT id, name, project_id, workspace_id, provider, model, scope_path, effort, thread_id, layout_x, layout_y
 			 FROM agents
 			 WHERE id = ?`,
 			[input.id]
