@@ -173,7 +173,7 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 					</div>
 					<button
 						onClick={() => setIsNewAgentModalOpen(true)}
-						className="flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/8 px-3 py-1.5 text-sm text-white transition-colors duration-300 hover:bg-white/12"
+						className="mr-2 flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/8 px-3 py-1.5 text-sm text-white transition-colors duration-300 hover:bg-white/12"
 					>
 						<Plus size={14} />
 						New Agent
