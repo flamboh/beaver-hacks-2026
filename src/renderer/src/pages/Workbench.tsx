@@ -83,8 +83,8 @@ export default function Workbench() {
 		const projectWorkspaces = workspacesByProjectId.get(project.id) ?? []
 		return [...projectWorkspaces]
 			.sort((a, b) => {
-				const createdOrder = a.createdAt.localeCompare(b.createdAt)
-				if (createdOrder !== 0) return createdOrder
+				const recencyOrder = b.lastPromptedAt.localeCompare(a.lastPromptedAt)
+				if (recencyOrder !== 0) return recencyOrder
 				return a.name.localeCompare(b.name)
 			})
 			.map((workspace) => ({

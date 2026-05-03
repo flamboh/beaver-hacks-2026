@@ -6,6 +6,7 @@ interface UseControlPanelKeyboardProps {
 	focusedIdx: number
 	moveFocus: (direction: "left" | "right" | "up" | "down") => void
 	moveFocusedWithinRail: (direction: "left" | "right") => void
+	onWorkspaceHotkey: (index: number) => void
 	resizeFocused: (direction: "grow" | "shrink") => void
 	setSpacePanActive: (active: boolean) => void
 	snapToCard: (idx: number) => void
@@ -19,6 +20,7 @@ export function useControlPanelKeyboard({
 	focusedIdx,
 	moveFocus,
 	moveFocusedWithinRail,
+	onWorkspaceHotkey,
 	resizeFocused,
 	setSpacePanActive,
 	snapToCard,
@@ -30,6 +32,11 @@ export function useControlPanelKeyboard({
 			const target = e.target as Element | null
 			if (e.key === "Escape") {
 				if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+				return
+			}
+			if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && /^[1-9]$/.test(e.key)) {
+				e.preventDefault()
+				onWorkspaceHotkey(Number(e.key) - 1)
 				return
 			}
 			if (target?.closest(".agent-create-popover")) return
@@ -91,6 +98,7 @@ export function useControlPanelKeyboard({
 		focusedIdx,
 		moveFocus,
 		moveFocusedWithinRail,
+		onWorkspaceHotkey,
 		resizeFocused,
 		setSpacePanActive,
 		snapToCard,

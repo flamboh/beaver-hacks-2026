@@ -72,7 +72,7 @@ export default function ControlPanel({
 		x: number
 		y: number
 		showAgents: boolean
-		sourceCardId: string
+		sourceCardId?: string
 		side: CreateSide
 	} | null>(null)
 	const { cards, createCard, deleteCard, deletingCardId, isCreatingCard, refetch } =
@@ -96,6 +96,7 @@ export default function ControlPanel({
 	)
 	const hasCards = sizedCards.length > 0
 	const hasCanvas = workspaces.length > 0
+	const activeWorkspaceHasCards = sizedCards.some((card) => card.workspace_id === activeWorkspaceId)
 	const viewportCenter = useCallback(
 		(nextOffset: { x: number; y: number }, nextZoom: number) => ({
 			x: (vpSize.w / 2 - nextOffset.x) / nextZoom,
@@ -220,6 +221,19 @@ export default function ControlPanel({
 				centerWorkspaceLane(nextWorkspaceIndex)
 				return
 			}
+			if (!activeWorkspaceHasCards && (direction === "left" || direction === "right")) {
+				setContextCreateMenu({
+					x: clampCreateMenuX(vpSize.w / 2 - CREATE_MENU_W / 2, vpSize.w),
+					y: clampCreateMenuY(
+						vpSize.h / 2 - CREATE_MENU_KEYBOARD_H / 2,
+						vpSize.h,
+						CREATE_MENU_KEYBOARD_H
+					),
+					showAgents: true,
+					side: direction
+				})
+				return
+			}
 			if (!hasCards) return
 			if (direction === "left" || direction === "right") {
 				const sourceCard = sizedCards[focusedIdx]
@@ -263,6 +277,7 @@ export default function ControlPanel({
 		},
 		[
 			activeWorkspaceId,
+			activeWorkspaceHasCards,
 			canvas,
 			centerCard,
 			centerWorkspaceLane,
@@ -582,6 +597,7 @@ export default function ControlPanel({
 		focusedIdx,
 		moveFocus,
 		moveFocusedWithinRail,
+		onWorkspaceHotkey: centerWorkspaceLane,
 		resizeFocused,
 		setSpacePanActive,
 		snapToCard,
