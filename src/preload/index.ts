@@ -11,6 +11,11 @@ import type {
 	StartTurnInput
 } from "../main/agent/ipc"
 import type {
+	ComposerFileSuggestion,
+	ComposerMentionSuggestion,
+	ComposerSearchFilesInput
+} from "../main/composer/ipc"
+import type {
 	AgentRow,
 	CreateAgentInput,
 	CreateProjectInput,
@@ -22,11 +27,13 @@ import type {
 	WorkspaceIdInput,
 	WorkspaceRow,
 	CreateTaskInput,
+	CreateToolCardInput,
 	DatabaseInfo,
 	DeleteWorkspaceResult,
 	ProjectIdInput,
 	ProjectRow,
 	TaskRow,
+	ToolCardRow,
 	UpdateProjectInput
 } from "../main/db/ipc"
 import type {
@@ -46,6 +53,9 @@ import type {
 	GitPushResult,
 	GitReviewFileInput,
 	GitReviewFilesInput,
+	GitRunStackedActionInput,
+	GitRunStackedActionResult,
+	GitStackedActionProgressEvent,
 	GitStatusSnapshot,
 	GitWorkingTreeDiffSnapshot
 } from "../main/git/ipc"
@@ -83,6 +93,12 @@ const api = {
 			return () => ipcRenderer.off("agent:snapshot", handler)
 		}
 	},
+	composer: {
+		searchFiles: (input: ComposerSearchFilesInput): Promise<ComposerFileSuggestion[]> =>
+			ipcRenderer.invoke("composer:search-files", input),
+		listMentions: (cwd: string): Promise<ComposerMentionSuggestion[]> =>
+			ipcRenderer.invoke("composer:list-mentions", cwd)
+	},
 	git: {
 		getStatus: (workspaceId: string): Promise<GitStatusSnapshot> =>
 			ipcRenderer.invoke("git:get-status", workspaceId),
@@ -106,7 +122,19 @@ const api = {
 			ipcRenderer.invoke("git:generate-diff-tour", workspaceId),
 		commitAll: (input: GitCommitAllInput): Promise<GitCommitResult> =>
 			ipcRenderer.invoke("git:commit-all", input),
-		push: (input: GitPushInput): Promise<GitPushResult> => ipcRenderer.invoke("git:push", input)
+		push: (input: GitPushInput): Promise<GitPushResult> => ipcRenderer.invoke("git:push", input),
+		runStackedAction: (input: GitRunStackedActionInput): Promise<GitRunStackedActionResult> =>
+			ipcRenderer.invoke("git:run-stacked-action", input),
+		onStackedActionProgress: (
+			listener: (event: GitStackedActionProgressEvent) => void
+		): (() => void) => {
+			const handler = (
+				_event: Electron.IpcRendererEvent,
+				progress: GitStackedActionProgressEvent
+			): void => listener(progress)
+			ipcRenderer.on("git:stacked-action-progress", handler)
+			return () => ipcRenderer.off("git:stacked-action-progress", handler)
+		}
 	},
 	db: {
 		getInfo: (): Promise<DatabaseInfo> => ipcRenderer.invoke("db:get-info")
@@ -150,6 +178,8 @@ const api = {
 			ipcRenderer.invoke("workspace:update", input),
 		activate: (input: WorkspaceIdInput): Promise<WorkspaceRow> =>
 			ipcRenderer.invoke("workspace:activate", input),
+		touchPrompted: (input: WorkspaceIdInput): Promise<WorkspaceRow> =>
+			ipcRenderer.invoke("workspace:touch-prompted", input),
 		delete: (input: WorkspaceIdInput): Promise<DeleteWorkspaceResult> =>
 			ipcRenderer.invoke("workspace:delete", input)
 	},
@@ -165,6 +195,13 @@ const api = {
 		update: (input: UpdateAgentInput): Promise<AgentRow> =>
 			ipcRenderer.invoke("agent:update", input),
 		delete: (id: string): Promise<void> => ipcRenderer.invoke("agent:delete", id)
+	},
+	toolCards: {
+		list: (projectId: string): Promise<ToolCardRow[]> =>
+			ipcRenderer.invoke("tool-card:list", projectId),
+		create: (input: CreateToolCardInput): Promise<ToolCardRow> =>
+			ipcRenderer.invoke("tool-card:create", input),
+		delete: (id: string): Promise<void> => ipcRenderer.invoke("tool-card:delete", id)
 	},
 	tasks: {
 		list: (agentId: string): Promise<TaskRow[]> => ipcRenderer.invoke("task:list", agentId),

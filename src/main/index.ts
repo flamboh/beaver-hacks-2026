@@ -1,9 +1,10 @@
-import { app, shell, BrowserWindow, type WebContents } from "electron"
+import { app, shell, BrowserWindow, screen, type WebContents } from "electron"
 import { join } from "path"
 import { electronApp, optimizer, is } from "@electron-toolkit/utils"
 import icon from "../../resources/icon.png?asset"
 import { AgentEngine } from "./agent/agentEngine"
 import { registerAgentIpc } from "./agent/ipc"
+import { registerComposerIpc } from "./composer/ipc"
 import { DatabaseService } from "./db/database"
 import { registerDatabaseIpc } from "./db/ipc"
 import { TaskService } from "./db/tasks"
@@ -25,6 +26,8 @@ const terminalSessionService = new TerminalSessionService()
 let database: DatabaseService | null = null
 const CHROMIUM_USER_AGENT =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+const MIN_WINDOW_WIDTH = 1200
+const MIN_WINDOW_HEIGHT = 800
 
 function configureBrowserWebview(contents: WebContents): void {
 	contents.setUserAgent(CHROMIUM_USER_AGENT)
@@ -36,10 +39,16 @@ function configureBrowserWebview(contents: WebContents): void {
 }
 
 function createWindow(): void {
+	const { workArea } = screen.getPrimaryDisplay()
+	const width = Math.max(MIN_WINDOW_WIDTH, workArea.width)
+	const height = Math.max(MIN_WINDOW_HEIGHT, workArea.height)
+
 	// Create the browser window.
 	const mainWindow = new BrowserWindow({
-		width: 900,
-		height: 670,
+		x: workArea.x,
+		y: workArea.y,
+		width,
+		height,
 		show: false,
 		autoHideMenuBar: true,
 		...(process.platform === "linux" ? { icon } : {}),
@@ -95,6 +104,7 @@ app.whenReady().then(async () => {
 	agentEngine.setPlanSink(new TaskService(database.db))
 
 	registerAgentIpc(agentEngine)
+	registerComposerIpc()
 	registerDatabaseIpc(database)
 	registerDevServerIpc(devServer)
 	registerDialogIpc()

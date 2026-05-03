@@ -13,6 +13,9 @@ import type {
 	GitDiffTour,
 	GitPushInput,
 	GitReviewFilesInput,
+	GitRunStackedActionInput,
+	GitRunStackedActionResult,
+	GitStackedActionProgressEvent,
 	GitStatusSnapshot
 } from "../../main/git/ipc"
 
@@ -116,10 +119,12 @@ export async function spawnAgentThread(input: {
 
 export async function findProjectSkills(input: {
 	threadId?: string
+	cwd?: string
 	prompt?: string
 }): Promise<void> {
 	const nextSnapshot = await window.api.agent.findSkills({
 		...(input.threadId ? { threadId: input.threadId } : {}),
+		...(input.cwd ? { cwd: input.cwd } : {}),
 		...(input.prompt ? { prompt: input.prompt } : {}),
 		runtimeMode: "full-access"
 	})
@@ -222,6 +227,21 @@ export async function pushGitBranch(input: GitPushInput): Promise<void> {
 	const result = await window.api.git.push(input)
 	gitSnapshots.set(input.workspaceId, result.status)
 	emitGit()
+}
+
+export async function runGitStackedAction(
+	input: GitRunStackedActionInput
+): Promise<GitRunStackedActionResult> {
+	const result = await window.api.git.runStackedAction(input)
+	gitSnapshots.set(input.workspaceId, result.status)
+	emitGit()
+	return result
+}
+
+export function onGitStackedActionProgress(
+	listener: (event: GitStackedActionProgressEvent) => void
+): () => void {
+	return window.api.git.onStackedActionProgress(listener)
 }
 
 function retainGitWatch(workspaceId: string): void {

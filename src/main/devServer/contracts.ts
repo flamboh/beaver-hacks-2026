@@ -1,10 +1,13 @@
 export interface LaunchProjectDevServerInput {
 	cwd: string
 	name: string
+	enterDevAction?: string
+	openExternal?: boolean
 }
 
 export interface ProjectDevServerInput {
 	cwd: string
+	name?: string
 }
 
 export interface ProjectDevServerLaunch {
@@ -19,8 +22,8 @@ export interface ProjectDevServerLaunch {
 
 export interface ProjectDevServerStatus {
 	status: "stopped" | "starting" | "running" | "stopping"
-	url: string | null
+	url: string
 	pid: number | null
 	cwd: string
-	appName: string | null
+	appName: string
 }

@@ -2,11 +2,12 @@ export const CARD_W = 1040
 export const CARD_H = 680
 export const GAP = 96
 export const PADDING = 80
+export const LANE_LABEL_GUTTER = 72
 export const COLS = 2
 export const MIN_ZOOM = 0.42
 export const MAX_ZOOM = 1.15
 export const STEP_X = CARD_W + GAP
-export const STEP_Y = CARD_H + GAP
+export const STEP_Y = CARD_H + LANE_LABEL_GUTTER + GAP
 
 export interface CanvasLayout {
 	w: number
@@ -20,17 +21,27 @@ export interface PositionedCard {
 	layout_y: number
 }
 
-export function canvasSize(cards: PositionedCard[]): CanvasLayout {
-	if (cards.length === 0) return { w: PADDING * 2, h: PADDING * 2, minX: 0, minY: 0 }
+export function canvasSize(cards: PositionedCard[], laneCount = 0): CanvasLayout {
+	if (cards.length === 0) {
+		return {
+			w: CARD_W + PADDING * 2,
+			h:
+				Math.max(1, laneCount) * (CARD_H + LANE_LABEL_GUTTER) +
+				Math.max(0, laneCount - 1) * GAP +
+				PADDING * 2,
+			minX: 0,
+			minY: 0
+		}
+	}
 	const xs = cards.map((card) => card.layout_x)
 	const ys = cards.map((card) => card.layout_y)
 	const minX = Math.min(...xs)
 	const maxX = Math.max(...xs)
-	const minY = Math.min(...ys)
-	const maxY = Math.max(...ys)
+	const minY = Math.min(0, ...ys)
+	const maxY = Math.max(laneCount - 1, ...ys)
 	return {
 		w: (maxX - minX + 1) * CARD_W + (maxX - minX) * GAP + PADDING * 2,
-		h: (maxY - minY + 1) * CARD_H + (maxY - minY) * GAP + PADDING * 2,
+		h: (maxY - minY + 1) * (CARD_H + LANE_LABEL_GUTTER) + (maxY - minY) * GAP + PADDING * 2,
 		minX,
 		minY
 	}
@@ -39,8 +50,12 @@ export function canvasSize(cards: PositionedCard[]): CanvasLayout {
 export function cardPos(card: PositionedCard, layout: CanvasLayout): { x: number; y: number } {
 	return {
 		x: PADDING + (card.layout_x - layout.minX) * STEP_X,
-		y: PADDING + (card.layout_y - layout.minY) * STEP_Y
+		y: PADDING + LANE_LABEL_GUTTER + (card.layout_y - layout.minY) * STEP_Y
 	}
+}
+
+export function laneCardCenterY(laneIndex: number, layout: CanvasLayout): number {
+	return PADDING + LANE_LABEL_GUTTER + (laneIndex - layout.minY) * STEP_Y + CARD_H / 2
 }
 
 export function clampZoom(zoom: number): number {

@@ -2,6 +2,7 @@ import { ipcMain } from "electron"
 import { DatabaseService } from "./database"
 import { AgentService, CreateAgentInput, UpdateAgentInput } from "./agents"
 import { TaskService, CreateTaskInput } from "./tasks"
+import { CreateToolCardInput, ToolCardService } from "./toolCards"
 
 import type {
 	CreateProjectInput,
@@ -17,6 +18,7 @@ import type {
 export function registerDatabaseIpc(database: DatabaseService): void {
 	const agents = new AgentService(database.db)
 	const tasks = new TaskService(database.db)
+	const toolCards = new ToolCardService(database.db)
 
 	// project handlers
 	ipcMain.handle("db:get-info", () => database.getInfo())
@@ -45,6 +47,9 @@ export function registerDatabaseIpc(database: DatabaseService): void {
 	ipcMain.handle("workspace:activate", (_event, input: WorkspaceIdInput) =>
 		database.activateWorkspace(input)
 	)
+	ipcMain.handle("workspace:touch-prompted", (_event, input: WorkspaceIdInput) =>
+		database.touchWorkspacePrompted(input)
+	)
 	ipcMain.handle("workspace:delete", (_event, input: WorkspaceIdInput) =>
 		database.deleteWorkspace(input)
 	)
@@ -58,6 +63,15 @@ export function registerDatabaseIpc(database: DatabaseService): void {
 	ipcMain.handle("agent:create", (_event, input: CreateAgentInput) => agents.createAgent(input))
 	ipcMain.handle("agent:update", (_event, input: UpdateAgentInput) => agents.updateAgent(input))
 	ipcMain.handle("agent:delete", (_event, id: string) => agents.deleteAgent(id))
+
+	// tool card handlers
+	ipcMain.handle("tool-card:list", (_event, projectId: string) =>
+		toolCards.listToolCards(projectId)
+	)
+	ipcMain.handle("tool-card:create", (_event, input: CreateToolCardInput) =>
+		toolCards.createToolCard(input)
+	)
+	ipcMain.handle("tool-card:delete", (_event, id: string) => toolCards.deleteToolCard(id))
 
 	// task handlers
 	ipcMain.handle("task:list", (_event, agentId: string) => tasks.listTasks(agentId))
@@ -81,4 +95,6 @@ export type {
 
 export type { AgentRow, TaskRow } from "./contracts"
 export type { CreateAgentInput, UpdateAgentInput } from "./agents"
+export type { CreateToolCardInput } from "./toolCards"
+export type { ToolCardRow } from "./contracts"
 export type { CreateTaskInput } from "./tasks"

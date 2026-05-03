@@ -23,7 +23,7 @@ import { INITIALIZE_SCHEMA_SQL } from "./schema"
 import { assertDirectory, assertWorkspaceTemplate, canonicalPath } from "./workspaceUtils"
 import { WorkspaceService } from "./workspaces"
 
-const SCHEMA_VERSION = 5
+const SCHEMA_VERSION = 8
 
 function nowIso(): string {
 	return new Date().toISOString()
@@ -32,6 +32,15 @@ function nowIso(): string {
 function isUniqueProjectPathError(error: unknown): boolean {
 	if (!(error instanceof Error)) return false
 	return error.message.includes("SQLITE_CONSTRAINT") && error.message.includes("projects.path")
+}
+
+function slugifyProjectName(value: string): string {
+	const slug = value
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9._-]+/g, "-")
+		.replace(/^-+|-+$/g, "")
+	return slug || "main"
 }
 
 export class DatabaseService {
@@ -47,6 +56,8 @@ export class DatabaseService {
 
 	async initialize(): Promise<void> {
 		await this.exec(INITIALIZE_SCHEMA_SQL)
+		await this.ensureProjectEnterDevActionColumn()
+		await this.ensureWorkspacePromptColumn()
 		await this.backfillProjectWorkspaces()
 
 		// Base tables — no FK constraints yet so migration can recreate agents safely
@@ -63,6 +74,7 @@ export class DatabaseService {
 				id TEXT PRIMARY KEY,
 				name TEXT NOT NULL,
 				path TEXT NOT NULL UNIQUE,
+				enter_dev_action TEXT NOT NULL DEFAULT '',
 				created_at TEXT NOT NULL,
 				accessed TEXT NOT NULL
 			);
@@ -180,7 +192,12 @@ export class DatabaseService {
 		}
 
 		await this.ensureAgentLayoutColumns()
+		await this.ensureProjectEnterDevActionColumn()
 		await this.ensureAgentThreadColumn()
+		await this.ensureWorkspacePromptColumn()
+		await this.ensureToolCardsTable()
+		await this.ensureAgentWorkspaceIds()
+		await this.ensureDefaultWorkspaceNames()
 
 		await this.run(
 			`INSERT INTO app_meta (key, value) VALUES ('schema_version', ?)
@@ -226,6 +243,17 @@ export class DatabaseService {
 		`)
 	}
 
+	private async ensureProjectEnterDevActionColumn(): Promise<void> {
+		const columns = await this.all<{ name: string }>(`PRAGMA table_info(projects)`, [])
+		const columnNames = new Set(columns.map((column) => column.name))
+		if (!columnNames.has("enter_dev_action")) {
+			await this.run(
+				`ALTER TABLE projects ADD COLUMN enter_dev_action TEXT NOT NULL DEFAULT ''`,
+				[]
+			)
+		}
+	}
+
 	private async ensureAgentThreadColumn(): Promise<void> {
 		const columns = await this.all<{ name: string }>(`PRAGMA table_info(agents)`, [])
 		const columnNames = new Set(columns.map((column) => column.name))
@@ -234,10 +262,78 @@ export class DatabaseService {
 		}
 	}
 
+	private async ensureWorkspacePromptColumn(): Promise<void> {
+		const columns = await this.all<{ name: string }>(`PRAGMA table_info(workspaces)`, [])
+		const columnNames = new Set(columns.map((column) => column.name))
+		if (!columnNames.has("last_prompted_at")) {
+			await this.run(
+				`ALTER TABLE workspaces ADD COLUMN last_prompted_at TEXT NOT NULL DEFAULT ''`,
+				[]
+			)
+		}
+		await this.run(
+			`UPDATE workspaces SET last_prompted_at = created_at WHERE last_prompted_at = ''`,
+			[]
+		)
+	}
+
+	private async ensureToolCardsTable(): Promise<void> {
+		await this.exec(`
+			CREATE TABLE IF NOT EXISTS tool_cards (
+				id TEXT PRIMARY KEY,
+				project_id TEXT NOT NULL,
+				workspace_id TEXT NOT NULL,
+				kind TEXT NOT NULL,
+				layout_x INTEGER NOT NULL DEFAULT 0,
+				layout_y INTEGER NOT NULL DEFAULT 0,
+				created_at TEXT NOT NULL,
+				FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+				FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+			);
+		`)
+	}
+
+	private async ensureAgentWorkspaceIds(): Promise<void> {
+		await this.exec(`
+			UPDATE agents
+			SET workspace_id = (
+				SELECT workspaces.id
+				FROM workspaces
+				WHERE workspaces.project_id = agents.project_id
+				ORDER BY workspaces.active DESC, workspaces.created_at ASC
+				LIMIT 1
+			)
+			WHERE workspace_id IS NULL
+				AND EXISTS (
+					SELECT 1
+					FROM workspaces
+					WHERE workspaces.project_id = agents.project_id
+				);
+		`)
+	}
+
+	private async ensureDefaultWorkspaceNames(): Promise<void> {
+		const rows = await this.all<{ id: string; project_name: string }>(
+			`
+				SELECT workspaces.id, projects.name AS project_name
+				FROM workspaces
+				INNER JOIN projects ON projects.id = workspaces.project_id
+				WHERE lower(workspaces.name) = 'source'
+			`,
+			[]
+		)
+		for (const row of rows) {
+			await this.run(`UPDATE workspaces SET name = ? WHERE id = ?`, [
+				slugifyProjectName(row.project_name),
+				row.id
+			])
+		}
+	}
+
 	async listProjects(): Promise<ProjectRow[]> {
 		const rows = await this.all<ProjectTableRow>(
 			`
-				SELECT id, name, path, created_at, accessed
+				SELECT id, name, path, enter_dev_action, created_at, accessed
 				FROM projects
 				ORDER BY accessed DESC
 			`,
@@ -256,6 +352,7 @@ export class DatabaseService {
 			id: `project:${randomUUID()}`,
 			name,
 			path,
+			enterDevAction: input.enterDevAction?.trim() ?? "",
 			createdAt: timestamp,
 			accessed: timestamp
 		}
@@ -263,10 +360,17 @@ export class DatabaseService {
 		try {
 			await this.run(
 				`
-					INSERT INTO projects (id, name, path, created_at, accessed)
-					VALUES (?, ?, ?, ?, ?)
+					INSERT INTO projects (id, name, path, enter_dev_action, created_at, accessed)
+					VALUES (?, ?, ?, ?, ?, ?)
 				`,
-				[project.id, project.name, project.path, project.createdAt, project.accessed]
+				[
+					project.id,
+					project.name,
+					project.path,
+					project.enterDevAction,
+					project.createdAt,
+					project.accessed
+				]
 			)
 		} catch (error) {
 			if (isUniqueProjectPathError(error)) {
@@ -277,7 +381,7 @@ export class DatabaseService {
 
 		await this.createWorkspace({
 			projectId: project.id,
-			name: "Source",
+			name: slugifyProjectName(project.name),
 			path: project.path
 		})
 
@@ -292,10 +396,10 @@ export class DatabaseService {
 		await this.run(
 			`
 				UPDATE projects
-				SET name = ?, path = ?
+				SET name = ?, path = ?, enter_dev_action = ?
 			WHERE id = ?
 			`,
-			[name, path, input.id]
+			[name, path, input.enterDevAction?.trim() ?? "", input.id]
 		)
 
 		return this.getProject(input)
@@ -322,7 +426,7 @@ export class DatabaseService {
 	async getProject(input: ProjectIdInput): Promise<ProjectRow> {
 		const row = await this.get<ProjectTableRow>(
 			`
-				SELECT id, name, path, created_at, accessed
+				SELECT id, name, path, enter_dev_action, created_at, accessed
 				FROM projects
 				WHERE id = ?
 			`,
@@ -354,6 +458,10 @@ export class DatabaseService {
 
 	async activateWorkspace(input: WorkspaceIdInput): Promise<WorkspaceRow> {
 		return this.workspaces.activate(input)
+	}
+
+	async touchWorkspacePrompted(input: WorkspaceIdInput): Promise<WorkspaceRow> {
+		return this.workspaces.touchPrompted(input)
 	}
 
 	async deleteWorkspace(input: WorkspaceIdInput): Promise<DeleteWorkspaceResult> {

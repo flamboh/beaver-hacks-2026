@@ -4,6 +4,7 @@ export interface ProjectTableRow {
 	id: string
 	name: string
 	path: string
+	enter_dev_action: string | null
 	created_at: string
 	accessed: string
 }
@@ -17,6 +18,7 @@ export interface WorkspaceTableRow {
 	active: number
 	created_at: string
 	accessed: string
+	last_prompted_at: string
 }
 
 export function toProjectRow(row: ProjectTableRow): ProjectRow {
@@ -24,6 +26,7 @@ export function toProjectRow(row: ProjectTableRow): ProjectRow {
 		id: row.id,
 		name: row.name,
 		path: row.path,
+		enterDevAction: row.enter_dev_action ?? "",
 		createdAt: row.created_at,
 		accessed: row.accessed
 	}
@@ -38,6 +41,7 @@ export function toWorkspaceRow(row: WorkspaceTableRow): WorkspaceRow {
 		gitRoot: row.git_root,
 		active: row.active === 1,
 		createdAt: row.created_at,
-		accessed: row.accessed
+		accessed: row.accessed,
+		lastPromptedAt: row.last_prompted_at
 	}
 }

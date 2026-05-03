@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type FormEvent, type JSX } from "react"
-import { ArrowLeft, ArrowRight, RotateCw } from "lucide-react"
+import { ArrowLeft, ArrowRight, Play, RotateCw } from "lucide-react"
 
 interface BrowserWebview extends HTMLElement {
 	canGoBack: () => boolean
@@ -7,6 +7,7 @@ interface BrowserWebview extends HTMLElement {
 	getURL: () => string
 	goBack: () => void
 	goForward: () => void
+	loadURL: (url: string) => Promise<void>
 	reload: () => void
 }
 
@@ -14,6 +15,12 @@ interface DidFailLoadEvent extends Event {
 	errorCode: number
 	errorDescription: string
 	validatedURL: string
+}
+
+interface BrowserCardProps {
+	enterDevAction: string
+	projectName: string
+	workspacePath: string
 }
 
 function normalizeUrl(value: string): string {
@@ -24,51 +31,111 @@ function normalizeUrl(value: string): string {
 	return `https://${input}`
 }
 
-export default function BrowserCard(): JSX.Element {
+function devServerUrl(projectName: string, workspacePath: string): string {
+	const hash = stableHash(workspacePath)
+	const slug =
+		projectName
+			.toLowerCase()
+			.replaceAll(/[^a-z0-9]+/g, "-")
+			.replaceAll(/(^-|-$)/g, "")
+			.slice(0, 32) || "project"
+	return `https://beaver-${slug}-${hash}.localhost:1355`
+}
+
+function stableHash(value: string): string {
+	let hash = 0x811c9dc5
+	for (let index = 0; index < value.length; index += 1) {
+		hash ^= value.charCodeAt(index)
+		hash = Math.imul(hash, 0x01000193)
+	}
+	return (hash >>> 0).toString(16).padStart(8, "0")
+}
+
+export default function BrowserCard({
+	enterDevAction,
+	projectName,
+	workspacePath
+}: BrowserCardProps): JSX.Element {
 	const webviewRef = useRef<BrowserWebview | null>(null)
+	const launchedRef = useRef(false)
 	const listenerCleanupRef = useRef<(() => void) | null>(null)
-	const [draftUrl, setDraftUrl] = useState("https://www.google.com")
-	const [activeUrl, setActiveUrl] = useState("https://www.google.com")
+	const initialUrl = devServerUrl(projectName, workspacePath)
+	const [draftUrl, setDraftUrl] = useState(initialUrl)
 	const [error, setError] = useState<string | null>(null)
+	const [launching, setLaunching] = useState(false)
 
-	const setWebviewRef = useCallback((node: HTMLElement | null) => {
-		listenerCleanupRef.current?.()
-		listenerCleanupRef.current = null
-		const webview = node as BrowserWebview | null
-		webviewRef.current = webview
+	const loadUrl = useCallback((url: string): void => {
+		const webview = webviewRef.current
 		if (!webview) return
-
-		const handleNavigate = (): void => {
-			const current = webview.getURL()
-			setActiveUrl(current)
-			setDraftUrl(current)
-			setError(null)
-		}
-		const handleFailLoad = (event: Event): void => {
-			const detail = event as DidFailLoadEvent
-			if (detail.errorCode === -3) return
-			setError(
-				detail.errorDescription
-					? `${detail.errorDescription}${detail.validatedURL ? ` (${detail.validatedURL})` : ""}`
-					: "Failed to load page."
-			)
-		}
-
-		webview.addEventListener("did-navigate", handleNavigate)
-		webview.addEventListener("did-navigate-in-page", handleNavigate)
-		webview.addEventListener("did-fail-load", handleFailLoad)
-		listenerCleanupRef.current = () => {
-			webview.removeEventListener("did-navigate", handleNavigate)
-			webview.removeEventListener("did-navigate-in-page", handleNavigate)
-			webview.removeEventListener("did-fail-load", handleFailLoad)
-		}
+		void webview.loadURL(url).catch((loadError: Error & { code?: string; errno?: number }) => {
+			if (loadError.code === "ERR_ABORTED" || loadError.errno === -3) return
+			setError(loadError.message || "Failed to load page.")
+		})
 	}, [])
+
+	const openDevServer = useCallback(async (): Promise<void> => {
+		setLaunching(true)
+		setError(null)
+		try {
+			const result = await window.api.devServer.launchProject({
+				cwd: workspacePath,
+				name: projectName,
+				enterDevAction,
+				openExternal: false
+			})
+			setDraftUrl(result.url)
+			loadUrl(result.url)
+		} catch (launchError) {
+			setError(launchError instanceof Error ? launchError.message : "Failed to open dev server.")
+		} finally {
+			setLaunching(false)
+		}
+	}, [enterDevAction, loadUrl, projectName, workspacePath])
+
+	const setWebviewRef = useCallback(
+		(node: HTMLElement | null) => {
+			listenerCleanupRef.current?.()
+			listenerCleanupRef.current = null
+			const webview = node as BrowserWebview | null
+			webviewRef.current = webview
+			if (!webview) return
+
+			const handleNavigate = (): void => {
+				const current = webview.getURL()
+				setDraftUrl(current)
+				setError(null)
+			}
+			const handleFailLoad = (event: Event): void => {
+				const detail = event as DidFailLoadEvent
+				if (detail.errorCode === -3) return
+				setError(
+					detail.errorDescription
+						? `${detail.errorDescription}${detail.validatedURL ? ` (${detail.validatedURL})` : ""}`
+						: "Failed to load page."
+				)
+			}
+
+			webview.addEventListener("did-navigate", handleNavigate)
+			webview.addEventListener("did-navigate-in-page", handleNavigate)
+			webview.addEventListener("did-fail-load", handleFailLoad)
+			if (!launchedRef.current) {
+				launchedRef.current = true
+				void openDevServer()
+			}
+			listenerCleanupRef.current = () => {
+				webview.removeEventListener("did-navigate", handleNavigate)
+				webview.removeEventListener("did-navigate-in-page", handleNavigate)
+				webview.removeEventListener("did-fail-load", handleFailLoad)
+			}
+		},
+		[openDevServer]
+	)
 
 	function navigate(event: FormEvent<HTMLFormElement>): void {
 		event.preventDefault()
 		const next = normalizeUrl(draftUrl)
 		setDraftUrl(next)
-		setActiveUrl(next)
+		loadUrl(next)
 		setError(null)
 	}
 
@@ -103,6 +170,16 @@ export default function BrowserCard(): JSX.Element {
 				>
 					<RotateCw size={12} />
 				</button>
+				<button
+					type="button"
+					onClick={() => void openDevServer()}
+					disabled={launching}
+					className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 text-neutral-400 transition-colors hover:border-white/20 hover:text-neutral-200 disabled:cursor-wait disabled:opacity-60"
+					aria-label="Open dev server"
+					title="Open dev server"
+				>
+					<Play size={12} />
+				</button>
 
 				<form onSubmit={navigate} className="flex min-w-0 flex-1 items-center gap-2">
 					<input
@@ -125,9 +202,14 @@ export default function BrowserCard(): JSX.Element {
 					{error}
 				</div>
 			) : null}
+			{launching ? (
+				<div className="border-b border-white/8 bg-white/[0.03] px-3 py-1 text-[11px] text-neutral-400">
+					Launching dev server...
+				</div>
+			) : null}
 
 			<div className="min-h-0 flex-1">
-				<webview ref={setWebviewRef} src={activeUrl} className="h-full w-full" />
+				<webview ref={setWebviewRef} src="about:blank" className="h-full w-full" />
 			</div>
 		</div>
 	)
