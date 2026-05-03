@@ -1,19 +1,39 @@
-import { Chat } from "@renderer/components/chat"
-import { useQuery } from "@tanstack/react-query"
+import { type MouseEvent, useRef, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useAgentSnapshot } from "@renderer/agentStore"
+import { Chat } from "@renderer/components/chat"
+import { ChevronDown } from "lucide-react"
 import type { AgentRow } from "@renderer/types/models"
-import { Code2, Globe, Terminal } from "lucide-react"
-import { useState } from "react"
-import BrowserCard from "./BrowserCard"
-import TerminalCard from "./TerminalCard"
+import AgentCardScopeModal from "./AgentCardScopeModal"
+import AgentCardSideCreateButton, { type CreateSide } from "./AgentCardSideCreateButton"
+import { parseScopePath } from "./agentCardScopePath"
+import TaskList from "./TaskList"
+import { CARD_H, CARD_W } from "./controlPanelLayout"
+import { agentNameForPrompt, type StartAgentInput } from "./useControlPanelAgents"
 
-function parseScopePath(p: string): string {
-	if (!p) return ""
-	const parts = p.replace(/\\/g, "/").split("/")
-	return parts.findLast((s) => s.endsWith(".md") || s.endsWith(".txt")) ?? parts[parts.length - 1]
-}
+export type { CreateSide }
 
 const PRIORITY_LEVELS = ["low", "medium", "high"] as const
+const MODEL_OPTIONS: { group: string; models: { value: string; label: string }[] }[] = [
+	{
+		group: "Anthropic",
+		models: [
+			{ value: "claude-opus-4-7", label: "Claude Opus 4.7" },
+			{ value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+			{ value: "claude-haiku-4-5", label: "Claude Haiku 4.5" }
+		]
+	},
+	{
+		group: "OpenAI",
+		models: [
+			{ value: "gpt-5.5", label: "GPT-5.5" },
+			{ value: "gpt-4o", label: "GPT-4o" },
+			{ value: "gpt-4o-mini", label: "GPT-4o mini" },
+			{ value: "o3", label: "o3" },
+			{ value: "o4-mini", label: "o4-mini" }
+		]
+	}
+]
 
 const EFFORT_STYLES: Record<string, string> = {
 	low: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
@@ -21,141 +41,305 @@ const EFFORT_STYLES: Record<string, string> = {
 	high: "bg-red-500/15 text-red-400 border-red-500/30"
 }
 
-type ControlSurface = "source" | "terminal" | "browser"
-
-const SURFACES: { value: ControlSurface; label: string; icon: typeof Code2 }[] = [
-	{ value: "source", label: "Source", icon: Code2 },
-	{ value: "terminal", label: "Terminal", icon: Terminal },
-	{ value: "browser", label: "Browser", icon: Globe }
-]
-
 interface Props {
 	agent: AgentRow
+	availableCreateSides: CreateSide[]
+	isDeleting: boolean
+	onCreateAgent: (input: StartAgentInput) => Promise<void>
+	onDeleteAgent: (id: string) => Promise<void>
 	workspaceId: string
 	workspacePath: string
 }
 
-export default function AgentCard({ agent, workspaceId, workspacePath }: Props) {
+export default function AgentCard({
+	agent,
+	availableCreateSides,
+	isDeleting,
+	onCreateAgent,
+	onDeleteAgent,
+	workspaceId,
+	workspacePath
+}: Props) {
+	const [activeCreateSide, setActiveCreateSide] = useState<CreateSide | null>(null)
+	const [isEditingName, setIsEditingName] = useState(false)
+	const [nameDraft, setNameDraft] = useState(agent.name)
+	const [isSavingName, setIsSavingName] = useState(false)
+	const [effort, setEffort] = useState(agent.effort)
+	const [model, setModel] = useState(agent.model)
+	const [scopePath, setScopePath] = useState(agent.scope_path)
+	const [scopeModalOpen, setScopeModalOpen] = useState(false)
+	const [deleteArmed, setDeleteArmed] = useState(false)
+	const [deleting, setDeleting] = useState(false)
+	const skipNameCommitRef = useRef(false)
+	const queryClient = useQueryClient()
 	const snapshot = useAgentSnapshot()
-	const thread = snapshot.threads.find((t) => t.id === agent.id) ?? null
+	const agentThreadId = agent.thread_id ?? `thread:${agent.id}`
+	const thread = snapshot.threads.find((agentThread) => agentThread.id === agentThreadId) ?? null
 	const session = thread?.session ?? null
+	const runtimeModel = session?.model ?? null
 	const isRunning =
 		session !== null &&
 		(session.status === "starting" || session.status === "running" || session.activeTurnId !== null)
 
-	const { data: tasks = [] } = useQuery({
-		queryKey: ["tasks", agent.id],
-		queryFn: () => window.api.tasks.list(agent.id),
-		enabled: !!agent.id
-	})
-	const [surface, setSurface] = useState<ControlSurface>("source")
+	const scopeDisplay = parseScopePath(scopePath)
+	const updateEffort = (nextEffort: string) => {
+		setEffort(nextEffort)
+		void window.api.agents
+			.update({ id: agent.id, effort: nextEffort })
+			.then((updatedAgent) => {
+				setEffort(updatedAgent.effort)
+				void queryClient.invalidateQueries({ queryKey: ["agents"] })
+			})
+			.catch(() => setEffort(agent.effort))
+	}
+	const updateModel = (nextModel: string) => {
+		setModel(nextModel)
+		void window.api.agents
+			.update({ id: agent.id, model: nextModel })
+			.then((updatedAgent) => {
+				setModel(updatedAgent.model)
+				void queryClient.invalidateQueries({ queryKey: ["agents"] })
+			})
+			.catch(() => setModel(agent.model))
+	}
+	const updateScope = async (nextScopePath: string) => {
+		const updatedAgent = await window.api.agents.update({
+			id: agent.id,
+			scope_path: nextScopePath
+		})
+		setScopePath(updatedAgent.scope_path)
+		await queryClient.invalidateQueries({ queryKey: ["agents"] })
+	}
+	const deleteAgent = () => {
+		setDeleting(true)
+		void onDeleteAgent(agent.id).finally(() => setDeleting(false))
+	}
+	const requestDelete = () => {
+		if (deleteArmed) {
+			deleteAgent()
+			return
+		}
+		setDeleteArmed(true)
+	}
+	const clearSelectionOutsideText = (event: MouseEvent<HTMLDivElement>) => {
+		const target = event.target as Element | null
+		if (target?.closest("[data-selectable-text], input, textarea, select, button")) return
+		window.getSelection()?.removeAllRanges()
+	}
 
-	const scopeDisplay = parseScopePath(agent.scope_path)
+	async function handleFirstMessage(prompt: string): Promise<void> {
+		await window.api.tasks.create({
+			agent_id: agent.id,
+			turn_id: null,
+			status: "working",
+			description: prompt
+		})
+		if (agent.name === "New Agent") {
+			const seedName = agentNameForPrompt(prompt)
+			await window.api.agents.update({
+				id: agent.id,
+				name: seedName,
+				thread_id: agentThreadId
+			})
+			await queryClient.invalidateQueries({ queryKey: ["agents"] })
+		} else if (!agent.thread_id) {
+			await window.api.agents.update({
+				id: agent.id,
+				thread_id: agentThreadId
+			})
+			await queryClient.invalidateQueries({ queryKey: ["agents"] })
+		}
+		await queryClient.invalidateQueries({ queryKey: ["tasks", agent.id] })
+	}
+
+	async function commitName(): Promise<void> {
+		if (skipNameCommitRef.current) {
+			skipNameCommitRef.current = false
+			return
+		}
+		const nextName = nameDraft.trim()
+		if (!nextName || nextName === agent.name) {
+			setNameDraft(agent.name)
+			setIsEditingName(false)
+			return
+		}
+		setIsSavingName(true)
+		try {
+			await window.api.agents.update({ id: agent.id, name: nextName })
+			await queryClient.invalidateQueries({ queryKey: ["agents"] })
+			setIsEditingName(false)
+		} finally {
+			setIsSavingName(false)
+		}
+	}
 
 	return (
 		<div
-			className="flex flex-col rounded-xl border border-white/8 bg-neutral-900 text-white overflow-hidden shadow-2xl shadow-black/40"
-			style={{ width: 1000, height: 600 }}
+			className="group/card nodrag relative cursor-default text-white"
+			style={{ width: CARD_W, height: CARD_H }}
+			onMouseDown={clearSelectionOutsideText}
+			onWheel={(event) => event.stopPropagation()}
 		>
-			{/* header */}
-			<div className="flex items-center justify-between px-5 h-11 border-b border-white/5 bg-neutral-800/60 shrink-0">
-				<span className="text-sm font-semibold tracking-wide text-neutral-100">{agent.name}</span>
-				<button className="text-xs px-2.5 py-1 rounded-md border border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-500/60 transition-all duration-150">
-					Terminate
-				</button>
-			</div>
+			{availableCreateSides.map((side) => (
+				<AgentCardSideCreateButton
+					key={side}
+					active={activeCreateSide === side}
+					onClose={() => setActiveCreateSide(null)}
+					onCreateAgent={onCreateAgent}
+					onOpen={() => setActiveCreateSide(side)}
+					side={side}
+					sourceAgentId={agent.id}
+				/>
+			))}
 
-			{/* body */}
-			<div className="flex flex-1 overflow-hidden">
-				{/* left panel */}
-				<div className="flex flex-col w-[35%] shrink-0 border-r border-white/5 px-4 py-4 gap-5">
-					<div className="flex flex-col gap-1.5 flex-1">
-						<span className="text-[10px] uppercase tracking-widest text-neutral-600 font-medium">
-							Task List
-						</span>
-						{tasks.length === 0 ? (
-							<p className="text-xs text-neutral-700">No tasks yet</p>
-						) : (
-							<ol className="flex flex-col gap-1.5">
-								{tasks.map((task, i) => (
-									<li key={task.id} className="flex items-start gap-2 text-sm text-neutral-400">
-										<span className="text-neutral-700 tabular-nums shrink-0 mt-px">{i + 1}.</span>
-										<span className="leading-snug">{task.description}</span>
-									</li>
-								))}
-							</ol>
-						)}
-					</div>
-
-					<div className="flex flex-col gap-1">
-						<span className="text-[10px] uppercase tracking-widest text-neutral-600 font-medium">
-							Model
-						</span>
-						<span className="text-xs text-neutral-400 font-mono">{agent.model}</span>
-					</div>
+			<div className="flex h-full flex-col overflow-hidden rounded-xl border border-white/8 bg-neutral-900 shadow-2xl shadow-black/40">
+				<div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-white/5 bg-neutral-800/60 px-5">
+					{isEditingName ? (
+						<input
+							value={nameDraft}
+							disabled={isSavingName}
+							autoFocus
+							style={{ width: `${Math.min(Math.max(nameDraft.length + 1, 8), 30)}ch` }}
+							onChange={(event) => setNameDraft(event.currentTarget.value)}
+							onBlur={() => void commitName()}
+							onKeyDown={(event) => {
+								if (event.key === "Enter") {
+									event.preventDefault()
+									event.currentTarget.blur()
+								}
+								if (event.key === "Escape") {
+									skipNameCommitRef.current = true
+									setNameDraft(agent.name)
+									setIsEditingName(false)
+								}
+							}}
+							className="nodrag min-w-0 max-w-full bg-transparent text-sm font-semibold tracking-wide text-neutral-100 outline-none"
+							aria-label="Agent name"
+						/>
+					) : (
+						<button
+							type="button"
+							onClick={() => {
+								setNameDraft(agent.name)
+								setIsEditingName(true)
+							}}
+							className="min-w-0 max-w-full cursor-text truncate text-left text-sm font-semibold tracking-wide text-neutral-100"
+							title="Rename agent"
+						>
+							{agent.name}
+						</button>
+					)}
+					<button
+						type="button"
+						onClick={requestDelete}
+						onBlur={() => setDeleteArmed(false)}
+						onMouseLeave={() => setDeleteArmed(false)}
+						disabled={deleting || isDeleting}
+						className={`min-w-20 cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${
+							deleteArmed
+								? "border-red-500/60 bg-red-500/10 text-red-300"
+								: "border-red-500/40 text-red-400 hover:border-red-500/60 hover:bg-red-500/10"
+						}`}
+					>
+						{deleting || isDeleting ? "Deleting..." : deleteArmed ? "Confirm" : "Delete"}
+					</button>
 				</div>
 
-				{/* right panel */}
-				<div className="flex flex-col flex-1 overflow-hidden">
-					<div className="flex items-center gap-3 border-b border-white/5 px-4 py-3 shrink-0">
-						<div className="flex items-center gap-1">
-							{PRIORITY_LEVELS.map((level) => (
-								<span
-									key={level}
-									className={`text-[11px] px-2 py-0.5 rounded-md border capitalize transition-colors ${
-										agent.effort === level
-											? EFFORT_STYLES[level]
-											: "border-white/5 text-neutral-700 bg-transparent"
-									}`}
-								>
-									{level}
-								</span>
-							))}
-						</div>
-						{scopeDisplay && (
-							<span className="min-w-0 truncate text-xs text-neutral-600">
-								Scope: <span className="text-blue-400/80 font-mono">{scopeDisplay}</span>
+				<div className="flex flex-1 overflow-hidden">
+					<div className="flex w-[28%] shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
+						<TaskList />
+
+						<div className="flex flex-col gap-1">
+							<span className="text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
+								Model
 							</span>
-						)}
-						<div className="ml-auto flex items-center gap-1">
-							{SURFACES.map((item) => {
-								const Icon = item.icon
-								const active = surface === item.value
-								return (
+							<div className="relative">
+								<select
+									value={model}
+									onChange={(event) => updateModel(event.currentTarget.value)}
+									className="w-full cursor-pointer appearance-none rounded-md border border-white/5 bg-white/[0.03] px-2 py-1.5 pr-7 font-mono text-xs text-neutral-400 outline-none transition-colors duration-150 hover:border-white/10 hover:text-neutral-200 focus:border-white/20"
+								>
+									{MODEL_OPTIONS.map((group) => (
+										<optgroup key={group.group} label={group.group}>
+											{group.models.map((option) => (
+												<option key={option.value} value={option.value}>
+													{option.label}
+												</option>
+											))}
+										</optgroup>
+									))}
+								</select>
+								<ChevronDown
+									size={12}
+									className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-neutral-600"
+								/>
+							</div>
+							{runtimeModel && runtimeModel !== agent.model ? (
+								<span className="break-words font-mono text-[10px] text-neutral-600">
+									running {runtimeModel}
+								</span>
+							) : null}
+						</div>
+					</div>
+
+					<div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+						<div className="flex shrink-0 items-center gap-3 border-b border-white/5 px-4 py-3">
+							<div className="flex items-center gap-1">
+								{PRIORITY_LEVELS.map((level) => (
 									<button
-										key={item.value}
 										type="button"
-										onClick={() => setSurface(item.value)}
-										className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition-colors ${
-											active
-												? "border-white/20 bg-white/10 text-neutral-100"
-												: "border-white/8 text-neutral-500 hover:border-white/15 hover:text-neutral-300"
+										key={level}
+										onClick={() => updateEffort(level)}
+										className={`cursor-pointer rounded-md border px-2 py-0.5 text-[11px] capitalize transition-colors ${
+											effort === level
+												? EFFORT_STYLES[level]
+												: "border-white/5 bg-transparent text-neutral-700 hover:border-white/10 hover:text-neutral-500"
 										}`}
 									>
-										<Icon size={11} />
-										{item.label}
+										{level}
 									</button>
-								)
-							})}
+								))}
+							</div>
+							{scopeDisplay ? (
+								<span className="min-w-0 truncate text-xs text-neutral-600">
+									Scope:{" "}
+									<button
+										type="button"
+										onClick={() => setScopeModalOpen(true)}
+										className="max-w-[260px] cursor-pointer truncate align-bottom font-mono text-blue-400/80 transition-colors duration-150 hover:text-blue-300"
+										title={scopePath}
+									>
+										{scopeDisplay}
+									</button>
+								</span>
+							) : null}
 						</div>
-					</div>
 
-					<div className="min-h-0 flex-1">
-						{surface === "source" ? (
+						<div className="min-h-0 flex-1">
 							<Chat
 								thread={thread}
+								threadId={agentThreadId}
 								isRunning={isRunning}
 								cwd={workspacePath}
+								model={model}
+								onFirstMessage={handleFirstMessage}
+								provider={agent.provider}
 								workspaceId={workspaceId}
 							/>
-						) : surface === "terminal" ? (
-							<TerminalCard cwd={workspacePath} />
-						) : (
-							<BrowserCard />
-						)}
+						</div>
 					</div>
 				</div>
 			</div>
+
+			{scopeModalOpen ? (
+				<AgentCardScopeModal
+					agentName={agent.name}
+					initialScopePath={scopePath}
+					onCancel={() => setScopeModalOpen(false)}
+					onSave={updateScope}
+					projectPath={workspacePath}
+				/>
+			) : null}
 		</div>
 	)
 }

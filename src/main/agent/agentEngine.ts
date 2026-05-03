@@ -1,12 +1,23 @@
 import { EventEmitter } from "node:events"
 import { randomUUID } from "node:crypto"
-import { CodexAdapter, assistantMessageId } from "./codexAdapter"
+import { ClaudeAdapter } from "./claudeAdapter"
+import { CodexAdapter } from "./codexAdapter"
+import { assistantMessageId } from "./runtimeIds"
+import {
+	buildAgentNamePrompt,
+	parseAgentName,
+	type GenerateAgentNameInput,
+	type GenerateAgentNameResult
+} from "./agentNaming"
 import { recommendProjectSkills } from "../skills/skillRecommender"
 import { installProjectSkill } from "../skills/skillInstaller"
 import { listInstalledSkillKeys, matchesInstalledSkill } from "../skills/installedSkills"
 import type {
 	AgentActivity,
 	AgentMessage,
+	AgentPlan,
+	AgentProvider,
+	ProviderAdapter,
 	AgentRuntimeMode,
 	AgentSession,
 	AgentSnapshot,
@@ -18,8 +29,22 @@ import type {
 	StartTurnInput
 } from "./contracts"
 
+const AGENT_NAME_MODEL = "gpt-5.4-mini"
+
 function nowIso(): string {
 	return new Date().toISOString()
+}
+
+function emptyPlan(): AgentPlan {
+	return {
+		items: [],
+		source: null,
+		updatedAt: null
+	}
+}
+
+function providerForThread(thread: AgentThread): AgentProvider {
+	return thread.provider
 }
 
 function newMessage(input: {
@@ -42,13 +67,20 @@ function newMessage(input: {
 
 export class AgentEngine {
 	private readonly events = new EventEmitter()
-	private readonly provider: CodexAdapter
+	private readonly codexProvider: CodexAdapter
+	private readonly providers: Record<AgentProvider, ProviderAdapter>
 	private threads = new Map<string, AgentThread>()
 	private activeThreadId: string | null = null
 
 	constructor(options: { cwd: string }) {
-		this.provider = new CodexAdapter({ cwd: options.cwd })
-		this.provider.onEvent((event) => this.ingestProviderEvent(event))
+		this.codexProvider = new CodexAdapter({ cwd: options.cwd })
+		this.providers = {
+			codex: this.codexProvider,
+			claude: new ClaudeAdapter()
+		}
+		for (const provider of Object.values(this.providers)) {
+			provider.onEvent((event) => this.ingestProviderEvent(event))
+		}
 	}
 
 	getSnapshot(): AgentSnapshot {
@@ -73,15 +105,17 @@ export class AgentEngine {
 		this.emitSnapshot()
 
 		try {
-			const session = await this.provider.startSession({
+			const provider = this.providers[providerForThread(thread)]
+			const session = await provider.startSession({
 				threadId: thread.id,
 				cwd: thread.cwd,
+				provider: providerForThread(thread),
 				...(input.model ? { model: input.model } : {}),
 				runtimeMode: input.runtimeMode ?? thread.runtimeMode
 			})
 			this.setThreadSession(thread.id, session)
 
-			await this.provider.sendTurn({
+			await provider.sendTurn({
 				threadId: thread.id,
 				prompt: input.prompt,
 				...(input.model ? { model: input.model } : {})
@@ -89,7 +123,8 @@ export class AgentEngine {
 		} catch (error) {
 			this.setThreadSession(thread.id, {
 				status: "error",
-				provider: "codex",
+				provider: providerForThread(thread),
+				model: thread.session?.model ?? thread.model,
 				activeTurnId: null,
 				lastError: error instanceof Error ? error.message : String(error),
 				updatedAt: nowIso()
@@ -160,10 +195,12 @@ export class AgentEngine {
 				id: input.threadId,
 				title: input.name ?? "Agent",
 				cwd: input.cwd,
+				provider: "codex",
 				model: input.model ?? null,
 				runtimeMode: "full-access",
 				messages: [],
 				activities: [],
+				plan: emptyPlan(),
 				suggestedSkills: [],
 				session: null,
 				createdAt,
@@ -182,7 +219,18 @@ export class AgentEngine {
 		runtimeMode: AgentRuntimeMode
 		timeoutMs?: number
 	}): Promise<string> {
-		return this.provider.runOneShot(input)
+		return this.codexProvider.runOneShot(input)
+	}
+
+	async generateAgentName(input: GenerateAgentNameInput): Promise<GenerateAgentNameResult> {
+		const raw = await this.runOneShot({
+			cwd: input.cwd,
+			prompt: buildAgentNamePrompt(input.prompt),
+			model: AGENT_NAME_MODEL,
+			runtimeMode: "approval-required",
+			timeoutMs: 45_000
+		})
+		return { name: parseAgentName(raw) }
 	}
 
 	private ensureThread(input: StartTurnInput): AgentThread {
@@ -194,10 +242,12 @@ export class AgentEngine {
 			id: input.threadId ?? `thread:${randomUUID()}`,
 			title: input.prompt.trim().slice(0, 80) || "New thread",
 			cwd: input.cwd ?? process.cwd(),
+			provider: input.provider ?? "codex",
 			model: input.model ?? null,
 			runtimeMode: input.runtimeMode ?? "full-access",
 			messages: [],
 			activities: [],
+			plan: emptyPlan(),
 			suggestedSkills: [],
 			session: null,
 			createdAt,
@@ -215,7 +265,8 @@ export class AgentEngine {
 			case "session.state.changed":
 				this.setThreadSession(event.threadId, {
 					status: event.payload.status,
-					provider: "codex",
+					provider: providerForThread(thread),
+					model: event.payload.model ?? thread.session?.model ?? thread.model,
 					activeTurnId: thread.session?.activeTurnId ?? null,
 					lastError:
 						event.payload.status === "error" ? (event.payload.reason ?? "Codex error") : null,
@@ -226,7 +277,8 @@ export class AgentEngine {
 			case "turn.started":
 				this.setThreadSession(event.threadId, {
 					status: "running",
-					provider: "codex",
+					provider: providerForThread(thread),
+					model: thread.session?.model ?? thread.model,
 					activeTurnId: event.turnId,
 					lastError: null,
 					updatedAt: event.createdAt
@@ -262,7 +314,8 @@ export class AgentEngine {
 				}
 				this.setThreadSession(event.threadId, {
 					status: event.payload.status === "failed" ? "error" : "ready",
-					provider: "codex",
+					provider: providerForThread(thread),
+					model: thread.session?.model ?? thread.model,
 					activeTurnId: null,
 					lastError: event.payload.error ?? null,
 					updatedAt: event.createdAt
@@ -271,6 +324,10 @@ export class AgentEngine {
 
 			case "activity":
 				thread.activities.push(this.toActivity(event))
+				break
+
+			case "plan.updated":
+				thread.plan = event.payload.plan
 				break
 
 			case "runtime.error":
@@ -316,7 +373,7 @@ export class AgentEngine {
 	private async updateSkillSuggestions(thread: AgentThread, prompt: string): Promise<void> {
 		const recommendation = await recommendProjectSkills(thread.cwd, prompt, {
 			runCodexPrompt: (input) =>
-				this.provider.runOneShot({
+				this.codexProvider.runOneShot({
 					cwd: thread.cwd,
 					prompt: input.prompt,
 					model: input.model,

@@ -14,11 +14,13 @@ import type {
 	CreateWorkspaceInput,
 	ProjectWorkspaceInput,
 	UpdateSettingInput,
+	UpdateAgentInput,
 	UpdateWorkspaceInput,
 	WorkspaceIdInput,
 	WorkspaceRow,
 	CreateTaskInput,
 	DatabaseInfo,
+	DeleteWorkspaceResult,
 	ProjectIdInput,
 	ProjectRow,
 	TaskRow,
@@ -123,7 +125,9 @@ const api = {
 		update: (input: UpdateWorkspaceInput): Promise<WorkspaceRow> =>
 			ipcRenderer.invoke("workspace:update", input),
 		activate: (input: WorkspaceIdInput): Promise<WorkspaceRow> =>
-			ipcRenderer.invoke("workspace:activate", input)
+			ipcRenderer.invoke("workspace:activate", input),
+		delete: (input: WorkspaceIdInput): Promise<DeleteWorkspaceResult> =>
+			ipcRenderer.invoke("workspace:delete", input)
 	},
 	settings: {
 		get: (key: string): Promise<string> => ipcRenderer.invoke("setting:get", key),
@@ -134,6 +138,8 @@ const api = {
 		list: (projectId: string): Promise<AgentRow[]> => ipcRenderer.invoke("agent:list", projectId),
 		create: (input: CreateAgentInput): Promise<AgentRow> =>
 			ipcRenderer.invoke("agent:create", input),
+		update: (input: UpdateAgentInput): Promise<AgentRow> =>
+			ipcRenderer.invoke("agent:update", input),
 		delete: (id: string): Promise<void> => ipcRenderer.invoke("agent:delete", id)
 	},
 	tasks: {

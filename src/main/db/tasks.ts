@@ -4,8 +4,9 @@ import type { TaskRow } from "./contracts"
 
 export interface CreateTaskInput {
 	agent_id: string
-	status: string
 	batch_id?: string
+	turn_id?: string | null
+	status: string
 	description?: string
 }
 
@@ -21,16 +22,24 @@ export class TaskService {
 	}
 
 	async createTask(input: CreateTaskInput): Promise<TaskRow> {
+		const batchId = input.batch_id ?? `batch:${randomUUID()}`
 		const task: TaskRow = {
 			id: `task:${randomUUID()}`,
 			batch_id: input.batch_id ?? `batch:${randomUUID()}`,
 			agent_id: input.agent_id,
+			turn_id: input.turn_id ?? null,
 			status: input.status,
 			description: input.description ?? ""
 		}
+		await this.run(`INSERT OR IGNORE INTO batch (id, agent_id, summary) VALUES (?, ?, ?)`, [
+			batchId,
+			task.agent_id,
+			task.description || "Task batch"
+		])
 		await this.run(
-			`INSERT INTO task (id, batch_id, agent_id, status, description) VALUES (?, ?, ?, ?, ?)`,
-			[task.id, task.batch_id, task.agent_id, task.status, task.description]
+			`INSERT INTO task (id, batch_id, agent_id, turn_id, status, description)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			[task.id, task.batch_id, task.agent_id, task.turn_id, task.status, task.description]
 		)
 		return task
 	}

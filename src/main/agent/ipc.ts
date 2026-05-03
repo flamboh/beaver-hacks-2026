@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain } from "electron"
 import { AgentEngine } from "./agentEngine"
+
 import type {
 	AgentSnapshot,
 	FindSkillsInput,

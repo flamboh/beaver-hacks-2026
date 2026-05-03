@@ -1,8 +1,26 @@
 export type AgentRole = "user" | "assistant" | "system"
 
+export type AgentProvider = "codex" | "claude"
+
 export type AgentSessionStatus = "idle" | "starting" | "ready" | "running" | "stopped" | "error"
 
 export type AgentRuntimeMode = "full-access" | "auto-accept-edits" | "approval-required"
+
+export type AgentPlanItemStatus = "pending" | "in_progress" | "completed" | "cancelled"
+
+export interface AgentPlanItem {
+	id: string
+	title: string
+	status: AgentPlanItemStatus
+	detail: string | null
+	updatedAt: string
+}
+
+export interface AgentPlan {
+	items: AgentPlanItem[]
+	source: AgentProvider | "user" | null
+	updatedAt: string | null
+}
 
 export interface AgentMessage {
 	id: string
@@ -39,7 +57,8 @@ export interface AgentSkillSuggestion {
 
 export interface AgentSession {
 	status: AgentSessionStatus
-	provider: "codex"
+	provider: AgentProvider
+	model: string | null
 	activeTurnId: string | null
 	lastError: string | null
 	updatedAt: string
@@ -49,10 +68,12 @@ export interface AgentThread {
 	id: string
 	title: string
 	cwd: string
+	provider: AgentProvider
 	model: string | null
 	runtimeMode: AgentRuntimeMode
 	messages: AgentMessage[]
 	activities: AgentActivity[]
+	plan: AgentPlan
 	suggestedSkills: AgentSkillSuggestion[]
 	session: AgentSession | null
 	createdAt: string
@@ -69,6 +90,7 @@ export interface StartTurnInput {
 	threadId?: string
 	cwd?: string
 	prompt: string
+	provider?: AgentProvider
 	model?: string
 	runtimeMode?: AgentRuntimeMode
 }
@@ -95,6 +117,7 @@ export interface SpawnThreadInput {
 export interface ProviderSessionStartInput {
 	threadId: string
 	cwd: string
+	provider: AgentProvider
 	model?: string
 	runtimeMode: AgentRuntimeMode
 }
@@ -116,7 +139,7 @@ export type ProviderRuntimeEvent =
 			type: "session.state.changed"
 			threadId: string
 			createdAt: string
-			payload: { status: AgentSessionStatus; reason?: string }
+			payload: { status: AgentSessionStatus; reason?: string; model?: string | null }
 	  }
 	| {
 			type: "turn.started"
@@ -146,6 +169,13 @@ export type ProviderRuntimeEvent =
 			turnId: string | null
 			createdAt: string
 			payload: { kind: string; summary: string; detail?: unknown }
+	  }
+	| {
+			type: "plan.updated"
+			threadId: string
+			turnId: string | null
+			createdAt: string
+			payload: { plan: AgentPlan }
 	  }
 	| {
 			type: "runtime.error"

@@ -13,10 +13,12 @@ import type {
 	CreateTaskInput,
 	CreateWorkspaceInput,
 	DatabaseInfo,
+	DeleteWorkspaceResult,
 	ProjectIdInput,
 	ProjectRow,
 	ProjectWorkspaceInput,
 	TaskRow,
+	UpdateAgentInput,
 	UpdateProjectInput,
 	UpdateSettingInput,
 	UpdateWorkspaceInput,
@@ -93,6 +95,7 @@ interface BeaverApi {
 		create: (input: CreateWorkspaceInput) => Promise<WorkspaceRow>
 		update: (input: UpdateWorkspaceInput) => Promise<WorkspaceRow>
 		activate: (input: WorkspaceIdInput) => Promise<WorkspaceRow>
+		delete: (input: WorkspaceIdInput) => Promise<DeleteWorkspaceResult>
 	}
 	settings: {
 		get: (key: string) => Promise<string>
@@ -101,6 +104,7 @@ interface BeaverApi {
 	agents: {
 		list: (projectId: string) => Promise<AgentRow[]>
 		create: (input: CreateAgentInput) => Promise<AgentRow>
+		update: (input: UpdateAgentInput) => Promise<AgentRow>
 		delete: (id: string) => Promise<void>
 	}
 	tasks: {
