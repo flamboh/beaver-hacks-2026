@@ -2,44 +2,13 @@ import { type MouseEvent, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useAgentSnapshot } from "@renderer/agentStore"
 import { Chat } from "@renderer/components/chat"
-import { ChevronDown } from "lucide-react"
 import type { AgentRow } from "@renderer/types/models"
-import AgentCardScopeModal from "./AgentCardScopeModal"
 import AgentCardSideCreateButton, { type CreateSide } from "./AgentCardSideCreateButton"
-import { parseScopePath } from "./agentCardScopePath"
 import TaskList from "./TaskList"
 import { CARD_H, CARD_W } from "./controlPanelLayout"
 import { agentNameForPrompt, type StartAgentInput } from "./useControlPanelAgents"
 
 export type { CreateSide }
-
-const PRIORITY_LEVELS = ["low", "medium", "high"] as const
-const MODEL_OPTIONS: { group: string; models: { value: string; label: string }[] }[] = [
-	{
-		group: "Anthropic",
-		models: [
-			{ value: "claude-opus-4-7", label: "Claude Opus 4.7" },
-			{ value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
-			{ value: "claude-haiku-4-5", label: "Claude Haiku 4.5" }
-		]
-	},
-	{
-		group: "OpenAI",
-		models: [
-			{ value: "gpt-5.5", label: "GPT-5.5" },
-			{ value: "gpt-4o", label: "GPT-4o" },
-			{ value: "gpt-4o-mini", label: "GPT-4o mini" },
-			{ value: "o3", label: "o3" },
-			{ value: "o4-mini", label: "o4-mini" }
-		]
-	}
-]
-
-const EFFORT_STYLES: Record<string, string> = {
-	low: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-	medium: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-	high: "bg-red-500/15 text-red-400 border-red-500/30"
-}
 
 interface Props {
 	agent: AgentRow
@@ -66,8 +35,7 @@ export default function AgentCard({
 	const [isSavingName, setIsSavingName] = useState(false)
 	const [effort, setEffort] = useState(agent.effort)
 	const [model, setModel] = useState(agent.model)
-	const [scopePath, setScopePath] = useState(agent.scope_path)
-	const [scopeModalOpen, setScopeModalOpen] = useState(false)
+	const [speedTier, setSpeedTier] = useState<string | null>(null)
 	const [deleteArmed, setDeleteArmed] = useState(false)
 	const [deleting, setDeleting] = useState(false)
 	const skipNameCommitRef = useRef(false)
@@ -81,7 +49,6 @@ export default function AgentCard({
 		session !== null &&
 		(session.status === "starting" || session.status === "running" || session.activeTurnId !== null)
 
-	const scopeDisplay = parseScopePath(scopePath)
 	const updateEffort = (nextEffort: string) => {
 		setEffort(nextEffort)
 		void window.api.agents
@@ -101,14 +68,6 @@ export default function AgentCard({
 				void queryClient.invalidateQueries({ queryKey: ["agents"] })
 			})
 			.catch(() => setModel(agent.model))
-	}
-	const updateScope = async (nextScopePath: string) => {
-		const updatedAgent = await window.api.agents.update({
-			id: agent.id,
-			scope_path: nextScopePath
-		})
-		setScopePath(updatedAgent.scope_path)
-		await queryClient.invalidateQueries({ queryKey: ["agents"] })
 	}
 	const deleteAgent = () => {
 		setDeleting(true)
@@ -247,74 +206,10 @@ export default function AgentCard({
 
 				<div className="flex flex-1 overflow-hidden">
 					<div className="flex w-[28%] shrink-0 flex-col gap-5 border-r border-white/5 px-4 py-4">
-						<TaskList />
-
-						<div className="flex flex-col gap-1">
-							<span className="text-[10px] font-medium tracking-widest text-neutral-600 uppercase">
-								Model
-							</span>
-							<div className="relative">
-								<select
-									value={model}
-									onChange={(event) => updateModel(event.currentTarget.value)}
-									className="w-full cursor-pointer appearance-none rounded-md border border-white/5 bg-white/[0.03] px-2 py-1.5 pr-7 font-mono text-xs text-neutral-400 outline-none transition-colors duration-150 hover:border-white/10 hover:text-neutral-200 focus:border-white/20"
-								>
-									{MODEL_OPTIONS.map((group) => (
-										<optgroup key={group.group} label={group.group}>
-											{group.models.map((option) => (
-												<option key={option.value} value={option.value}>
-													{option.label}
-												</option>
-											))}
-										</optgroup>
-									))}
-								</select>
-								<ChevronDown
-									size={12}
-									className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-neutral-600"
-								/>
-							</div>
-							{runtimeModel && runtimeModel !== agent.model ? (
-								<span className="break-words font-mono text-[10px] text-neutral-600">
-									running {runtimeModel}
-								</span>
-							) : null}
-						</div>
+						<TaskList plan={thread?.plan ?? null} />
 					</div>
 
 					<div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-						<div className="flex shrink-0 items-center gap-3 border-b border-white/5 px-4 py-3">
-							<div className="flex items-center gap-1">
-								{PRIORITY_LEVELS.map((level) => (
-									<button
-										type="button"
-										key={level}
-										onClick={() => updateEffort(level)}
-										className={`cursor-pointer rounded-md border px-2 py-0.5 text-[11px] capitalize transition-colors ${
-											effort === level
-												? EFFORT_STYLES[level]
-												: "border-white/5 bg-transparent text-neutral-700 hover:border-white/10 hover:text-neutral-500"
-										}`}
-									>
-										{level}
-									</button>
-								))}
-							</div>
-							{scopeDisplay ? (
-								<span className="min-w-0 truncate text-xs text-neutral-600">
-									Scope:{" "}
-									<button
-										type="button"
-										onClick={() => setScopeModalOpen(true)}
-										className="max-w-[260px] cursor-pointer truncate align-bottom font-mono text-blue-400/80 transition-colors duration-150 hover:text-blue-300"
-										title={scopePath}
-									>
-										{scopeDisplay}
-									</button>
-								</span>
-							) : null}
-						</div>
-
 						<div className="min-h-0 flex-1">
 							<Chat
 								thread={thread}
@@ -322,6 +217,12 @@ export default function AgentCard({
 								isRunning={isRunning}
 								cwd={workspacePath}
 								model={model}
+								runtimeModel={runtimeModel}
+								effort={effort}
+								speedTier={speedTier}
+								onModelChange={updateModel}
+								onEffortChange={updateEffort}
+								onSpeedTierChange={setSpeedTier}
 								onFirstMessage={handleFirstMessage}
 								provider={agent.provider}
 								workspaceId={workspaceId}
@@ -330,16 +231,6 @@ export default function AgentCard({
 					</div>
 				</div>
 			</div>
-
-			{scopeModalOpen ? (
-				<AgentCardScopeModal
-					agentName={agent.name}
-					initialScopePath={scopePath}
-					onCancel={() => setScopeModalOpen(false)}
-					onSave={updateScope}
-					projectPath={workspacePath}
-				/>
-			) : null}
 		</div>
 	)
 }

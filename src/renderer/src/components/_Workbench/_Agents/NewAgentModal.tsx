@@ -32,7 +32,7 @@ const MODEL_OPTIONS: {
 const EFFORT_OPTIONS = ["low", "medium", "high"] as const
 const PROVIDER_OPTIONS: { value: AgentProvider; label: string }[] = [
 	{ value: "claude", label: "Claude" },
-	{ value: "codex", label: "Codex" }
+	{ value: "codex", label: "OpenAI" }
 ]
 
 const EFFORT_STYLES: Record<(typeof EFFORT_OPTIONS)[number], string> = {

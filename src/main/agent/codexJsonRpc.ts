@@ -45,7 +45,7 @@ export class CodexJsonRpc extends EventEmitter {
 		this.child.stderr.setEncoding("utf8")
 		this.child.stderr.on("data", (chunk: string) => this.emit("stderr", chunk))
 		this.child.on("exit", (code) => {
-			this.rejectAll(new Error(`Codex app-server exited with code ${code ?? "unknown"}`))
+			this.rejectAll(new Error(`Agent app-server exited with code ${code ?? "unknown"}`))
 			this.emit("exit", code)
 			this.child = null
 		})
@@ -88,14 +88,14 @@ export class CodexJsonRpc extends EventEmitter {
 	}
 
 	stop(): void {
-		this.rejectAll(new Error("Codex app-server stopped"))
+		this.rejectAll(new Error("Agent app-server stopped"))
 		this.child?.kill()
 		this.child = null
 	}
 
 	private write(message: CodexWireMessage): void {
 		const child = this.child
-		if (!child) throw new Error("Codex app-server is not running")
+		if (!child) throw new Error("Agent app-server is not running")
 
 		const cleanMessage = Object.fromEntries(
 			Object.entries(message).filter(([, value]) => value !== undefined)
@@ -132,7 +132,7 @@ export class CodexJsonRpc extends EventEmitter {
 
 			this.pending.delete(String(message.id))
 			if (message.error) {
-				pending.reject(new Error(message.error.message ?? "Codex app-server request failed"))
+				pending.reject(new Error(message.error.message ?? "Agent app-server request failed"))
 				return
 			}
 			pending.resolve(message.result)

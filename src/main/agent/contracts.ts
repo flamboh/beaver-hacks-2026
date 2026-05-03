@@ -55,6 +55,22 @@ export interface AgentSkillSuggestion {
 	installed: boolean
 }
 
+export interface AgentModelOption {
+	id: string
+	label: string
+	provider: AgentProvider
+	isDefault: boolean
+	reasoningEfforts: AgentRunSettingOption[]
+	speedTiers: AgentRunSettingOption[]
+}
+
+export interface AgentRunSettingOption {
+	id: string
+	label: string
+	description: string | null
+	isDefault: boolean
+}
+
 export interface AgentSession {
 	status: AgentSessionStatus
 	provider: AgentProvider
@@ -92,6 +108,8 @@ export interface StartTurnInput {
 	prompt: string
 	provider?: AgentProvider
 	model?: string
+	effort?: string
+	speedTier?: string | null
 	runtimeMode?: AgentRuntimeMode
 }
 
@@ -126,6 +144,8 @@ export interface ProviderSendTurnInput {
 	threadId: string
 	prompt: string
 	model?: string
+	effort?: string
+	speedTier?: string | null
 }
 
 export interface ProviderTurnStartResult {
@@ -189,5 +209,6 @@ export interface ProviderAdapter {
 	startSession(input: ProviderSessionStartInput): Promise<AgentSession>
 	sendTurn(input: ProviderSendTurnInput): Promise<ProviderTurnStartResult>
 	stopSession(threadId: string): Promise<void>
+	listModels?(): Promise<AgentModelOption[]>
 	onEvent(listener: (event: ProviderRuntimeEvent) => void): () => void
 }
