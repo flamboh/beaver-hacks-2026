@@ -7,6 +7,7 @@ interface BrowserWebview extends HTMLElement {
 	getURL: () => string
 	goBack: () => void
 	goForward: () => void
+	loadURL: (url: string) => Promise<void>
 	reload: () => void
 }
 
@@ -56,55 +57,23 @@ export default function BrowserCard({
 	workspacePath
 }: BrowserCardProps): JSX.Element {
 	const webviewRef = useRef<BrowserWebview | null>(null)
+	const launchedRef = useRef(false)
 	const listenerCleanupRef = useRef<(() => void) | null>(null)
 	const initialUrl = devServerUrl(projectName, workspacePath)
 	const [draftUrl, setDraftUrl] = useState(initialUrl)
-	const [activeUrl, setActiveUrl] = useState(initialUrl)
 	const [error, setError] = useState<string | null>(null)
 	const [launching, setLaunching] = useState(false)
 
-	const setWebviewRef = useCallback((node: HTMLElement | null) => {
-		listenerCleanupRef.current?.()
-		listenerCleanupRef.current = null
-		const webview = node as BrowserWebview | null
-		webviewRef.current = webview
+	const loadUrl = useCallback((url: string): void => {
+		const webview = webviewRef.current
 		if (!webview) return
-
-		const handleNavigate = (): void => {
-			const current = webview.getURL()
-			setActiveUrl(current)
-			setDraftUrl(current)
-			setError(null)
-		}
-		const handleFailLoad = (event: Event): void => {
-			const detail = event as DidFailLoadEvent
-			if (detail.errorCode === -3) return
-			setError(
-				detail.errorDescription
-					? `${detail.errorDescription}${detail.validatedURL ? ` (${detail.validatedURL})` : ""}`
-					: "Failed to load page."
-			)
-		}
-
-		webview.addEventListener("did-navigate", handleNavigate)
-		webview.addEventListener("did-navigate-in-page", handleNavigate)
-		webview.addEventListener("did-fail-load", handleFailLoad)
-		listenerCleanupRef.current = () => {
-			webview.removeEventListener("did-navigate", handleNavigate)
-			webview.removeEventListener("did-navigate-in-page", handleNavigate)
-			webview.removeEventListener("did-fail-load", handleFailLoad)
-		}
+		void webview.loadURL(url).catch((loadError: Error & { code?: string; errno?: number }) => {
+			if (loadError.code === "ERR_ABORTED" || loadError.errno === -3) return
+			setError(loadError.message || "Failed to load page.")
+		})
 	}, [])
 
-	function navigate(event: FormEvent<HTMLFormElement>): void {
-		event.preventDefault()
-		const next = normalizeUrl(draftUrl)
-		setDraftUrl(next)
-		setActiveUrl(next)
-		setError(null)
-	}
-
-	async function openDevServer(): Promise<void> {
+	const openDevServer = useCallback(async (): Promise<void> => {
 		setLaunching(true)
 		setError(null)
 		try {
@@ -115,12 +84,59 @@ export default function BrowserCard({
 				openExternal: false
 			})
 			setDraftUrl(result.url)
-			setActiveUrl(result.url)
+			loadUrl(result.url)
 		} catch (launchError) {
 			setError(launchError instanceof Error ? launchError.message : "Failed to open dev server.")
 		} finally {
 			setLaunching(false)
 		}
+	}, [enterDevAction, loadUrl, projectName, workspacePath])
+
+	const setWebviewRef = useCallback(
+		(node: HTMLElement | null) => {
+			listenerCleanupRef.current?.()
+			listenerCleanupRef.current = null
+			const webview = node as BrowserWebview | null
+			webviewRef.current = webview
+			if (!webview) return
+
+			const handleNavigate = (): void => {
+				const current = webview.getURL()
+				setDraftUrl(current)
+				setError(null)
+			}
+			const handleFailLoad = (event: Event): void => {
+				const detail = event as DidFailLoadEvent
+				if (detail.errorCode === -3) return
+				setError(
+					detail.errorDescription
+						? `${detail.errorDescription}${detail.validatedURL ? ` (${detail.validatedURL})` : ""}`
+						: "Failed to load page."
+				)
+			}
+
+			webview.addEventListener("did-navigate", handleNavigate)
+			webview.addEventListener("did-navigate-in-page", handleNavigate)
+			webview.addEventListener("did-fail-load", handleFailLoad)
+			if (!launchedRef.current) {
+				launchedRef.current = true
+				void openDevServer()
+			}
+			listenerCleanupRef.current = () => {
+				webview.removeEventListener("did-navigate", handleNavigate)
+				webview.removeEventListener("did-navigate-in-page", handleNavigate)
+				webview.removeEventListener("did-fail-load", handleFailLoad)
+			}
+		},
+		[openDevServer]
+	)
+
+	function navigate(event: FormEvent<HTMLFormElement>): void {
+		event.preventDefault()
+		const next = normalizeUrl(draftUrl)
+		setDraftUrl(next)
+		loadUrl(next)
+		setError(null)
 	}
 
 	return (
@@ -186,9 +202,14 @@ export default function BrowserCard({
 					{error}
 				</div>
 			) : null}
+			{launching ? (
+				<div className="border-b border-white/8 bg-white/[0.03] px-3 py-1 text-[11px] text-neutral-400">
+					Launching dev server...
+				</div>
+			) : null}
 
 			<div className="min-h-0 flex-1">
-				<webview ref={setWebviewRef} src={activeUrl} className="h-full w-full" />
+				<webview ref={setWebviewRef} src="about:blank" className="h-full w-full" />
 			</div>
 		</div>
 	)

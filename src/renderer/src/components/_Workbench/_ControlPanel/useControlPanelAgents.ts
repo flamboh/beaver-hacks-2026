@@ -2,7 +2,7 @@ import { useMemo, useState } from "react"
 import { useQueries, useQueryClient } from "@tanstack/react-query"
 import type { AgentRow } from "@renderer/types/models"
 import type { CreateSide } from "./AgentCard"
-import type { WorkspaceRow } from "src/main/db/contracts"
+import type { ToolCardRow, WorkspaceRow } from "src/main/db/contracts"
 
 const MODEL_BY_PROVIDER: Record<AgentRow["provider"], string> = {
 	codex: "gpt-5.5",
@@ -74,13 +74,19 @@ export type ControlPanelCard =
 	  } & AgentRow)
 	| ToolCard
 
+export interface CreatedCardPosition {
+	workspaceId: string
+	layout_x: number
+	layout_y: number
+}
+
 export function useControlPanelAgents(
 	projectIds: string[],
 	workspaces: WorkspaceLane[],
 	activeWorkspaceId: string
 ): {
 	cards: ControlPanelCard[]
-	createCard: (input: StartCardInput) => Promise<void>
+	createCard: (input: StartCardInput) => Promise<CreatedCardPosition | null>
 	deleteCard: (id: string) => Promise<void>
 	deletingCardId: string | null
 	isCreatingCard: boolean
@@ -103,6 +109,18 @@ export function useControlPanelAgents(
 	})
 	const agents = agentQueries.flatMap((query) => query.data ?? [])
 	const persistedToolCards = toolCardQueries.flatMap((query) => query.data ?? [])
+	const [optimisticToolCards, setOptimisticToolCards] = useState<ToolCardRow[]>([])
+	const persistedToolCardIds = useMemo(
+		() => new Set(persistedToolCards.map((card) => card.id)),
+		[persistedToolCards]
+	)
+	const toolCardRows = useMemo(
+		() => [
+			...persistedToolCards,
+			...optimisticToolCards.filter((card) => !persistedToolCardIds.has(card.id))
+		],
+		[optimisticToolCards, persistedToolCardIds, persistedToolCards]
+	)
 	const refetchCards = () =>
 		Promise.all([...agentQueries, ...toolCardQueries].map((query) => query.refetch()))
 	const [isCreatingCard, setIsCreatingCard] = useState(false)
@@ -131,7 +149,7 @@ export function useControlPanelAgents(
 				}
 			]
 		})
-		const toolCards = persistedToolCards.flatMap((card) => {
+		const toolCards = toolCardRows.flatMap((card) => {
 			const lane = laneByWorkspaceId.get(card.workspace_id)
 			if (!lane) return []
 			return [
@@ -155,28 +173,52 @@ export function useControlPanelAgents(
 			if (a.layout_y !== b.layout_y) return a.layout_y - b.layout_y
 			return a.layout_x - b.layout_x
 		})
-	}, [agents, laneByWorkspaceId, persistedToolCards])
+	}, [agents, laneByWorkspaceId, toolCardRows])
 
-	async function createCard(input: StartCardInput): Promise<void> {
-		if (isCreatingCard) return
+	async function createCard(input: StartCardInput): Promise<CreatedCardPosition | null> {
+		if (isCreatingCard) return null
 		setIsCreatingCard(true)
 		try {
 			const sourceCard = cards.find((card) => card.id === input.sourceCardId)
 			const workspaceId = sourceCard?.workspace_id ?? activeWorkspaceId
 			const lane = laneByWorkspaceId.get(workspaceId)
-			if (!lane) return
+			if (!lane) return null
 			const laneCards = cards.filter((card) => card.workspace_id === workspaceId)
 			const layout = layoutForCard(input, laneCards, lane.index)
 			if (input.kind === "tool") {
-				await window.api.toolCards.create({
+				const optimisticId = `tool:${input.tool}:pending:${crypto.randomUUID()}`
+				const optimisticCard: ToolCardRow = {
+					id: optimisticId,
 					project_id: lane.workspace.projectId,
 					workspace_id: workspaceId,
 					kind: input.tool,
 					layout_x: layout.layout_x,
-					layout_y: 0
-				})
-				await refetchCards()
-				return
+					layout_y: 0,
+					created_at: new Date().toISOString()
+				}
+				setOptimisticToolCards((nextCards) => [...nextCards, optimisticCard])
+				try {
+					const createdCard = await window.api.toolCards.create({
+						project_id: lane.workspace.projectId,
+						workspace_id: workspaceId,
+						kind: input.tool,
+						layout_x: layout.layout_x,
+						layout_y: 0
+					})
+					setOptimisticToolCards((nextCards) =>
+						nextCards.map((card) => (card.id === optimisticId ? createdCard : card))
+					)
+					await refetchCards()
+					setOptimisticToolCards((nextCards) =>
+						nextCards.filter((card) => card.id !== optimisticId && card.id !== createdCard.id)
+					)
+				} catch (error) {
+					setOptimisticToolCards((nextCards) =>
+						nextCards.filter((card) => card.id !== optimisticId)
+					)
+					throw error
+				}
+				return { workspaceId, ...layout }
 			}
 			const model = MODEL_BY_PROVIDER[input.provider]
 			await window.api.agents.create({
@@ -191,6 +233,7 @@ export function useControlPanelAgents(
 				layout_y: 0
 			})
 			await refetchCards()
+			return { workspaceId, ...layout }
 		} finally {
 			setIsCreatingCard(false)
 		}
@@ -201,6 +244,7 @@ export function useControlPanelAgents(
 		setDeletingCardId(id)
 		try {
 			if (id.startsWith("tool:")) {
+				setOptimisticToolCards((nextCards) => nextCards.filter((card) => card.id !== id))
 				await window.api.toolCards.delete(id)
 				await refetchCards()
 				return

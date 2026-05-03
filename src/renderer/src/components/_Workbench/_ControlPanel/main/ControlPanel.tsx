@@ -10,8 +10,6 @@ import { useControlPanelKeyboard } from "../useControlPanelKeyboard"
 import {
 	PADDING,
 	CARD_W,
-	STEP_X,
-	STEP_Y,
 	canElementScroll,
 	canStartPan,
 	canvasSize,
@@ -93,13 +91,18 @@ export default function ControlPanel({
 		wheelPanFrame.current = null
 	}, [])
 	const commitOffset = useCallback(
-		(nextOffset: { x: number; y: number }, nextZoom = zoom, syncFocus = true) => {
+		(
+			nextOffset: { x: number; y: number },
+			nextZoom = zoom,
+			syncFocus = true,
+			nextCanvas = canvas
+		) => {
 			stopWheelPan()
-			const clamped = clampOffset(nextOffset, vpSize, canvas, nextZoom)
+			const clamped = clampOffset(nextOffset, vpSize, nextCanvas, nextZoom)
 			wheelTargetOffset.current = clamped
 			setOffset(clamped)
 			if (syncFocus && cards.length > 0) {
-				setFocusedIdx(nearestCardIndex(viewportCenter(clamped, nextZoom), cards, canvas))
+				setFocusedIdx(nearestCardIndex(viewportCenter(clamped, nextZoom), cards, nextCanvas))
 			}
 			flashMap()
 		},
@@ -473,20 +476,36 @@ export default function ControlPanel({
 						? sourceCard.layout_y + 1
 						: sourceCard?.layout_y
 
-			await createCard(input)
+			const createdCard = await createCard(input)
+			if (!createdCard) return
 
-			if (nextX === undefined || nextY === undefined) return
-			const dx = nextX < canvas.minX ? -STEP_X * zoom : 0
-			const dy = nextY < canvas.minY ? -STEP_Y * zoom : 0
-			if (!dx && !dy) return
-
-			setOffset((current) => {
-				const next = { x: current.x + dx, y: current.y + dy }
-				wheelTargetOffset.current = next
-				return next
-			})
+			const nextCard = {
+				layout_x: nextX ?? createdCard.layout_x,
+				layout_y: nextY ?? createdCard.layout_y
+			}
+			const nextCanvas = canvasSize([...cards, nextCard], workspaces.length)
+			setSmoothPan(true)
+			onWorkspaceActivate(createdCard.workspaceId)
+			commitOffset(
+				centerOffset(cardCenter(nextCard, nextCanvas), vpSize, nextCanvas, zoom),
+				zoom,
+				false,
+				nextCanvas
+			)
+			if (smoothPanTimer.current) clearTimeout(smoothPanTimer.current)
+			smoothPanTimer.current = setTimeout(() => setSmoothPan(false), 320)
 		},
-		[cards, canvas.minX, canvas.minY, createCard, isCreatingCard, onWorkspaceCreate, zoom]
+		[
+			cards,
+			commitOffset,
+			createCard,
+			isCreatingCard,
+			onWorkspaceActivate,
+			onWorkspaceCreate,
+			vpSize,
+			workspaces.length,
+			zoom
+		]
 	)
 	const handleCreateWorkspace = useCallback(
 		(sourceCardId: string, side: "top" | "bottom") => {
