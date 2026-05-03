@@ -3,9 +3,9 @@ import { FileDiff, type FileDiffMetadata } from "@pierre/diffs/react"
 import type { GitStatusEntry } from "@pierre/trees"
 import { FileTree, useFileTree, useFileTreeSelection } from "@pierre/trees/react"
 import { useQuery } from "@tanstack/react-query"
-import { ExternalLink, Play, RefreshCw } from "lucide-react"
+import { ExternalLink, Play, Square } from "lucide-react"
 import { useMemo, useState } from "react"
-import { useAgentSnapshot } from "@renderer/agentStore"
+import { useAgentSnapshot, useGitStatus } from "@renderer/agentStore"
 import { buildPatchCacheKey } from "@renderer/lib/diffRendering"
 
 type RenderablePatch =
@@ -208,31 +208,51 @@ function ReviewFilesWorkspace({ files }: { files: FileDiffMetadata[] }) {
 	)
 }
 
-export default function Review() {
+interface ReviewProps {
+	projectCwd: string
+	projectName: string
+}
+
+export default function Review({ projectCwd, projectName }: ReviewProps) {
 	const snapshot = useAgentSnapshot()
-	const activeThread = snapshot.threads.find((thread) => thread.id === snapshot.activeThreadId)
-	const cwd = activeThread?.cwd
+	const activeThread = snapshot.threads.find(
+		(thread) => thread.id === snapshot.activeThreadId && thread.cwd === projectCwd
+	)
+	const cwd = activeThread?.cwd ?? projectCwd
 	const [launching, setLaunching] = useState(false)
+	const [stopping, setStopping] = useState(false)
 	const [message, setMessage] = useState("Review workspace ready")
-	const [url, setUrl] = useState("https://beaver-review.localhost/#/workbench/review")
-	const [output, setOutput] = useState("")
+	const gitStatus = useGitStatus(cwd)
+	const devServerQuery = useQuery({
+		queryKey: ["dev-server", "project-status", cwd],
+		queryFn: () => window.api.devServer.getProjectStatus({ cwd }),
+		refetchInterval: 2000
+	})
+	const devServerRunning = devServerQuery.data?.status === "running"
 	const diffQuery = useQuery({
-		queryKey: ["git", "working-tree-diff", cwd ?? null],
+		queryKey: ["git", "working-tree-diff", cwd, gitStatus?.updatedAt ?? null],
 		queryFn: () => window.api.git.getWorkingTreeDiff(cwd),
-		refetchOnWindowFocus: true
+		enabled: gitStatus?.isRepo === true
 	})
 	const renderablePatch = useMemo(
 		() => getRenderablePatch(diffQuery.data?.patch, `review:${diffQuery.data?.updatedAt ?? ""}`),
 		[diffQuery.data?.patch, diffQuery.data?.updatedAt]
 	)
 
-	const launchReview = async () => {
+	const launchDevServer = async () => {
+		if (devServerRunning && devServerQuery.data?.url) {
+			window.open(devServerQuery.data.url, "_blank", "noopener,noreferrer")
+			return
+		}
+
 		setLaunching(true)
 		try {
-			const result = await window.api.devServer.launchReview()
+			const result = await window.api.devServer.launchProject({
+				cwd,
+				name: projectName
+			})
 			setMessage(result.message)
-			setUrl(result.url)
-			setOutput(result.output)
+			void devServerQuery.refetch()
 		} catch (error) {
 			setMessage(error instanceof Error ? error.message : "Launch failed.")
 		} finally {
@@ -240,8 +260,19 @@ export default function Review() {
 		}
 	}
 
-	const refreshDiff = () => {
-		void diffQuery.refetch()
+	const stopDevServer = async () => {
+		setStopping(true)
+		try {
+			const result = await window.api.devServer.stopProject({ cwd })
+			setMessage(
+				result.status === "stopped" ? "Project dev server stopped." : "Project dev server stopping."
+			)
+			void devServerQuery.refetch()
+		} catch (error) {
+			setMessage(error instanceof Error ? error.message : "Stop failed.")
+		} finally {
+			setStopping(false)
+		}
 	}
 
 	return (
@@ -255,40 +286,47 @@ export default function Review() {
 				</div>
 				<div className="flex items-center gap-2">
 					<p className="hidden max-w-[420px] truncate font-mono text-xs text-neutral-500 lg:block">
-						{cwd ?? diffQuery.data?.cwd ?? url}
+						{cwd ?? diffQuery.data?.cwd}
 					</p>
 					<button
 						type="button"
-						onClick={refreshDiff}
-						disabled={diffQuery.isFetching}
-						className="flex items-center gap-2 rounded-md border border-white/10 bg-neutral-900 px-3 py-2 text-sm font-medium text-neutral-200 transition-colors duration-150 hover:bg-neutral-800 disabled:cursor-wait disabled:text-neutral-500"
-					>
-						<RefreshCw size={15} />
-						{diffQuery.isFetching ? "Refreshing" : "Refresh"}
-					</button>
-					<button
-						type="button"
-						onClick={launchReview}
+						onClick={launchDevServer}
 						disabled={launching}
 						className="flex items-center gap-2 rounded-md border border-white/10 bg-white px-3 py-2 text-sm font-medium text-neutral-950 transition-colors duration-150 hover:bg-neutral-200 disabled:cursor-wait disabled:bg-neutral-400"
 					>
 						{launching ? <ExternalLink size={15} /> : <Play size={15} />}
-						{launching ? "Launching" : "Launch"}
+						{launching ? "Launching" : devServerRunning ? "Open" : "Dev"}
 					</button>
+					{devServerRunning && (
+						<button
+							type="button"
+							onClick={stopDevServer}
+							disabled={stopping}
+							className="flex size-9 items-center justify-center rounded-md border border-red-500/30 bg-red-500/10 text-red-300 transition-colors duration-150 hover:bg-red-500/15 disabled:cursor-wait disabled:text-red-500"
+							aria-label={stopping ? "Stopping dev server" : "Kill dev server"}
+							title={stopping ? "Stopping dev server" : "Kill dev server"}
+						>
+							<Square size={14} />
+						</button>
+					)}
 				</div>
 			</header>
 
-			{diffQuery.isLoading ? (
+			{!gitStatus ? (
+				<div className="flex flex-1 items-center justify-center text-xs text-neutral-500">
+					Loading git status.
+				</div>
+			) : gitStatus.isRepo === false ? (
+				<div className="flex flex-1 items-center justify-center px-4 text-center text-xs text-neutral-500">
+					Review diffs are unavailable outside a git repository.
+				</div>
+			) : diffQuery.isLoading ? (
 				<div className="flex flex-1 items-center justify-center text-xs text-neutral-500">
 					Loading diff.
 				</div>
 			) : diffQuery.error ? (
 				<div className="flex flex-1 items-center justify-center px-4 text-center text-xs text-red-300/80">
 					{diffQuery.error instanceof Error ? diffQuery.error.message : "Failed to load diff."}
-				</div>
-			) : diffQuery.data?.isRepo === false ? (
-				<div className="flex flex-1 items-center justify-center px-4 text-center text-xs text-neutral-500">
-					Review diffs are unavailable outside a git repository.
 				</div>
 			) : !renderablePatch ? (
 				<div className="flex flex-1 items-center justify-center px-4 text-center text-xs text-neutral-500">
@@ -306,12 +344,6 @@ export default function Review() {
 						{renderablePatch.text}
 					</pre>
 				</div>
-			)}
-
-			{output && (
-				<pre className="mt-4 max-h-32 shrink-0 overflow-auto rounded-lg border border-white/8 bg-black p-4 text-xs leading-relaxed text-neutral-500">
-					{output}
-				</pre>
 			)}
 		</div>
 	)

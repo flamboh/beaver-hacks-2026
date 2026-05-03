@@ -1,4 +1,4 @@
-import { Tally1, PanelLeft } from "lucide-react"
+import { PanelLeft, Tally1 } from "lucide-react"
 
 interface Props {
 	onToggleSidebar: () => void

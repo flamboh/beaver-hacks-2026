@@ -13,7 +13,12 @@ import type {
 	ProjectRow,
 	UpdateProjectInput
 } from "../main/db/ipc"
-import type { ReviewDevServerLaunch } from "../main/devServer/ipc"
+import type {
+	LaunchProjectDevServerInput,
+	ProjectDevServerInput,
+	ProjectDevServerLaunch,
+	ProjectDevServerStatus
+} from "../main/devServer/ipc"
 import type {
 	GitCheckoutInput,
 	GitCommitAllInput,
@@ -63,14 +68,19 @@ const api = {
 		getInfo: (): Promise<DatabaseInfo> => ipcRenderer.invoke("db:get-info")
 	},
 	devServer: {
-		launchReview: (): Promise<ReviewDevServerLaunch> =>
-			ipcRenderer.invoke("dev-server:launch-review")
+		launchProject: (input: LaunchProjectDevServerInput): Promise<ProjectDevServerLaunch> =>
+			ipcRenderer.invoke("dev-server:launch-project", input),
+		getProjectStatus: (input: ProjectDevServerInput): Promise<ProjectDevServerStatus> =>
+			ipcRenderer.invoke("dev-server:get-project-status", input),
+		stopProject: (input: ProjectDevServerInput): Promise<ProjectDevServerStatus> =>
+			ipcRenderer.invoke("dev-server:stop-project", input)
 	},
 	dialog: {
 		selectDirectory: (): Promise<string | null> => ipcRenderer.invoke("dialog:select-directory")
 	},
 	projects: {
 		list: (): Promise<ProjectRow[]> => ipcRenderer.invoke("project:list"),
+		get: (input: ProjectIdInput): Promise<ProjectRow> => ipcRenderer.invoke("project:get", input),
 		create: (input: CreateProjectInput): Promise<ProjectRow> =>
 			ipcRenderer.invoke("project:create", input),
 		update: (input: UpdateProjectInput): Promise<ProjectRow> =>

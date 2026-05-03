@@ -2,7 +2,6 @@ import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useSessionData } from "@renderer/hooks/useSessionData"
 import type { ProjectRow } from "@renderer/types/models"
-import { motion } from "motion/react"
 import { useNavigate } from "react-router-dom"
 
 import NewProjectButton from "./NewProjectButton"
@@ -38,33 +37,22 @@ export default function Gallery() {
 			name: project.name,
 			path: project.path
 		})
-		navigate("/workbench")
+		void window.api.projects.touch({ id: project.id })
+		navigate(`/project/${encodeURIComponent(project.id)}/workbench`)
 	}
 
 	return (
 		<main className="min-h-[calc(100vh-3.5rem)] bg-neutral-950 p-6 text-neutral-50">
 			<section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-				{projects.map((project, index) => (
-					<motion.div
+				{projects.map((project) => (
+					<ProjectButton
 						key={project.id}
-						initial={{ opacity: 0, y: 32 }}
-						animate={{ opacity: 1, y: 0 }}
-						transition={{ duration: 0.36, delay: index * 0.1, ease: "easeOut" }}
-					>
-						<ProjectButton
-							name={project.name}
-							accessed={project.accessed}
-							onClick={() => selectProject(project)}
-						/>
-					</motion.div>
+						name={project.name}
+						accessed={project.accessed}
+						onClick={() => selectProject(project)}
+					/>
 				))}
-				<motion.div
-					initial={{ opacity: 0, y: 32 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.36, delay: projects.length * 0.1, ease: "easeOut" }}
-				>
-					<NewProjectButton onClick={() => setIsNewProjectModalOpen(true)} />
-				</motion.div>
+				<NewProjectButton onClick={() => setIsNewProjectModalOpen(true)} />
 			</section>
 
 			{isNewProjectModalOpen && (
