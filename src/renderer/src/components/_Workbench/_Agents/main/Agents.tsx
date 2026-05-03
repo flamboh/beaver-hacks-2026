@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { X, Plus, FolderOpen, AlignLeft } from "lucide-react"
-import { Agent } from "@renderer/types/models"
+import { useSessionData } from "@renderer/hooks/useSessionData"
+import type { Agent } from "@renderer/types/models"
 
 // ── placeholder data ──────────────────────────────────────────────
 const PLACEHOLDER_AGENTS: Agent[] = [
@@ -79,6 +80,7 @@ const DEFAULT_FORM = {
 // ─────────────────────────────────────────────────────────────────
 
 export default function Agents() {
+	const { project } = useSessionData()
 	const [agents, setAgents] = useState<Agent[]>(PLACEHOLDER_AGENTS)
 	const [showForm, setShowForm] = useState(false)
 	const [form, setForm] = useState({ ...DEFAULT_FORM })
@@ -95,7 +97,7 @@ export default function Agents() {
 		const newAgent: Agent = {
 			id: crypto.randomUUID(),
 			name: form.name || "Unnamed Agent",
-			project_id: "proj-1",
+			project_id: project?.id ?? "",
 			model: form.model,
 			scope_path: form.instructionMode === "path" ? form.scopePath : "",
 			effort: form.effort

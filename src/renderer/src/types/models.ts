@@ -8,7 +8,7 @@ export type ProjectRow = {
 	accessed: string
 }
 
-export type AgentRow = {
+export type Agent = {
 	id: string
 	name: string
 	project_id: string
@@ -25,7 +25,7 @@ export type TaskRow = {
 }
 
 export type BatchRow = {
-	id: string,
-	agent_id: string,
+	id: string
+	agent_id: string
 	summary: string
 }
