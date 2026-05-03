@@ -1,11 +1,11 @@
 import { useState } from "react"
 import { Plus } from "lucide-react"
 import { useSessionData } from "@renderer/hooks/useSessionData"
-import type { Agent } from "@renderer/types/models"
+import type { AgentRow } from "@renderer/types/models"
 import NewAgentModal, { type NewAgentInput } from "../NewAgentModal"
 
 // ── placeholder data ──────────────────────────────────────────────
-const PLACEHOLDER_AGENTS: Agent[] = [
+const PLACEHOLDER_AGENTS: AgentRow[] = [
 	{
 		id: "1",
 		name: "Auth Refactor",
@@ -45,13 +45,13 @@ const EFFORT_STYLES: Record<string, string> = {
 
 export default function Agents() {
 	const { project } = useSessionData()
-	const [agents, setAgents] = useState<Agent[]>(PLACEHOLDER_AGENTS)
+	const [agents, setAgents] = useState<AgentRow[]>(PLACEHOLDER_AGENTS)
 	const [isNewAgentModalOpen, setIsNewAgentModalOpen] = useState(false)
 
 	const handleCreateAgent = async (input: NewAgentInput) => {
 		// simulate DB write
 		await new Promise((res) => setTimeout(res, 900))
-		const newAgent: Agent = {
+		const newAgent: AgentRow = {
 			id: crypto.randomUUID(),
 			name: input.name || "Unnamed Agent",
 			project_id: project?.id ?? "",
