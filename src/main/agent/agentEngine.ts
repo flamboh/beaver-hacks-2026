@@ -7,6 +7,8 @@ import { listInstalledSkillKeys, matchesInstalledSkill } from "../skills/install
 import type {
 	AgentActivity,
 	AgentMessage,
+	AgentPlan,
+	AgentProvider,
 	AgentRuntimeMode,
 	AgentSession,
 	AgentSnapshot,
@@ -19,6 +21,18 @@ import type {
 
 function nowIso(): string {
 	return new Date().toISOString()
+}
+
+function emptyPlan(): AgentPlan {
+	return {
+		items: [],
+		source: null,
+		updatedAt: null
+	}
+}
+
+function providerForThread(thread: AgentThread): AgentProvider {
+	return thread.provider
 }
 
 function newMessage(input: {
@@ -75,6 +89,7 @@ export class AgentEngine {
 			const session = await this.provider.startSession({
 				threadId: thread.id,
 				cwd: thread.cwd,
+				provider: providerForThread(thread),
 				...(input.model ? { model: input.model } : {}),
 				runtimeMode: input.runtimeMode ?? thread.runtimeMode
 			})
@@ -88,7 +103,7 @@ export class AgentEngine {
 		} catch (error) {
 			this.setThreadSession(thread.id, {
 				status: "error",
-				provider: "codex",
+				provider: providerForThread(thread),
 				activeTurnId: null,
 				lastError: error instanceof Error ? error.message : String(error),
 				updatedAt: nowIso()
@@ -171,10 +186,12 @@ export class AgentEngine {
 			id: input.threadId ?? `thread:${randomUUID()}`,
 			title: input.prompt.trim().slice(0, 80) || "New thread",
 			cwd: input.cwd ?? process.cwd(),
+			provider: input.provider ?? "codex",
 			model: input.model ?? null,
 			runtimeMode: input.runtimeMode ?? "full-access",
 			messages: [],
 			activities: [],
+			plan: emptyPlan(),
 			suggestedSkills: [],
 			session: null,
 			createdAt,
@@ -192,7 +209,7 @@ export class AgentEngine {
 			case "session.state.changed":
 				this.setThreadSession(event.threadId, {
 					status: event.payload.status,
-					provider: "codex",
+					provider: providerForThread(thread),
 					activeTurnId: thread.session?.activeTurnId ?? null,
 					lastError:
 						event.payload.status === "error" ? (event.payload.reason ?? "Codex error") : null,
@@ -203,7 +220,7 @@ export class AgentEngine {
 			case "turn.started":
 				this.setThreadSession(event.threadId, {
 					status: "running",
-					provider: "codex",
+					provider: providerForThread(thread),
 					activeTurnId: event.turnId,
 					lastError: null,
 					updatedAt: event.createdAt
@@ -239,7 +256,7 @@ export class AgentEngine {
 				}
 				this.setThreadSession(event.threadId, {
 					status: event.payload.status === "failed" ? "error" : "ready",
-					provider: "codex",
+					provider: providerForThread(thread),
 					activeTurnId: null,
 					lastError: event.payload.error ?? null,
 					updatedAt: event.createdAt
@@ -248,6 +265,10 @@ export class AgentEngine {
 
 			case "activity":
 				thread.activities.push(this.toActivity(event))
+				break
+
+			case "plan.updated":
+				thread.plan = event.payload.plan
 				break
 
 			case "runtime.error":

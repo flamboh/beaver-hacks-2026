@@ -13,12 +13,18 @@ type AgentCardRow = AgentRow & {
 
 type AgentProvider = "claudeCode" | "codex"
 
+function providerFromModel(model: string): AgentRow["provider"] {
+	return model.includes("claude") ? "claude" : "codex"
+}
+
 // ── placeholder data ──────────────────────────────────────────────
 const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 	{
 		id: "1",
 		name: "Auth Refactor",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "claude",
 		model: "claude-opus-4-7",
 		scope_path: "@Pipeline.md",
 		effort: "high",
@@ -29,6 +35,8 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		id: "2",
 		name: "Test Coverage",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "codex",
 		model: "gpt-4o-mini",
 		scope_path: "@tests/README.md",
 		effort: "medium",
@@ -39,6 +47,8 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		id: "3",
 		name: "Docs Generator",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "claude",
 		model: "claude-sonnet-4-6",
 		scope_path: "@docs",
 		effort: "low",
@@ -49,6 +59,8 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		id: "4",
 		name: "Merge Steward",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "codex",
 		model: "o4-mini",
 		scope_path: "@src/main/git",
 		effort: "medium",
@@ -59,6 +71,8 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		id: "5",
 		name: "UI Polish",
 		project_id: "proj-1",
+		workspace_id: null,
+		provider: "claude",
 		model: "claude-haiku-4-5",
 		scope_path: "@src/renderer",
 		effort: "low",
@@ -160,6 +174,8 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 			id: crypto.randomUUID(),
 			name: input.name || "Unnamed Agent",
 			project_id: project?.id ?? "",
+			workspace_id: null,
+			provider: providerFromModel(input.model),
 			model: input.model,
 			scope_path: input.scopePath,
 			effort: input.effort,
@@ -179,6 +195,7 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 					? {
 							...agent,
 							name: input.name || "Unnamed Agent",
+							provider: providerFromModel(input.model),
 							model: input.model,
 							scope_path: input.scopePath,
 							effort: input.effort

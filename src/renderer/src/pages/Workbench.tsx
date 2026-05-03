@@ -100,7 +100,6 @@ export default function Workbench() {
 					projectName={project?.name ?? "Loading project"}
 					setCurrentPage={setProjectPage}
 					open={sidebarOpen}
-					onToggle={() => setSidebarOpen((o) => !o)}
 				/>
 				<main className={`flex-1 overflow-hidden ${isCanvas ? "" : "overflow-auto p-6"}`}>
 					{(projectQuery.isLoading || workspacesQuery.isLoading) &&

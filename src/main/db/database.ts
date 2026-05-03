@@ -29,7 +29,7 @@ import {
 	slugify
 } from "./workspaceUtils"
 
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 function nowIso(): string {
 	return new Date().toISOString()
@@ -75,6 +75,8 @@ export class DatabaseService {
 				id TEXT PRIMARY KEY,
 				project_id TEXT NOT NULL,
 				name TEXT NOT NULL DEFAULT '',
+				workspace_id TEXT,
+				provider TEXT NOT NULL DEFAULT 'codex',
 				model TEXT NOT NULL,
 				scope_path TEXT,
 				effort TEXT NOT NULL
@@ -84,6 +86,7 @@ export class DatabaseService {
 				id TEXT PRIMARY KEY,
 				batch_id TEXT NOT NULL,
 				agent_id TEXT NOT NULL,
+				turn_id TEXT,
 				status TEXT NOT NULL,
 				description TEXT
 			);
@@ -113,15 +116,62 @@ export class DatabaseService {
 					id TEXT PRIMARY KEY,
 					project_id TEXT NOT NULL,
 					name TEXT NOT NULL DEFAULT '',
+					workspace_id TEXT,
+					provider TEXT NOT NULL DEFAULT 'codex',
 					model TEXT NOT NULL,
 					scope_path TEXT,
 					effort TEXT NOT NULL,
-					FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+					FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+					FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE SET NULL
 				);
-				INSERT INTO agents_new (id, project_id, name, model, scope_path, effort)
-					SELECT id, project_id, '', model, scope_path, effort FROM agents;
+				INSERT INTO agents_new (id, project_id, name, workspace_id, provider, model, scope_path, effort)
+					SELECT id, project_id, '', NULL, 'codex', model, scope_path, effort FROM agents;
 				DROP TABLE agents;
 				ALTER TABLE agents_new RENAME TO agents;
+				COMMIT;
+			`)
+		}
+
+		if (storedVersion >= 2 && storedVersion < 3) {
+			await this.exec(`
+				BEGIN TRANSACTION;
+				CREATE TABLE agents_new (
+					id TEXT PRIMARY KEY,
+					project_id TEXT NOT NULL,
+					name TEXT NOT NULL DEFAULT '',
+					workspace_id TEXT,
+					provider TEXT NOT NULL DEFAULT 'codex',
+					model TEXT NOT NULL,
+					scope_path TEXT,
+					effort TEXT NOT NULL,
+					FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+					FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE SET NULL
+				);
+				INSERT INTO agents_new (id, project_id, name, workspace_id, provider, model, scope_path, effort)
+					SELECT id, project_id, name, NULL, 'codex', model, scope_path, effort FROM agents;
+				DROP TABLE agents;
+				ALTER TABLE agents_new RENAME TO agents;
+				COMMIT;
+			`)
+		}
+
+		if (storedVersion < 3) {
+			await this.exec(`
+				BEGIN TRANSACTION;
+				CREATE TABLE task_new (
+					id TEXT PRIMARY KEY,
+					batch_id TEXT NOT NULL,
+					agent_id TEXT NOT NULL,
+					turn_id TEXT,
+					status TEXT NOT NULL,
+					description TEXT,
+					FOREIGN KEY(batch_id) REFERENCES batch(id) ON DELETE CASCADE,
+					FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
+				);
+				INSERT INTO task_new (id, batch_id, agent_id, turn_id, status, description)
+					SELECT id, batch_id, agent_id, NULL, status, description FROM task;
+				DROP TABLE task;
+				ALTER TABLE task_new RENAME TO task;
 				COMMIT;
 			`)
 		}

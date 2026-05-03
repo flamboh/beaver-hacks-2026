@@ -3,6 +3,7 @@ import { AlertTriangle, GitBranch, PanelLeft, Tally1 } from "lucide-react"
 import { checkoutGitBranch, createGitBranch, useGitStatus } from "@renderer/agentStore"
 import { GitCommitMenu } from "../GitCommitMenu"
 import type { WorkspaceRow } from "../../../../main/db/ipc"
+import { useNavigate } from "react-router-dom"
 
 interface Props {
 	activeAgentCount: number
@@ -19,6 +20,7 @@ export default function TopBar({
 	onWorkspaceChange,
 	workspaces
 }: Props) {
+	const navigate = useNavigate()
 	const workspaceId = activeWorkspace?.id ?? null
 	const status = useGitStatus(workspaceId ?? "")
 	const [branchDraft, setBranchDraft] = useState("")
@@ -37,6 +39,17 @@ export default function TopBar({
 	return (
 		<div className="flex h-11 w-full shrink-0 items-center justify-between border-b border-white/5 bg-neutral-900 px-3">
 			<div className="flex items-center gap-2">
+				<div className="flex items-center gap-2 text-sm font-medium">
+					<button
+						type="button"
+						onClick={() => navigate("/")}
+						className="tracking-wide text-white transition-colors duration-150 hover:text-neutral-300"
+					>
+						NULLOTH
+					</button>
+					<Tally1 size={14} className="text-neutral-600" />
+					<span className="text-neutral-400">Workbench</span>
+				</div>
 				<button
 					onClick={onToggleSidebar}
 					className="rounded-md p-1.5 text-neutral-500 transition-colors duration-150 hover:bg-white/5 hover:text-white"
@@ -44,11 +57,6 @@ export default function TopBar({
 				>
 					<PanelLeft size={15} />
 				</button>
-				<div className="ml-1 flex items-center gap-2 text-sm font-medium">
-					<span className="tracking-wide text-white">NULLOTH</span>
-					<Tally1 size={14} className="text-neutral-600" />
-					<span className="text-neutral-400">Workbench</span>
-				</div>
 			</div>
 			<div className="flex min-w-0 items-center gap-2">
 				{activeAgentCount > 0 ? (
