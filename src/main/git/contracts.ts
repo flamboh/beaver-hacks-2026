@@ -18,6 +18,7 @@ export interface GitStatusSnapshot {
 	ahead: number
 	behind: number
 	hasRemote: boolean
+	openPullRequestUrl: string | null
 	files: GitFileChange[]
 	insertions: number
 	deletions: number

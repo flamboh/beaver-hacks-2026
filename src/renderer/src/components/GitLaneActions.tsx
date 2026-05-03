@@ -1,7 +1,7 @@
 import type { JSX } from "react"
 import { useState } from "react"
 import { GitBranch } from "lucide-react"
-import { checkoutGitBranch, createGitBranch, useGitStatus } from "../agentStore"
+import { checkoutGitBranch, useGitStatus } from "../agentStore"
 import { GitCommitMenu } from "./GitCommitMenu"
 
 interface GitLaneActionsProps {
@@ -25,18 +25,12 @@ export function GitLaneActions({
 	const [isBusy, setIsBusy] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const branchName = branchNameForFeature(workspaceName)
-	const currentBranch = status?.branch ?? null
-	const isCurrentBranch = Boolean(branchName && status?.branch === branchName)
-	const branchExists = Boolean(status?.branches.some((branch) => branch.name === branchName))
 
-	function checkoutFeatureBranch(): void {
-		if (!branchName || isBusy || isCurrentBranch) return
+	function checkoutBranch(nextBranch: string): void {
+		if (!nextBranch || isBusy || nextBranch === status?.branch) return
 		setError(null)
 		setIsBusy(true)
-		const task = branchExists
-			? checkoutGitBranch({ workspaceId, branch: branchName })
-			: createGitBranch({ workspaceId, branch: branchName })
-		void task
+		void checkoutGitBranch({ workspaceId, branch: nextBranch })
 			.catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
 			.finally(() => setIsBusy(false))
 	}
@@ -46,18 +40,23 @@ export function GitLaneActions({
 	return (
 		<div className="pointer-events-auto flex items-center gap-1.5">
 			<GitCommitMenu workspaceId={workspaceId} featureBranchName={branchName} />
-			<button
-				type="button"
-				onClick={checkoutFeatureBranch}
-				disabled={isBusy || !branchName || isCurrentBranch}
-				className="inline-flex h-8 max-w-48 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2 text-xs text-zinc-300 transition-colors duration-150 hover:bg-white/[0.07] hover:text-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-600"
-				title={isCurrentBranch ? `On ${branchName}` : `Checkout ${branchName}`}
-			>
+			<label className="inline-flex h-8 max-w-48 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2 text-xs text-zinc-300 transition-colors duration-150 hover:bg-white/[0.07] hover:text-zinc-100">
 				<GitBranch className="size-3.5 shrink-0" />
-				<span className="truncate">
-					{isBusy ? "Checking out..." : currentBranch ? currentBranch : branchName}
-				</span>
-			</button>
+				<select
+					value={status?.branch ?? ""}
+					onChange={(event) => checkoutBranch(event.currentTarget.value)}
+					disabled={isBusy || !status}
+					className="min-w-0 bg-transparent text-xs text-zinc-300 outline-none disabled:cursor-not-allowed disabled:text-zinc-600"
+					aria-label="Checkout branch"
+				>
+					{status?.branch ? null : <option value="">detached</option>}
+					{status?.branches.map((branch) => (
+						<option key={branch.name} value={branch.name}>
+							{branch.name}
+						</option>
+					))}
+				</select>
+			</label>
 			{error ? <span className="max-w-64 truncate text-xs text-red-400">{error}</span> : null}
 		</div>
 	)

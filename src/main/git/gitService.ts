@@ -108,6 +108,7 @@ export class GitService {
 				ahead: 0,
 				behind: 0,
 				hasRemote: false,
+				openPullRequestUrl: null,
 				files: [],
 				insertions: 0,
 				deletions: 0,
@@ -118,10 +119,11 @@ export class GitService {
 
 		const statusResult = await runGit(cwd, ["status", "--porcelain=v2", "--branch"])
 		const parsed = parseStatus(statusResult.stdout)
-		const [branchesResult, remotesResult, numstatResult] = await Promise.all([
+		const [branchesResult, remotesResult, numstatResult, openPullRequestUrl] = await Promise.all([
 			runGit(cwd, ["branch", "--format=%(refname:short)"]),
 			runGit(cwd, ["remote"]),
-			runGit(cwd, ["diff", "--numstat", "HEAD", "--"]).catch(() => ({ stdout: "", stderr: "" }))
+			runGit(cwd, ["diff", "--numstat", "HEAD", "--"]).catch(() => ({ stdout: "", stderr: "" })),
+			this.openPullRequestUrl(cwd, parsed.branch)
 		])
 		const stats = parseNumstat(numstatResult.stdout)
 
@@ -135,11 +137,35 @@ export class GitService {
 			ahead: parsed.ahead,
 			behind: parsed.behind,
 			hasRemote: remotesResult.stdout.trim().length > 0,
+			openPullRequestUrl,
 			files: parsed.files,
 			insertions: stats.insertions,
 			deletions: stats.deletions,
 			branches: parseBranches(branchesResult.stdout, parsed.branch),
 			updatedAt: nowIso()
+		}
+	}
+
+	private async openPullRequestUrl(cwd: string, branch: string | null): Promise<string | null> {
+		if (!branch) return null
+		try {
+			const result = await runGh(cwd, [
+				"pr",
+				"list",
+				"--head",
+				branch,
+				"--state",
+				"open",
+				"--limit",
+				"1",
+				"--json",
+				"url",
+				"--jq",
+				".[0].url"
+			])
+			return result.stdout.trim() || null
+		} catch {
+			return null
 		}
 	}
 
@@ -219,6 +245,13 @@ export class GitService {
 			command: string,
 			message: string
 		) => input.onProgress?.({ actionId, phase, status, command, message })
+
+		if (actionNeedsPr(input.action)) {
+			const snapshot = await this.status(input.cwd)
+			if (snapshot.openPullRequestUrl) {
+				throw new Error(`Open PR already exists: ${snapshot.openPullRequestUrl}`)
+			}
+		}
 
 		if (actionNeedsCommit(input.action)) {
 			progress("commit", "started", "git add -A && git commit", "Committing changes.")
