@@ -1,6 +1,6 @@
 import type { JSX } from "react"
 import { motion } from "motion/react"
-import { AlertTriangle, FileText, ListChecks, Terminal, Wrench } from "lucide-react"
+import { AlertTriangle, FileText, ListChecks, ShieldCheck, Terminal, Wrench } from "lucide-react"
 import type { TranscriptActivity, TranscriptBlock } from "./chatTranscriptModel"
 
 const blockEnter = {
@@ -44,6 +44,10 @@ export function TranscriptBlockView({ block }: { block: TranscriptBlock }): JSX.
 }
 
 function ActivityInline({ activity }: { activity: TranscriptActivity }): JSX.Element {
+	if (activity.kind.startsWith("security.scan.")) {
+		return <SecurityScanBanner activity={activity} />
+	}
+
 	const meta = activityMeta(activity.kind)
 	const Icon = meta.icon
 	const isOutput = activity.kind === "command.output"
@@ -64,6 +68,29 @@ function ActivityInline({ activity }: { activity: TranscriptActivity }): JSX.Ele
 				) : (
 					<span className="break-words text-neutral-300">{activity.summary}</span>
 				)}
+			</div>
+		</div>
+	)
+}
+
+function SecurityScanBanner({ activity }: { activity: TranscriptActivity }): JSX.Element {
+	const isCompleted = activity.kind === "security.scan.completed"
+	return (
+		<div
+			data-selectable-text
+			className="flex max-w-full items-start gap-3 rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 py-2.5 text-xs leading-5 text-cyan-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+		>
+			<div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-cyan-300/25 bg-cyan-300/10 text-cyan-200">
+				<ShieldCheck size={15} strokeWidth={2.4} />
+			</div>
+			<div className="min-w-0">
+				<div className="flex flex-wrap items-center gap-2">
+					<span className="font-semibold text-cyan-100">Semgrep security enhancement</span>
+					<span className="rounded-full border border-cyan-300/20 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-cyan-200/80">
+						{isCompleted ? "tool completed" : "tool call"}
+					</span>
+				</div>
+				<p className="mt-0.5 break-words text-cyan-100/75">{activity.summary}</p>
 			</div>
 		</div>
 	)

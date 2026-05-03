@@ -1,5 +1,5 @@
 import { AlertTriangle, PanelLeft } from "lucide-react"
-import logoUrl from "@renderer/assets/logo.png"
+import logoURLSVG from "@renderer/assets/logo.svg"
 import { useNavigate } from "react-router-dom"
 import type { WorkbenchTab } from "@renderer/types/models"
 
@@ -27,7 +27,7 @@ export default function TopBar({
 	const navigate = useNavigate()
 
 	return (
-		<div className="relative flex h-11 w-full shrink-0 items-center gap-3 border-b border-white/5 bg-neutral-900 px-3">
+		<div className="relative flex max-h-[5rem] w-full shrink-0 items-center gap-3 border-b border-white/5 bg-neutral-900 px-3">
 			<div className="flex min-w-0 items-center gap-2">
 				<div className="flex items-center gap-2 text-sm font-medium">
 					<button
@@ -36,11 +36,11 @@ export default function TopBar({
 						className="group flex cursor-pointer items-center gap-2 tracking-wide text-white transition-colors duration-150 hover:text-neutral-300"
 					>
 						<img
-							src={logoUrl}
-							alt=""
-							className="size-10 transition-opacity duration-150 group-hover:opacity-70"
+							src={logoURLSVG}
+							alt="logo"
+							className="size-[4rem] transition-opacity duration-150 group-hover:opacity-70 m-3"
 						/>
-						NULLOTH
+						<h1 className="text-[1.3rem] font-bold">NULLOTH</h1>
 					</button>
 				</div>
 				<button
@@ -49,7 +49,7 @@ export default function TopBar({
 					className="cursor-pointer rounded-md p-1.5 text-neutral-500 transition-colors duration-150 hover:bg-white/5 hover:text-white"
 					title="Toggle sidebar"
 				>
-					<PanelLeft size={15} />
+					<PanelLeft size={25} />
 				</button>
 			</div>
 			<nav className="flex shrink-0 items-center gap-0.5">
@@ -60,7 +60,7 @@ export default function TopBar({
 							key={tab}
 							type="button"
 							onClick={() => onTabChange(tab)}
-							className={`cursor-pointer rounded-md px-2.5 py-1.5 text-sm transition-colors duration-150 ${
+							className={`cursor-pointer rounded-md px-2.5 py-1.5 text-md transition-colors duration-150 ${
 								active
 									? "bg-white/8 text-white"
 									: "text-neutral-500 hover:bg-white/5 hover:text-neutral-200"

@@ -90,6 +90,7 @@ export interface AgentThread {
 	messages: AgentMessage[]
 	activities: AgentActivity[]
 	plan: AgentPlan
+	reasoningPreview: string | null
 	suggestedSkills: AgentSkillSuggestion[]
 	session: AgentSession | null
 	createdAt: string

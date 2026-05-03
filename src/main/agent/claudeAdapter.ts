@@ -172,6 +172,16 @@ function partialText(message: SDKPartialAssistantMessage): string {
 	return "text" in delta && delta.text ? String(delta.text) : ""
 }
 
+function partialThinking(message: SDKPartialAssistantMessage): string {
+	const event = message.event
+	if (!(event instanceof Object)) return ""
+	if (!("type" in event) || event.type !== "content_block_delta") return ""
+	if (!("delta" in event) || !(event.delta instanceof Object)) return ""
+	const delta = event.delta
+	if (!("type" in delta) || delta.type !== "thinking_delta") return ""
+	return "thinking" in delta && delta.thinking ? String(delta.thinking) : ""
+}
+
 function claudeUserMessage(prompt: string): SDKUserMessage {
 	return {
 		type: "user",
@@ -329,6 +339,17 @@ export class ClaudeAdapter implements ProviderAdapter {
 		const turnId = thread.currentTurnId
 
 		if (message.type === "stream_event") {
+			const reasoning = partialThinking(message)
+			if (reasoning) {
+				this.emit({
+					type: "activity",
+					threadId: thread.appThreadId,
+					turnId,
+					createdAt: nowIso(),
+					payload: { kind: "reasoning.delta", summary: "Reasoning…", detail: { delta: reasoning } }
+				})
+				return
+			}
 			const delta = partialText(message)
 			if (!delta) return
 			thread.emittedPartialText = true

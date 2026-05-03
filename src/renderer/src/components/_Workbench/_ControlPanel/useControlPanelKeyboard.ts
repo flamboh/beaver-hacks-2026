@@ -24,15 +24,16 @@ export function useControlPanelKeyboard({
 				if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
 				return
 			}
+			if (e.key === "Tab") {
+				e.preventDefault()
+				if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+				snapToCard(focusedIdx + (e.shiftKey ? -1 : 1))
+				return
+			}
 			if (target?.closest("input, textarea, [contenteditable='true']")) return
 			if (e.code === "Space") {
 				spacePan.current = true
 				setSpacePanActive(true)
-				return
-			}
-			if (e.key === "Tab") {
-				e.preventDefault()
-				snapToCard(focusedIdx + (e.shiftKey ? -1 : 1))
 				return
 			}
 			if (

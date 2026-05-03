@@ -75,7 +75,7 @@ export function ControlPanelCanvas({
 					>
 						<div className="absolute top-4 left-8 flex max-w-[680px] items-center gap-2">
 							<span className="truncate rounded bg-neutral-950 px-2 py-1 text-[11px] font-medium text-neutral-500">
-								<span className="text-neutral-400">{workspace.projectName}</span>
+								<span className="text-blue-300">{workspace.projectName}</span>
 								<span className="px-1 text-neutral-700">/</span>
 								{workspace.name}
 							</span>
