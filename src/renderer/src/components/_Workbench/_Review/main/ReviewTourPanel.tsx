@@ -1,5 +1,5 @@
 import { AlertCircle, LoaderCircle, Map, RefreshCw } from "lucide-react"
-import type { PointerEvent } from "react"
+import type { PointerEvent, ReactNode } from "react"
 import { useRef } from "react"
 
 interface ReviewTourPanelProps {
@@ -18,6 +18,18 @@ const MAX_HEIGHT = 440
 
 function clampHeight(height: number): number {
 	return Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, height))
+}
+
+function renderBoldSpans(text: string): ReactNode[] {
+	return text.split(/(\*\*[^*]+\*\*)/g).map((segment, index) =>
+		segment.startsWith("**") && segment.endsWith("**") ? (
+			<strong key={index} className="font-semibold text-neutral-100">
+				{segment.slice(2, -2)}
+			</strong>
+		) : (
+			segment
+		)
+	)
 }
 
 export function ReviewTourPanel({
@@ -78,7 +90,7 @@ export function ReviewTourPanel({
 					<div className="flex h-10 items-center justify-between border-b border-white/8 px-3">
 						{hasBody || generating || stale ? (
 							<div className="flex items-center gap-2">
-								<p className="text-xs font-medium text-neutral-300">Tour</p>
+								<p className="text-sm font-medium text-neutral-300">Tour</p>
 								{stale ? (
 									<span className="rounded border border-white/8 bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-medium uppercase text-neutral-600">
 										stale
@@ -113,9 +125,9 @@ export function ReviewTourPanel({
 							<p>{error}</p>
 						</div>
 					) : hasBody ? (
-						<pre className="h-[calc(100%-3rem)] overflow-auto whitespace-pre-wrap px-3 py-3 text-xs leading-5 text-neutral-300">
-							{tour}
-						</pre>
+						<div className="h-[calc(100%-3rem)] overflow-auto whitespace-pre-wrap px-3 py-3 font-mono text-sm leading-6 text-neutral-300">
+							{renderBoldSpans(tour)}
+						</div>
 					) : null}
 				</>
 			)}
