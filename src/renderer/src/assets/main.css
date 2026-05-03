@@ -32,6 +32,23 @@
 	box-shadow: none !important;
 }
 
+.agent-create-popover {
+	transform: translate(-50%, -50%) scale(0.45);
+	transform-origin: center;
+	opacity: 0;
+	filter: blur(3px);
+	animation: agent-create-popover-in 120ms cubic-bezier(0.2, 0, 0, 1) forwards;
+	will-change: transform, opacity, filter;
+}
+
+@keyframes agent-create-popover-in {
+	to {
+		transform: translate(-50%, -50%) scale(1);
+		opacity: 1;
+		filter: blur(0);
+	}
+}
+
 @layer base {
 	html,
 	body,

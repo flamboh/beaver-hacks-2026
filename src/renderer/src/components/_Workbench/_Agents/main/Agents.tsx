@@ -24,6 +24,8 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		model: "claude-opus-4-7",
 		scope_path: "@Pipeline.md",
 		effort: "high",
+		layout_x: 0,
+		layout_y: 0,
 		status: "working",
 		current_task: "Extracting auth middleware boundaries"
 	},
@@ -36,6 +38,8 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		model: "gpt-4o-mini",
 		scope_path: "@tests/README.md",
 		effort: "medium",
+		layout_x: 1,
+		layout_y: 0,
 		status: "pending",
 		current_task: "Writing renderer smoke tests"
 	},
@@ -48,6 +52,8 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		model: "claude-sonnet-4-6",
 		scope_path: "@docs",
 		effort: "low",
+		layout_x: 0,
+		layout_y: 1,
 		status: "idle",
 		current_task: "Summarizing review workflow"
 	},
@@ -60,6 +66,8 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		model: "o4-mini",
 		scope_path: "@src/main/git",
 		effort: "medium",
+		layout_x: 1,
+		layout_y: 1,
 		status: "failure",
 		current_task: "Checking branch isolation rules"
 	},
@@ -72,6 +80,8 @@ const PLACEHOLDER_AGENTS: AgentCardRow[] = [
 		model: "claude-haiku-4-5",
 		scope_path: "@src/renderer",
 		effort: "low",
+		layout_x: 0,
+		layout_y: 2,
 		status: "working",
 		current_task: "Tightening sidebar spacing"
 	}
@@ -174,6 +184,8 @@ export default function Agents({ projectPath }: { projectPath: string }) {
 			model: input.model,
 			scope_path: input.scopePath,
 			effort: input.effort,
+			layout_x: 0,
+			layout_y: 0,
 			status: "idle",
 			current_task: "Waiting for task"
 		}

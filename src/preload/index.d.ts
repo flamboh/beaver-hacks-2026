@@ -16,6 +16,7 @@ import type {
 	ProjectRow,
 	ProjectWorkspaceInput,
 	TaskRow,
+	UpdateAgentInput,
 	UpdateProjectInput,
 	UpdateSettingInput,
 	UpdateWorkspaceInput,
@@ -98,6 +99,7 @@ interface BeaverApi {
 	agents: {
 		list: (projectId: string) => Promise<AgentRow[]>
 		create: (input: CreateAgentInput) => Promise<AgentRow>
+		update: (input: UpdateAgentInput) => Promise<AgentRow>
 		delete: (id: string) => Promise<void>
 	}
 	tasks: {

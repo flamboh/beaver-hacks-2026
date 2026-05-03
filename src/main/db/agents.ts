@@ -12,6 +12,8 @@ interface AgentTableRow {
 	model: string
 	scope_path: string
 	effort: string
+	layout_x: number
+	layout_y: number
 }
 
 export interface CreateAgentInput {
@@ -22,6 +24,13 @@ export interface CreateAgentInput {
 	model: string
 	scope_path: string
 	effort: string
+	layout_x?: number
+	layout_y?: number
+}
+
+export interface UpdateAgentInput {
+	id: string
+	name: string
 }
 
 // ── mapper ────────────────────────────────────────────────────────
@@ -34,7 +43,9 @@ function toAgentRow(row: AgentTableRow): AgentRow {
 		provider: row.provider,
 		model: row.model,
 		scope_path: row.scope_path,
-		effort: row.effort
+		effort: row.effort,
+		layout_x: row.layout_x,
+		layout_y: row.layout_y
 	}
 }
 
@@ -44,10 +55,10 @@ export class AgentService {
 
 	async listAgents(projectId: string): Promise<AgentRow[]> {
 		const rows = await this.all<AgentTableRow>(
-			`SELECT id, name, project_id, workspace_id, provider, model, scope_path, effort
+			`SELECT id, name, project_id, workspace_id, provider, model, scope_path, effort, layout_x, layout_y
 			 FROM agents
 			 WHERE project_id = ?
-			 ORDER BY rowid ASC`,
+			 ORDER BY layout_y ASC, layout_x ASC, rowid ASC`,
 			[projectId]
 		)
 		return rows.map(toAgentRow)
@@ -62,11 +73,13 @@ export class AgentService {
 			provider: input.provider ?? "codex",
 			model: input.model,
 			scope_path: input.scope_path.trim(),
-			effort: input.effort
+			effort: input.effort,
+			layout_x: input.layout_x ?? 0,
+			layout_y: input.layout_y ?? 0
 		}
 		await this.run(
-			`INSERT INTO agents (id, name, project_id, workspace_id, provider, model, scope_path, effort)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO agents (id, name, project_id, workspace_id, provider, model, scope_path, effort, layout_x, layout_y)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			[
 				agent.id,
 				agent.name,
@@ -75,10 +88,23 @@ export class AgentService {
 				agent.provider,
 				agent.model,
 				agent.scope_path,
-				agent.effort
+				agent.effort,
+				agent.layout_x,
+				agent.layout_y
 			]
 		)
 		return agent
+	}
+
+	async updateAgent(input: UpdateAgentInput): Promise<AgentRow> {
+		await this.run(`UPDATE agents SET name = ? WHERE id = ?`, [input.name.trim(), input.id])
+		const row = await this.get<AgentTableRow>(
+			`SELECT id, name, project_id, workspace_id, provider, model, scope_path, effort, layout_x, layout_y
+			 FROM agents
+			 WHERE id = ?`,
+			[input.id]
+		)
+		return toAgentRow(row)
 	}
 
 	async deleteAgent(id: string): Promise<void> {
@@ -95,6 +121,12 @@ export class AgentService {
 	private async all<T>(sql: string, params: unknown[]): Promise<T[]> {
 		return new Promise((resolve, reject) => {
 			this.db.all<T>(sql, params, (err, rows) => (err ? reject(err) : resolve(rows)))
+		})
+	}
+
+	private async get<T>(sql: string, params: unknown[]): Promise<T> {
+		return new Promise((resolve, reject) => {
+			this.db.get<T>(sql, params, (err, row) => (err ? reject(err) : resolve(row)))
 		})
 	}
 }

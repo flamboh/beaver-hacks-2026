@@ -1,6 +1,6 @@
 import { DEFAULT_WORKSPACE_TEMPLATE } from "./workspaceUtils"
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 export const INITIALIZE_SCHEMA_SQL = `
 	PRAGMA journal_mode = WAL;
@@ -40,6 +40,8 @@ export const INITIALIZE_SCHEMA_SQL = `
 		model TEXT NOT NULL,
 		scope_path TEXT,
 		effort TEXT NOT NULL,
+		layout_x INTEGER NOT NULL DEFAULT 0,
+		layout_y INTEGER NOT NULL DEFAULT 0,
 		FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
 		FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE SET NULL
 	);

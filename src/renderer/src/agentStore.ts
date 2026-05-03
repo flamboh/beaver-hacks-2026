@@ -67,9 +67,13 @@ export async function sendAgentMessage(input: {
 	prompt: string
 	cwd: string
 	threadId?: string
+	provider?: AgentSnapshot["threads"][number]["provider"]
+	model?: string
 }): Promise<void> {
 	const nextSnapshot = await window.api.agent.startTurn({
 		...(input.threadId ? { threadId: input.threadId } : {}),
+		...(input.provider ? { provider: input.provider } : {}),
+		...(input.model ? { model: input.model } : {}),
 		cwd: input.cwd,
 		prompt: input.prompt,
 		runtimeMode: "full-access"

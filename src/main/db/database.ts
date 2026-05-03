@@ -29,7 +29,7 @@ import {
 	slugify
 } from "./workspaceUtils"
 
-const SCHEMA_VERSION = 3
+const SCHEMA_VERSION = 4
 
 function nowIso(): string {
 	return new Date().toISOString()
@@ -79,7 +79,9 @@ export class DatabaseService {
 				provider TEXT NOT NULL DEFAULT 'codex',
 				model TEXT NOT NULL,
 				scope_path TEXT,
-				effort TEXT NOT NULL
+				effort TEXT NOT NULL,
+				layout_x INTEGER NOT NULL DEFAULT 0,
+				layout_y INTEGER NOT NULL DEFAULT 0
 			);
 
 			CREATE TABLE IF NOT EXISTS task (
@@ -176,6 +178,12 @@ export class DatabaseService {
 			`)
 		}
 
+		if (storedVersion < 4) {
+			await this.ensureAgentLayoutColumns()
+		}
+
+		await this.ensureAgentLayoutColumns()
+
 		await this.run(
 			`INSERT INTO app_meta (key, value) VALUES ('schema_version', ?)
 			 ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
@@ -195,6 +203,29 @@ export class DatabaseService {
 			path: this.path,
 			schemaVersion: Number(row.value)
 		}
+	}
+
+	private async ensureAgentLayoutColumns(): Promise<void> {
+		const columns = await this.all<{ name: string }>(`PRAGMA table_info(agents)`, [])
+		const columnNames = new Set(columns.map((column) => column.name))
+		if (!columnNames.has("layout_x")) {
+			await this.run(`ALTER TABLE agents ADD COLUMN layout_x INTEGER NOT NULL DEFAULT 0`, [])
+		}
+		if (!columnNames.has("layout_y")) {
+			await this.run(`ALTER TABLE agents ADD COLUMN layout_y INTEGER NOT NULL DEFAULT 0`, [])
+		}
+		await this.exec(`
+			WITH ordered AS (
+				SELECT id, ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY rowid) - 1 AS idx
+				FROM agents
+				WHERE layout_x = 0 AND layout_y = 0
+			)
+			UPDATE agents
+			SET
+				layout_x = (SELECT idx % 2 FROM ordered WHERE ordered.id = agents.id),
+				layout_y = (SELECT idx / 2 FROM ordered WHERE ordered.id = agents.id)
+			WHERE id IN (SELECT id FROM ordered);
+		`)
 	}
 
 	async listProjects(): Promise<ProjectRow[]> {
